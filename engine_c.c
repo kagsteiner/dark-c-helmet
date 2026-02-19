@@ -126,7 +126,7 @@ typedef struct {
 
 static TranspositionTable g_tt = {0};
 
-static const char* ENGINE_NAME = "Dark C. Helmet 0.1";
+static const char* ENGINE_NAME = "Dark C. Helmet 0.1B";
 static const char* ENGINE_AUTHOR = "Karlheinz + Cursor";
 
 static const int PIECE_VALUES[7] = {0, 100, 320, 330, 500, 900, 20000};
@@ -242,16 +242,16 @@ static const int ENDGAME_ADVANCED_PAWN_BONUS[8] = {0, 0, 5, 10, 20, 35, 50, 0};
 
 // Attack Module v1 (middlegame attack planning signals)
 #define ENABLE_ATTACK_MODULE_V1 1
-#define ATTACK_V1_ZONE_HIT_MINOR 6
-#define ATTACK_V1_ZONE_HIT_ROOK 9
-#define ATTACK_V1_ZONE_HIT_QUEEN 14
-#define ATTACK_V1_UNIT_MINOR 2
-#define ATTACK_V1_UNIT_ROOK 3
-#define ATTACK_V1_UNIT_QUEEN 5
-#define ATTACK_V1_FILE_OPEN_BONUS 16
-#define ATTACK_V1_FILE_SEMIOPEN_BONUS 9
-#define ATTACK_V1_PAWN_STORM_STEP 6
-#define ATTACK_V1_TROPISM_DIV 8
+#define ATTACK_V1_ZONE_HIT_MINOR 6*2
+#define ATTACK_V1_ZONE_HIT_ROOK 9*2
+#define ATTACK_V1_ZONE_HIT_QUEEN 14*2
+#define ATTACK_V1_UNIT_MINOR 2*2
+#define ATTACK_V1_UNIT_ROOK 3*2
+#define ATTACK_V1_UNIT_QUEEN 5*2
+#define ATTACK_V1_FILE_OPEN_BONUS 16*2
+#define ATTACK_V1_FILE_SEMIOPEN_BONUS 9*2
+#define ATTACK_V1_PAWN_STORM_STEP 6*2
+#define ATTACK_V1_TROPISM_DIV 8*2
 
 static const int ATTACK_V1_ATTACKER_SCALE[8] = {0, 0, 45, 70, 85, 95, 100, 105};
 

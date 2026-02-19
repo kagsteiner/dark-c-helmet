@@ -127,11 +127,30 @@ Evaluation is handcrafted and phase-aware, returning score from side-to-move per
 
 - Base material values (`P=100, N=320, B=330, R=500, Q=900`).
 - Piece-square tables (PSTs) for all pieces, with separate king PSTs for middlegame/endgame.
-- Game phase classification:
-  - opening,
-  - middlegame,
-  - endgame,
-  based on queen/rook/minor presence, non-pawn material, and move number/development clues.
+- Game phase classification is implemented in `get_game_phase()` and returns:
+  - `0` = opening,
+  - `1` = middlegame,
+  - `2` = endgame.
+
+### Exact game phase rules (implementation order)
+
+The engine checks these in this exact order:
+
+1. Compute piece counts and non-pawn material (`white_non_pawn`, `black_non_pawn`), where:
+   - `non_pawn = total_non_king_material - pawn_count * 100`
+2. Mark **endgame** if any of these is true:
+   - both queens are gone (`white_queens == 0 && black_queens == 0`), or
+   - both sides still have a queen, but neither side has rooks and both have at most one minor (`white_rooks == 0 && black_rooks == 0 && white_minors <= 1 && black_minors <= 1`), or
+   - both sides have low non-pawn material (`white_non_pawn < 900 && black_non_pawn < 900`), or
+   - combined non-pawn material is small (`white_non_pawn + black_non_pawn <= 1600`).
+3. If any endgame condition is true, return `2` immediately.
+4. Otherwise, if `fullmove_number <= 15`, compute `undeveloped` as the count of knights/bishops still on their start squares:
+   - White: `b1`, `g1`, `c1`, `f1`
+   - Black: `b8`, `g8`, `c8`, `f8`
+5. Return **opening** (`0`) if either:
+   - `fullmove_number <= 10`, or
+   - `undeveloped >= 2`.
+6. Otherwise return **middlegame** (`1`).
 
 ### Always-applied terms
 
