@@ -1,6 +1,28 @@
 # Engine Overview (`engine_c.c`)
 
-This engine is a single-file UCI chess engine written in C. It uses a straightforward board representation, pseudo-legal move generation filtered for legality, an iterative deepening alpha-beta search with modern pruning/ordering heuristics, a handcrafted phase-aware evaluation, and a fixed-size transposition table indexed by Zobrist hash.
+This engine is a single-file UCI chess engine written in C.
+
+It uses a straightforward board representation, pseudo-legal move generation filtered for legality, an iterative deepening alpha-beta search with modern pruning/ordering heuristics, a handcrafted phase-aware evaluation, and a fixed-size transposition table indexed by Zobrist hash.
+
+## Building
+
+The project builds with CMake and MSVC. You must run build commands from **Developer PowerShell for VS 2022** (or *x64 Native Tools Command Prompt for VS 2022*). The developer shell initializes the environment so that `cmake` and `cl` (MSVC) are on PATH and the correct `INCLUDE`/`LIB` variables are set — a plain PowerShell or cmd will not have these.
+
+**Prerequisites:** Visual Studio 2022 with *Desktop development with C++*, and CMake (via `winget install Kitware.CMake` or VS Installer).
+
+**Build steps:**
+
+1. Open *Developer PowerShell for VS 2022* (Windows key → type name → run).
+2. `cd` to the project root.
+3. Run:
+   ```powershell
+   cmake -S . -B build
+   cmake --build build --config Release
+   ```
+   Or use `build_c.bat` from the project root.
+4. Executable: `build\Release\vibechess_c.exe`
+
+For a clean rebuild, delete the `build` folder and rerun the steps above. 
 
 ## Move Generator
 
