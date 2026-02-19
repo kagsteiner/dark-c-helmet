@@ -1,0 +1,43 @@
+# CMake
+build/
+bin/
+out/
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
+
+# MSVC / Visual Studio
+*.exe
+*.obj
+*.pdb
+*.lib
+*.ilk
+*.iobj
+*.ipdb
+*.tlog
+*.log
+*.user
+*.suo
+.vs/
+x64/
+Debug/
+Release/
+RelWithDebInfo/
+MinSizeRel/
+
+# Compiled objects
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
