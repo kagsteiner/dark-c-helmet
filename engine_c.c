@@ -240,6 +240,21 @@ static const int ENDGAME_ADVANCED_PAWN_BONUS[8] = {0, 0, 5, 10, 20, 35, 50, 0};
 #define BISHOP_UNDEVELOPED_PENALTY 35
 #define ROOK_TRAPPED_BEHIND_BISHOP_PENALTY 50
 
+// Attack Module v1 (middlegame attack planning signals)
+#define ENABLE_ATTACK_MODULE_V1 1
+#define ATTACK_V1_ZONE_HIT_MINOR 6
+#define ATTACK_V1_ZONE_HIT_ROOK 9
+#define ATTACK_V1_ZONE_HIT_QUEEN 14
+#define ATTACK_V1_UNIT_MINOR 2
+#define ATTACK_V1_UNIT_ROOK 3
+#define ATTACK_V1_UNIT_QUEEN 5
+#define ATTACK_V1_FILE_OPEN_BONUS 16
+#define ATTACK_V1_FILE_SEMIOPEN_BONUS 9
+#define ATTACK_V1_PAWN_STORM_STEP 6
+#define ATTACK_V1_TROPISM_DIV 8
+
+static const int ATTACK_V1_ATTACKER_SCALE[8] = {0, 0, 45, 70, 85, 95, 100, 105};
+
 static inline int piece_type(int p) { return p & 7; }
 static inline int piece_color(int p) { return p >> 3; }
 static inline int make_piece(int color, int ptype) { return (color << 3) | ptype; }
@@ -1186,6 +1201,169 @@ static int evaluate_king_safety_fast_c(const Board* b) {
     return score;
 }
 
+static int attack_v1_manhattan(int sq1, int sq2) {
+    return abs(rank_of(sq1) - rank_of(sq2)) + abs(file_of(sq1) - file_of(sq2));
+}
+
+static int attack_v1_piece_attacks_square(const Board* b, int from, int target, int piece) {
+    int t = piece_type(piece);
+    int c = piece_color(piece);
+    int fr = rank_of(from), ff = file_of(from);
+    int tr = rank_of(target), tf = file_of(target);
+    int dr = tr - fr, df = tf - ff;
+
+    if (t == PIECE_PAWN) {
+        if (c == COLOR_WHITE) return dr == 1 && (df == -1 || df == 1);
+        return dr == -1 && (df == -1 || df == 1);
+    }
+    if (t == PIECE_KNIGHT) {
+        int adr = abs(dr), adf = abs(df);
+        return (adr == 2 && adf == 1) || (adr == 1 && adf == 2);
+    }
+    if (t == PIECE_KING) {
+        return abs(dr) <= 1 && abs(df) <= 1 && (dr != 0 || df != 0);
+    }
+
+    if (t == PIECE_BISHOP || t == PIECE_ROOK || t == PIECE_QUEEN) {
+        int step_r = 0, step_f = 0;
+        if (dr == 0 && df != 0) {
+            if (t == PIECE_BISHOP) return 0;
+            step_f = (df > 0) ? 1 : -1;
+        } else if (df == 0 && dr != 0) {
+            if (t == PIECE_BISHOP) return 0;
+            step_r = (dr > 0) ? 1 : -1;
+        } else if (abs(dr) == abs(df)) {
+            if (t == PIECE_ROOK) return 0;
+            step_r = (dr > 0) ? 1 : -1;
+            step_f = (df > 0) ? 1 : -1;
+        } else {
+            return 0;
+        }
+
+        int r = fr + step_r;
+        int f = ff + step_f;
+        while (r != tr || f != tf) {
+            if (b->squares[square_of(r, f)] != PIECE_EMPTY) return 0;
+            r += step_r;
+            f += step_f;
+        }
+        return 1;
+    }
+    return 0;
+}
+
+static void attack_v1_build_king_zone(int king_sq, int victim_color, int zone[64]) {
+    memset(zone, 0, 64 * sizeof(int));
+    int kr = rank_of(king_sq), kf = file_of(king_sq);
+
+    for (int dr = -1; dr <= 1; ++dr) {
+        for (int df = -1; df <= 1; ++df) {
+            int r = kr + dr, f = kf + df;
+            if (r >= 0 && r < 8 && f >= 0 && f < 8) zone[square_of(r, f)] = 1;
+        }
+    }
+
+    int forward = (victim_color == COLOR_WHITE) ? 1 : -1;
+    for (int step = 1; step <= 2; ++step) {
+        int r = kr + forward * step;
+        if (r < 0 || r >= 8) continue;
+        for (int df = -1; df <= 1; ++df) {
+            int f = kf + df;
+            if (f >= 0 && f < 8) zone[square_of(r, f)] = 1;
+        }
+    }
+}
+
+static int evaluate_attack_side_v1(const Board* b, int attacker_color) {
+    int victim_color = attacker_color ^ 1;
+    int victim_king_sq = b->king_sq[victim_color];
+    int victim_king_file = file_of(victim_king_sq);
+    int victim_king_rank = rank_of(victim_king_sq);
+
+    int zone[64];
+    attack_v1_build_king_zone(victim_king_sq, victim_color, zone);
+
+    int attackers = 0;
+    int attack_units = 0;
+    int tropism = 0;
+    int file_pressure = 0;
+    int pawn_storm = 0;
+
+    int attacker_pawns_on_file[8] = {0};
+    int victim_pawns_on_file[8] = {0};
+
+    for (int sq = 0; sq < 64; ++sq) {
+        int p = b->squares[sq];
+        if (!p || piece_type(p) != PIECE_PAWN) continue;
+        int c = piece_color(p);
+        int f = file_of(sq);
+        if (c == attacker_color) attacker_pawns_on_file[f]++;
+        else victim_pawns_on_file[f]++;
+    }
+
+    for (int sq = 0; sq < 64; ++sq) {
+        int p = b->squares[sq];
+        if (!p || piece_color(p) != attacker_color) continue;
+        int t = piece_type(p);
+
+        int zone_hits = 0;
+        for (int target = 0; target < 64; ++target) {
+            if (!zone[target]) continue;
+            if (attack_v1_piece_attacks_square(b, sq, target, p)) zone_hits++;
+        }
+
+        if (zone_hits > 0) {
+            attackers++;
+            if (t == PIECE_KNIGHT || t == PIECE_BISHOP) {
+                attack_units += ATTACK_V1_UNIT_MINOR + zone_hits * ATTACK_V1_ZONE_HIT_MINOR;
+            } else if (t == PIECE_ROOK) {
+                attack_units += ATTACK_V1_UNIT_ROOK + zone_hits * ATTACK_V1_ZONE_HIT_ROOK;
+            } else if (t == PIECE_QUEEN) {
+                attack_units += ATTACK_V1_UNIT_QUEEN + zone_hits * ATTACK_V1_ZONE_HIT_QUEEN;
+            }
+        }
+
+        if (t == PIECE_KNIGHT || t == PIECE_BISHOP || t == PIECE_ROOK || t == PIECE_QUEEN) {
+            int dist = attack_v1_manhattan(sq, victim_king_sq);
+            int closeness = 14 - dist;
+            if (closeness < 0) closeness = 0;
+            if (t == PIECE_QUEEN) tropism += closeness * 5;
+            else if (t == PIECE_ROOK) tropism += closeness * 3;
+            else tropism += closeness * 2;
+        }
+
+        if (t == PIECE_ROOK || t == PIECE_QUEEN) {
+            int f = file_of(sq);
+            if (abs(f - victim_king_file) <= 1) {
+                if (attacker_pawns_on_file[f] == 0 && victim_pawns_on_file[f] == 0) {
+                    file_pressure += ATTACK_V1_FILE_OPEN_BONUS;
+                } else if (attacker_pawns_on_file[f] == 0) {
+                    file_pressure += ATTACK_V1_FILE_SEMIOPEN_BONUS;
+                }
+            }
+        }
+
+        if (t == PIECE_PAWN && abs(file_of(sq) - victim_king_file) <= 1) {
+            int dist = abs(rank_of(sq) - victim_king_rank);
+            int closeness = 4 - dist;
+            if (closeness > 0) pawn_storm += closeness * ATTACK_V1_PAWN_STORM_STEP;
+        }
+    }
+
+    int idx = attackers;
+    if (idx > 7) idx = 7;
+    int scaled_attack = attack_units * ATTACK_V1_ATTACKER_SCALE[idx] / 100;
+    if (attackers < 2) scaled_attack /= 2;
+
+    return scaled_attack + file_pressure + pawn_storm + tropism / ATTACK_V1_TROPISM_DIV;
+}
+
+static int evaluate_attack_module_v1(const Board* b) {
+    int white_attack = evaluate_attack_side_v1(b, COLOR_WHITE);
+    int black_attack = evaluate_attack_side_v1(b, COLOR_BLACK);
+    return white_attack - black_attack;
+}
+
 static int evaluate_mobility_fast_c(const Board* b) {
     int score = 0;
     for (int sq = 0; sq < 64; ++sq) {
@@ -1325,6 +1503,7 @@ static int evaluate(const Board* b) {
     } else {
         score += evaluate_pawn_structure_fast_c(b, 1);
         score += evaluate_king_safety_fast_c(b);
+        if (ENABLE_ATTACK_MODULE_V1) score += evaluate_attack_module_v1(b);
         score += evaluate_mobility_fast_c(b);
         score += evaluate_trapped_pieces_c(b);
         score += evaluate_knight_quality_c(b);
