@@ -36,6 +36,9 @@ MinSizeRel/
 *.dylib
 *.dll
 
+# Archive (older versions of executables)
+archive/
+
 # IDE
 .idea/
 *.swp
