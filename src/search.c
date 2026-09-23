@@ -441,7 +441,8 @@ static int search(int alpha, int beta, int depth, int ply) {
 // Iterative deepening
 // ---------------------------------------------------------------------------
 
-static void print_info(int depth, int score) {
+// Prints the search result; the PV always starts with `best` (the move that will be played).
+static void print_info(int depth, int score, Move best) {
     long long elapsed = now_ms() - S.start_ms;
     long long nps = S.nodes * 1000 / (elapsed > 0 ? elapsed : 1);
     printf("info depth %d seldepth %d ", depth, S.seldepth);
@@ -449,9 +450,14 @@ static void print_info(int depth, int score) {
     else if (score <= -VALUE_MATE_IN_MAX) printf("score mate -%d ", (VALUE_MATE + score) / 2);
     else printf("score cp %d ", score);
     printf("nodes %lld nps %lld hashfull %d time %lld pv", S.nodes, nps, tt_hashfull(), elapsed);
-    for (int i = 0; i < S.pv_len[0]; ++i) {
-        char buf[6];
-        move_to_str(S.pv[0][i], buf);
+    char buf[6];
+    if (S.pv_len[0] > 0 && S.pv[0][0] == best) {
+        for (int i = 0; i < S.pv_len[0]; ++i) {
+            move_to_str(S.pv[0][i], buf);
+            printf(" %s", buf);
+        }
+    } else {
+        move_to_str(best, buf);
         printf(" %s", buf);
     }
     printf("\n");
@@ -514,11 +520,17 @@ SearchResult search_run(const Position* pos, const SearchLimits* limits, int sil
         // A move that raised alpha at the root was fully searched, so it is usable even if
         // this iteration was interrupted.
         if (S.root_best != MOVE_NONE) result.best_move = S.root_best;
-        if (S.stop) break;
+        if (S.stop) {
+            // The interrupted iteration found a better move: report it so the last info line
+            // matches the bestmove sent to the GUI.
+            if (!silent && result.best_move != prev_best && prev_best != MOVE_NONE)
+                print_info(depth, S.root_best_score, result.best_move);
+            break;
+        }
 
         result.score = score;
         result.depth = depth;
-        if (!silent) print_info(depth, score);
+        if (!silent) print_info(depth, score, result.best_move);
 
         if (result.best_move == prev_best) stability++;
         else stability = 0;
