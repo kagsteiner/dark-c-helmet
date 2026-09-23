@@ -7,7 +7,7 @@
 // over all weights with Adam, using full-batch gradients computed in parallel.
 //
 // Build:  make tuner
-// Usage:  bin/tuner [-n max_positions] [-e epochs] [-lr rate] data/*.txt > tuned.txt
+// Usage:  bin/tuner [-n max_positions] [-e epochs] [-lr rate] [-reg l2] data/*.txt > tuned.txt
 
 #include <math.h>
 #include <pthread.h>
@@ -34,6 +34,8 @@ static int16_t* feat_coeff;
 static long long feat_count, feat_cap;
 
 static double weights[N][2];  // [mg, eg]
+static double initial[N][2];  // starting values; L2 regularisation pulls towards them
+static double reg = 0.0;
 static double K = 1.0;
 
 #define VERIFY_COUNT 20000
@@ -186,6 +188,7 @@ int main(int argc, char** argv) {
         if (!strcmp(argv[first_file], "-n")) max_positions = atoi(argv[first_file + 1]);
         else if (!strcmp(argv[first_file], "-e")) epochs = atoi(argv[first_file + 1]);
         else if (!strcmp(argv[first_file], "-lr")) lr = atof(argv[first_file + 1]);
+        else if (!strcmp(argv[first_file], "-reg")) reg = atof(argv[first_file + 1]);
     }
 
     bitboards_init();
@@ -201,6 +204,8 @@ int main(int argc, char** argv) {
     for (int i = 0; i < N; ++i) {
         weights[i][0] = mg_value(flat[i]);
         weights[i][1] = eg_value(flat[i]);
+        initial[i][0] = weights[i][0];
+        initial[i][1] = weights[i][1];
     }
 
     // The linear model must reproduce the engine's evaluation (up to integer rounding).
@@ -218,7 +223,7 @@ int main(int argc, char** argv) {
         double loss = compute(grad);
         for (int i = 0; i < N; ++i)
             for (int k = 0; k < 2; ++k) {
-                double g = grad[i][k] / sample_count;
+                double g = grad[i][k] / sample_count + 2.0 * reg * (weights[i][k] - initial[i][k]);
                 m[i][k] = b1 * m[i][k] + (1 - b1) * g;
                 v[i][k] = b2 * v[i][k] + (1 - b2) * g * g;
                 double mh = m[i][k] / (1 - pow(b1, epoch)), vh = v[i][k] / (1 - pow(b2, epoch));

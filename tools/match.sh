@@ -14,8 +14,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-NEW="${1:?usage: match.sh <new-engine> <base-engine>}"
-BASE="${2:?usage: match.sh <new-engine> <base-engine>}"
+NEW="$(cd "$(dirname "${1:?usage: match.sh <new-engine> <base-engine>}")" && pwd)/$(basename "$1")"
+BASE="$(cd "$(dirname "${2:?usage: match.sh <new-engine> <base-engine>}")" && pwd)/$(basename "$2")"
 TC="${TC:-10+0.1}"
 GAMES="${GAMES:-1000}"
 CONCURRENCY="${CONCURRENCY:-8}"
@@ -41,4 +41,6 @@ if [[ "${SPRT:-0}" == "1" ]]; then
   ARGS+=(-sprt "elo0=${ELO0:-0}" "elo1=${ELO1:-5}" alpha=0.05 beta=0.05)
 fi
 
+# fastchess writes its resume file (config.json) into the working directory.
+cd "$OUT"
 exec "$FASTCHESS" "${ARGS[@]}"
