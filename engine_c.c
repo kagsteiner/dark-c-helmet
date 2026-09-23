@@ -6,17 +6,26 @@
 #include <time.h>
 
 #ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
 #define strtok_r strtok_s
+#else
+#include <sys/select.h>
+#include <unistd.h>
 #endif
 
 #define MAX_MOVES 256
 #define MAX_LINE 4096
 #define MAX_DEPTH 64
+#define MAX_QPLY 128
 #define MAX_HISTORY 4096
 
 #define INF 1000000
 #define MATE_SCORE 900000
+#define MATE_BOUND (MATE_SCORE - 1000)
 #define DEFAULT_TT_MB 64
+#define HISTORY_MAX 200000
 
 enum {
     PIECE_EMPTY = 0,
@@ -70,6 +79,8 @@ typedef struct {
     int moved_piece;
     int king_sq_white;
     int king_sq_black;
+    int is_null;
+    uint64_t hash;
 } Undo;
 
 typedef struct {
@@ -80,6 +91,7 @@ typedef struct {
     int halfmove_clock;
     int fullmove_number;
     int king_sq[2];
+    uint64_t hash;
     Undo history[MAX_HISTORY];
     int history_count;
 } Board;
@@ -87,7 +99,7 @@ typedef struct {
 typedef struct {
     int depth;
     int seldepth;
-    int nodes;
+    long long nodes;
     int score;
     long long time_ms;
     Move best_move;
@@ -96,7 +108,8 @@ typedef struct {
 
 typedef struct {
     int stop;
-    int nodes;
+    long long nodes;
+    long long max_nodes;
     int max_seldepth;
     long long start_ms;
     long long stop_ms;
@@ -362,10 +375,24 @@ static TTEntry* tt_probe(TranspositionTable* tt, uint64_t key) {
     return NULL;
 }
 
+// Mate scores are stored relative to the node (distance to mate from here), not to the root.
+static int score_to_tt(int score, int ply) {
+    if (score > MATE_BOUND) return score + ply;
+    if (score < -MATE_BOUND) return score - ply;
+    return score;
+}
+
+static int score_from_tt(int score, int ply) {
+    if (score > MATE_BOUND) return score - ply;
+    if (score < -MATE_BOUND) return score + ply;
+    return score;
+}
+
 static void tt_store(TranspositionTable* tt, uint64_t key, int depth, int score, int flag, const Move* best_move) {
     if (!tt->entries || tt->size == 0) return;
     TTEntry* e = &tt->entries[key % tt->size];
-    if (!e->used || e->key == key || depth >= e->depth || tt->age > e->age + 1) {
+    // Depth-preferred within the current search; entries from older searches are always replaceable.
+    if (!e->used || e->age != tt->age || depth >= e->depth) {
         e->used = 1;
         e->key = key;
         e->depth = depth;
@@ -465,6 +492,7 @@ static int board_set_fen(Board* b, const char* fen) {
     if (n > 4) b->halfmove_clock = atoi(parts[4]);
     if (n > 5) b->fullmove_number = atoi(parts[5]);
     b->history_count = 0;
+    b->hash = board_hash(b);
     return 1;
 }
 
@@ -573,15 +601,18 @@ static void gen_pseudo_moves(const Board* b, Move* moves, int* count, int captur
             int start_rank = (color == COLOR_WHITE) ? 1 : 6;
             int promo_rank = (color == COLOR_WHITE) ? 7 : 0;
 
-            if (!captures_only) {
+            {
                 int to = sq + dir * 8;
                 if (to >= 0 && to < 64 && b->squares[to] == PIECE_EMPTY) {
                     if (rank_of(to) == promo_rank) {
+                        // Queen promotions are tactical and belong in quiescence too.
                         add_move(moves, count, sq, to, PIECE_QUEEN, MOVE_FLAG_NONE);
-                        add_move(moves, count, sq, to, PIECE_ROOK, MOVE_FLAG_NONE);
-                        add_move(moves, count, sq, to, PIECE_BISHOP, MOVE_FLAG_NONE);
-                        add_move(moves, count, sq, to, PIECE_KNIGHT, MOVE_FLAG_NONE);
-                    } else {
+                        if (!captures_only) {
+                            add_move(moves, count, sq, to, PIECE_ROOK, MOVE_FLAG_NONE);
+                            add_move(moves, count, sq, to, PIECE_BISHOP, MOVE_FLAG_NONE);
+                            add_move(moves, count, sq, to, PIECE_KNIGHT, MOVE_FLAG_NONE);
+                        }
+                    } else if (!captures_only) {
                         add_move(moves, count, sq, to, 0, MOVE_FLAG_NONE);
                         if (r == start_rank) {
                             int to2 = sq + dir * 16;
@@ -727,12 +758,20 @@ static int board_make_move(Board* b, const Move* move) {
     u->moved_piece = p;
     u->king_sq_white = b->king_sq[COLOR_WHITE];
     u->king_sq_black = b->king_sq[COLOR_BLACK];
+    u->hash = b->hash;
+
+    uint64_t h = b->hash;
+    h ^= zobrist_castling[b->castling_rights & 15];
+    if (b->ep_sq >= 0) h ^= zobrist_ep[file_of(b->ep_sq)];
 
     int captured = b->squares[to];
     if (move->flags & MOVE_FLAG_EP) {
         int ep_cap_sq = to + ((b->side_to_move == COLOR_WHITE) ? -8 : 8);
         captured = b->squares[ep_cap_sq];
         b->squares[ep_cap_sq] = PIECE_EMPTY;
+        if (captured) h ^= zobrist_piece[captured][ep_cap_sq];
+    } else if (captured) {
+        h ^= zobrist_piece[captured][to];
     }
     u->captured = captured;
 
@@ -742,6 +781,7 @@ static int board_make_move(Board* b, const Move* move) {
         moved = make_piece(piece_color(p), move->promo);
     }
     b->squares[to] = moved;
+    h ^= zobrist_piece[p][from] ^ zobrist_piece[moved][to];
 
     int side = b->side_to_move;
     int ptype = piece_type(p);
@@ -764,18 +804,16 @@ static int board_make_move(Board* b, const Move* move) {
     }
 
     if (move->flags & MOVE_FLAG_CASTLE) {
-        if (to == 6) {
-            b->squares[5] = b->squares[7];
-            b->squares[7] = PIECE_EMPTY;
-        } else if (to == 2) {
-            b->squares[3] = b->squares[0];
-            b->squares[0] = PIECE_EMPTY;
-        } else if (to == 62) {
-            b->squares[61] = b->squares[63];
-            b->squares[63] = PIECE_EMPTY;
-        } else if (to == 58) {
-            b->squares[59] = b->squares[56];
-            b->squares[56] = PIECE_EMPTY;
+        int rook_from = -1, rook_to = -1;
+        if (to == 6) { rook_from = 7; rook_to = 5; }
+        else if (to == 2) { rook_from = 0; rook_to = 3; }
+        else if (to == 62) { rook_from = 63; rook_to = 61; }
+        else if (to == 58) { rook_from = 56; rook_to = 59; }
+        if (rook_from >= 0) {
+            int rook = b->squares[rook_from];
+            b->squares[rook_to] = rook;
+            b->squares[rook_from] = PIECE_EMPTY;
+            h ^= zobrist_piece[rook][rook_from] ^ zobrist_piece[rook][rook_to];
         }
     }
 
@@ -789,6 +827,11 @@ static int board_make_move(Board* b, const Move* move) {
 
     b->side_to_move ^= 1;
     if (b->side_to_move == COLOR_WHITE) b->fullmove_number++;
+
+    h ^= zobrist_castling[b->castling_rights & 15];
+    if (b->ep_sq >= 0) h ^= zobrist_ep[file_of(b->ep_sq)];
+    h ^= zobrist_side;
+    b->hash = h;
     return 1;
 }
 
@@ -804,6 +847,7 @@ static void board_unmake_move(Board* b) {
     b->fullmove_number = u->fullmove;
     b->king_sq[COLOR_WHITE] = u->king_sq_white;
     b->king_sq[COLOR_BLACK] = u->king_sq_black;
+    b->hash = u->hash;
 
     b->squares[m->from] = u->moved_piece;
     b->squares[m->to] = PIECE_EMPTY;
@@ -830,6 +874,40 @@ static void board_unmake_move(Board* b) {
     } else if (u->captured) {
         b->squares[m->to] = u->captured;
     }
+}
+
+static int board_make_null(Board* b) {
+    if (b->history_count >= MAX_HISTORY) return 0;
+    Undo* u = &b->history[b->history_count++];
+    memset(u, 0, sizeof(*u));
+    u->is_null = 1;
+    u->ep_sq = b->ep_sq;
+    u->hash = b->hash;
+    if (b->ep_sq >= 0) b->hash ^= zobrist_ep[file_of(b->ep_sq)];
+    b->ep_sq = -1;
+    b->side_to_move ^= 1;
+    b->hash ^= zobrist_side;
+    return 1;
+}
+
+static void board_unmake_null(Board* b) {
+    Undo* u = &b->history[--b->history_count];
+    b->side_to_move ^= 1;
+    b->ep_sq = u->ep_sq;
+    b->hash = u->hash;
+}
+
+// True if the current position occurred before since the last irreversible move.
+// A null move in between breaks the chain (positions across it are not real repetitions).
+static int is_repetition(const Board* b) {
+    int limit = b->halfmove_clock;
+    if (limit > b->history_count) limit = b->history_count;
+    for (int k = 1; k <= limit; ++k) {
+        const Undo* u = &b->history[b->history_count - k];
+        if (u->is_null) break;
+        if ((k & 1) == 0 && u->hash == b->hash) return 1;
+    }
+    return 0;
 }
 
 static int generate_legal_moves(Board* b, Move* out, int captures_only) {
@@ -908,7 +986,9 @@ static int get_game_phase(const Board* b) {
     if (white_non_pawn + black_non_pawn <= 1600) is_endgame = 1;
     if (is_endgame) return 2;
 
-    if (b->fullmove_number <= 15) {
+    // Opening is decided by the position only (minor pieces still at home), never by the move
+    // number: identical positions must get identical evals, otherwise TT entries disagree.
+    {
         int undeveloped = 0;
         if (b->squares[1] == make_piece(COLOR_WHITE, PIECE_KNIGHT)) undeveloped++;
         if (b->squares[6] == make_piece(COLOR_WHITE, PIECE_KNIGHT)) undeveloped++;
@@ -918,7 +998,7 @@ static int get_game_phase(const Board* b) {
         if (b->squares[62] == make_piece(COLOR_BLACK, PIECE_KNIGHT)) undeveloped++;
         if (b->squares[58] == make_piece(COLOR_BLACK, PIECE_BISHOP)) undeveloped++;
         if (b->squares[61] == make_piece(COLOR_BLACK, PIECE_BISHOP)) undeveloped++;
-        if (b->fullmove_number <= 10 || undeveloped >= 2) return 0;
+        if (undeveloped >= 3) return 0;
     }
     return 1;
 }
@@ -1427,10 +1507,8 @@ static int evaluate_opening_fast_c(const Board* b) {
     if (bking == 62 || bking == 58) score -= CASTLED_BONUS;
     else if (b->castling_rights & (CASTLE_BLACK_K | CASTLE_BLACK_Q)) score -= CASTLING_RIGHTS_BONUS;
 
-    if (b->fullmove_number < 8) {
-        if (white_queen_present && !white_queen_start && white_developed < 3) score -= EARLY_QUEEN_PENALTY;
-        if (black_queen_present && !black_queen_start && black_developed < 3) score += EARLY_QUEEN_PENALTY;
-    }
+    if (white_queen_present && !white_queen_start && white_developed < 3) score -= EARLY_QUEEN_PENALTY;
+    if (black_queen_present && !black_queen_start && black_developed < 3) score += EARLY_QUEEN_PENALTY;
     return score;
 }
 
@@ -1554,11 +1632,70 @@ static void order_moves(const Board* b, SearchContext* ctx, Move* moves, int n, 
     }
 }
 
+static int g_quit = 0;
+static int g_silent = 0;
+
+// Non-blocking check whether a line of UCI input is waiting on stdin.
+static int input_waiting(void) {
+#ifdef _WIN32
+    static int init = 0, is_pipe = 0;
+    static HANDLE inh;
+    DWORD dw;
+    if (!init) {
+        init = 1;
+        inh = GetStdHandle(STD_INPUT_HANDLE);
+        is_pipe = !GetConsoleMode(inh, &dw);
+        if (!is_pipe) {
+            SetConsoleMode(inh, dw & ~(ENABLE_MOUSE_INPUT | ENABLE_WINDOW_INPUT));
+            FlushConsoleInputBuffer(inh);
+        }
+    }
+    if (is_pipe) {
+        if (!PeekNamedPipe(inh, NULL, 0, NULL, &dw, NULL)) return 1;
+        return dw > 0;
+    }
+    GetNumberOfConsoleInputEvents(inh, &dw);
+    return dw > 1;
+#else
+    fd_set readfds;
+    struct timeval tv = {0, 0};
+    FD_ZERO(&readfds);
+    FD_SET(STDIN_FILENO, &readfds);
+    return select(STDIN_FILENO + 1, &readfds, NULL, NULL, &tv) > 0 && FD_ISSET(STDIN_FILENO, &readfds);
+#endif
+}
+
+// Handle commands that may arrive while searching. Returns 1 if the search must stop.
+static int handle_input_during_search(void) {
+    char line[MAX_LINE];
+    if (!fgets(line, sizeof(line), stdin)) {
+        g_quit = 1;
+        return 1;
+    }
+    if (strncmp(line, "quit", 4) == 0) {
+        g_quit = 1;
+        return 1;
+    }
+    if (strncmp(line, "stop", 4) == 0) return 1;
+    if (strncmp(line, "isready", 7) == 0) {
+        printf("readyok\n");
+        fflush(stdout);
+    }
+    return 0;
+}
+
 static int should_stop(SearchContext* ctx) {
     if (ctx->stop) return 1;
-    if (ctx->stop_ms <= 0) return 0;
+    if (ctx->max_nodes > 0 && ctx->nodes >= ctx->max_nodes) {
+        ctx->stop = 1;
+        return 1;
+    }
     if ((ctx->nodes & 2047) == 0) {
-        if (now_ms() >= ctx->stop_ms) {
+        if (ctx->stop_ms > 0 && now_ms() >= ctx->stop_ms) {
+            ctx->stop = 1;
+            return 1;
+        }
+        if (!g_silent && input_waiting() && handle_input_during_search()) {
             ctx->stop = 1;
             return 1;
         }
@@ -1570,57 +1707,113 @@ static int quiescence(Board* b, SearchContext* ctx, int alpha, int beta, int ply
     ctx->nodes++;
     if (should_stop(ctx)) return 0;
     if (ply > ctx->max_seldepth) ctx->max_seldepth = ply;
+    if (ply >= MAX_QPLY) return evaluate(b);
 
-    int stand_pat = evaluate(b);
-    if (stand_pat >= beta) return beta;
-    if (stand_pat > alpha) alpha = stand_pat;
+    uint64_t key = b->hash;
+    TTEntry* tte = tt_probe(&g_tt, key);
+    Move tt_move = {0};
+    Move* tt_move_ptr = NULL;
+    if (tte) {
+        int tt_score = score_from_tt(tte->score, ply);
+        if (tte->flag == TT_FLAG_EXACT ||
+            (tte->flag == TT_FLAG_LOWER && tt_score >= beta) ||
+            (tte->flag == TT_FLAG_UPPER && tt_score <= alpha)) {
+            return tt_score;
+        }
+        tt_move = tte->best_move;
+        tt_move_ptr = &tt_move;
+    }
 
+    int alpha_orig = alpha;
+    int in_check = is_in_check(b, b->side_to_move);
+    int best;
     Move moves[MAX_MOVES];
-    int n = generate_legal_moves(b, moves, 1);
-    order_moves(b, ctx, moves, n, 0, 1, NULL);
+    int n;
 
+    if (in_check) {
+        // Standing pat is illegal in check: search all evasions, detect mate.
+        n = generate_legal_moves(b, moves, 0);
+        if (n == 0) return -MATE_SCORE + ply;
+        best = -INF;
+        order_moves(b, ctx, moves, n, MAX_DEPTH + 1, 0, tt_move_ptr);
+    } else {
+        int stand_pat = evaluate(b);
+        if (stand_pat >= beta) return stand_pat;
+        if (stand_pat > alpha) alpha = stand_pat;
+        best = stand_pat;
+        n = generate_legal_moves(b, moves, 1);
+        order_moves(b, ctx, moves, n, 0, 1, tt_move_ptr);
+    }
+
+    Move best_move = {0};
     for (int i = 0; i < n; ++i) {
         if (!board_make_move(b, &moves[i])) continue;
         int score = -quiescence(b, ctx, -beta, -alpha, ply + 1);
         board_unmake_move(b);
         if (ctx->stop) return 0;
-        if (score >= beta) return beta;
-        if (score > alpha) alpha = score;
+        if (score > best) {
+            best = score;
+            best_move = moves[i];
+            if (score > alpha) {
+                alpha = score;
+                if (score >= beta) break;
+            }
+        }
     }
-    return alpha;
+
+    int flag = (best >= beta) ? TT_FLAG_LOWER : (best > alpha_orig) ? TT_FLAG_EXACT : TT_FLAG_UPPER;
+    tt_store(&g_tt, key, 0, score_to_tt(best, ply), flag, &best_move);
+    return best;
+}
+
+static int has_non_pawn_material(const Board* b, int color) {
+    for (int sq = 0; sq < 64; ++sq) {
+        int p = b->squares[sq];
+        if (!p || piece_color(p) != color) continue;
+        int t = piece_type(p);
+        if (t != PIECE_PAWN && t != PIECE_KING) return 1;
+    }
+    return 0;
 }
 
 static int negamax(Board* b, SearchContext* ctx, int depth, int alpha, int beta, int ply) {
+    ctx->pv_len[ply] = 0;
+    if (depth <= 0) return quiescence(b, ctx, alpha, beta, ply);
+
     ctx->nodes++;
     if (should_stop(ctx)) return 0;
-    ctx->pv_len[ply] = 0;
     if (ply > ctx->max_seldepth) ctx->max_seldepth = ply;
 
-    if (b->halfmove_clock >= 100) return 0;
-    if (depth <= 0) return quiescence(b, ctx, alpha, beta, ply);
+    if (b->halfmove_clock >= 100 || is_repetition(b)) return 0;
+    if (ply >= MAX_DEPTH) return evaluate(b);
+
+    int pv_node = (beta - alpha) > 1;
+    uint64_t key = b->hash;
+    Move tt_move = {0};
+    Move* tt_move_ptr = NULL;
+    TTEntry* tte = tt_probe(&g_tt, key);
+    if (tte) {
+        tt_move = tte->best_move;
+        tt_move_ptr = &tt_move;
+        if (!pv_node && tte->depth >= depth) {
+            int tt_score = score_from_tt(tte->score, ply);
+            if (tte->flag == TT_FLAG_EXACT ||
+                (tte->flag == TT_FLAG_LOWER && tt_score >= beta) ||
+                (tte->flag == TT_FLAG_UPPER && tt_score <= alpha)) {
+                return tt_score;
+            }
+        }
+    }
 
     int in_check = is_in_check(b, b->side_to_move);
 
-    // Null move pruning
-    if (!in_check && depth >= 3 && ply > 0 && beta < MATE_SCORE - 100 && beta > -MATE_SCORE + 100) {
-        int non_pawn = 0;
-        for (int sq = 0; sq < 64; ++sq) {
-            int p = b->squares[sq];
-            if (!p) continue;
-            int t = piece_type(p);
-            if (t != PIECE_PAWN && t != PIECE_KING) non_pawn++;
-        }
-        if (non_pawn >= 4) {
-            int old_ep = b->ep_sq;
-            b->ep_sq = -1;
-            b->side_to_move ^= 1;
-
+    // Null move pruning (not in PV nodes; side to move needs a piece to avoid zugzwang blunders)
+    if (!pv_node && !in_check && depth >= 3 && beta < MATE_BOUND && beta > -MATE_BOUND &&
+        has_non_pawn_material(b, b->side_to_move) && evaluate(b) >= beta) {
+        if (board_make_null(b)) {
             int R = 2 + depth / 4;
             int score = -negamax(b, ctx, depth - 1 - R, -beta, -beta + 1, ply + 1);
-
-            b->side_to_move ^= 1;
-            b->ep_sq = old_ep;
-
+            board_unmake_null(b);
             if (ctx->stop) return 0;
             if (score >= beta) return beta;
         }
@@ -1629,39 +1822,15 @@ static int negamax(Board* b, SearchContext* ctx, int depth, int alpha, int beta,
     Move moves[MAX_MOVES];
     int n = generate_legal_moves(b, moves, 0);
     if (n == 0) {
-        if (is_in_check(b, b->side_to_move)) return -MATE_SCORE + ply;
+        if (in_check) return -MATE_SCORE + ply;
         return 0;
     }
 
-    Move tt_move = {0};
-    Move* tt_move_ptr = NULL;
     int alpha_orig = alpha;
-    uint64_t key = board_hash(b);
-    TTEntry* tte = tt_probe(&g_tt, key);
-    if (tte) {
-        tt_move = tte->best_move;
-        tt_move_ptr = &tt_move;
-        if (tte->depth >= depth) {
-            if (tte->flag == TT_FLAG_EXACT) {
-                if (tt_move_ptr && (tt_move_ptr->from || tt_move_ptr->to || tt_move_ptr->promo)) {
-                    ctx->pv_table[ply][0] = *tt_move_ptr;
-                    ctx->pv_len[ply] = 1;
-                }
-                return tte->score;
-            } else if (tte->flag == TT_FLAG_LOWER) {
-                if (tte->score > alpha) alpha = tte->score;
-            } else if (tte->flag == TT_FLAG_UPPER) {
-                if (tte->score < beta) beta = tte->score;
-            }
-            if (alpha >= beta) return tte->score;
-        }
-    }
-
     order_moves(b, ctx, moves, n, ply, 0, tt_move_ptr);
     int best = -INF;
 
     Move best_move = moves[0];
-    int tt_flag = TT_FLAG_UPPER;
 
     for (int i = 0; i < n; ++i) {
         int is_capture = move_is_capture(b, &moves[i]);
@@ -1698,7 +1867,6 @@ static int negamax(Board* b, SearchContext* ctx, int depth, int alpha, int beta,
         }
         if (score > alpha) {
             alpha = score;
-            tt_flag = TT_FLAG_EXACT;
             ctx->pv_table[ply][0] = moves[i];
             int child_len = ctx->pv_len[ply + 1];
             for (int j = 0; j < child_len; ++j) {
@@ -1707,9 +1875,8 @@ static int negamax(Board* b, SearchContext* ctx, int depth, int alpha, int beta,
             ctx->pv_len[ply] = child_len + 1;
         }
         if (alpha >= beta) {
-            tt_flag = TT_FLAG_LOWER;
             // Update killer/history for quiet beta-cutoff moves
-            if (!is_capture && ply <= MAX_DEPTH) {
+            if (!is_capture && !moves[i].promo) {
                 if (!move_equals(&moves[i], &ctx->killers[ply][0])) {
                     ctx->killers[ply][1] = ctx->killers[ply][0];
                     ctx->killers[ply][0] = moves[i];
@@ -1717,7 +1884,8 @@ static int negamax(Board* b, SearchContext* ctx, int depth, int alpha, int beta,
                 int c = b->side_to_move;
                 int from = moves[i].from, to = moves[i].to;
                 ctx->history[c][from][to] += depth * depth;
-                if (ctx->history[c][from][to] > 1000000) {
+                // Keep history below the killer/capture ordering bands
+                if (ctx->history[c][from][to] > HISTORY_MAX) {
                     for (int f = 0; f < 64; ++f) {
                         for (int t = 0; t < 64; ++t) {
                             ctx->history[c][f][t] /= 2;
@@ -1728,16 +1896,25 @@ static int negamax(Board* b, SearchContext* ctx, int depth, int alpha, int beta,
             break;
         }
     }
-    if (best <= alpha_orig) tt_flag = TT_FLAG_UPPER;
-    tt_store(&g_tt, key, depth, best, tt_flag, &best_move);
+
+    int tt_flag = (best >= beta) ? TT_FLAG_LOWER : (best > alpha_orig) ? TT_FLAG_EXACT : TT_FLAG_UPPER;
+    tt_store(&g_tt, key, depth, score_to_tt(best, ply), tt_flag, &best_move);
     return best;
 }
 
-static Move search_best_move(Board* b, int max_depth, long long time_limit_ms, int fixed_depth_mode, SearchInfo* out_info) {
-    SearchContext ctx;
+static void print_score(int score) {
+    if (score > MATE_BOUND) printf("score mate %d", (MATE_SCORE - score + 1) / 2);
+    else if (score < -MATE_BOUND) printf("score mate -%d", (MATE_SCORE + score) / 2);
+    else printf("score cp %d", score);
+}
+
+static Move search_best_move(Board* b, int max_depth, long long time_limit_ms, long long max_nodes,
+                             int fixed_depth_mode, int infinite, SearchInfo* out_info) {
+    static SearchContext ctx;
     memset(&ctx, 0, sizeof(ctx));
     ctx.max_depth = max_depth;
     ctx.max_seldepth = 0;
+    ctx.max_nodes = max_nodes;
     ctx.start_ms = now_ms();
     ctx.stop_ms = (time_limit_ms > 0) ? (ctx.start_ms + time_limit_ms) : 0;
     tt_new_search(&g_tt);
@@ -1746,28 +1923,40 @@ static Move search_best_move(Board* b, int max_depth, long long time_limit_ms, i
     memset(&info, 0, sizeof(info));
     Move best = {0};
 
-    for (int depth = 1; depth <= max_depth; ++depth) {
-        Move moves[MAX_MOVES];
-        int n = generate_legal_moves(b, moves, 0);
-        if (n == 0) break;
-        order_moves(b, &ctx, moves, n, 0, 0, NULL);
+    // Root move list is kept across iterations; the previous iteration's best move goes first.
+    Move moves[MAX_MOVES];
+    int n = generate_legal_moves(b, moves, 0);
+    {
+        TTEntry* tte = tt_probe(&g_tt, b->hash);
+        Move tt_move = tte ? tte->best_move : (Move){0};
+        order_moves(b, &ctx, moves, n, 0, 0, tte ? &tt_move : NULL);
+    }
 
+    for (int depth = 1; depth <= max_depth && n > 0; ++depth) {
         int alpha = -INF;
         int beta = INF;
         int best_score = -INF;
-        Move best_this = moves[0];
+        int best_idx = -1;
         Move root_pv[MAX_DEPTH + 1];
         int root_pv_len = 0;
 
         for (int i = 0; i < n; ++i) {
             if (!board_make_move(b, &moves[i])) continue;
-            int score = -negamax(b, &ctx, depth - 1, -beta, -alpha, 1);
+            int score;
+            if (i == 0) {
+                score = -negamax(b, &ctx, depth - 1, -beta, -alpha, 1);
+            } else {
+                score = -negamax(b, &ctx, depth - 1, -alpha - 1, -alpha, 1);
+                if (score > alpha && !ctx.stop) {
+                    score = -negamax(b, &ctx, depth - 1, -beta, -alpha, 1);
+                }
+            }
             board_unmake_move(b);
             if (ctx.stop) break;
 
             if (score > best_score) {
                 best_score = score;
-                best_this = moves[i];
+                best_idx = i;
                 root_pv[0] = moves[i];
                 int child_len = ctx.pv_len[1];
                 for (int j = 0; j < child_len && (j + 1) < (MAX_DEPTH + 1); ++j) {
@@ -1778,41 +1967,51 @@ static Move search_best_move(Board* b, int max_depth, long long time_limit_ms, i
             if (score > alpha) alpha = score;
         }
 
-        if (ctx.stop && depth > 1) break;
-        best = best_this;
+        // Every score recorded above comes from a completed search, so even an interrupted
+        // iteration's best move is usable (the previous best was searched first).
+        if (best_idx >= 0) {
+            Move m = moves[best_idx];
+            for (int k = best_idx; k > 0; --k) moves[k] = moves[k - 1];
+            moves[0] = m;
+            best = m;
+            info.has_best = 1;
+            info.best_move = m;
+        }
+        if (ctx.stop) break;
+
         info.depth = depth;
         info.seldepth = ctx.max_seldepth;
         info.score = best_score;
         info.nodes = ctx.nodes;
-        info.has_best = 1;
-        info.best_move = best;
         info.time_ms = now_ms() - ctx.start_ms;
 
-        long long t = info.time_ms > 0 ? info.time_ms : 1;
-        long long nps = (long long)info.nodes * 1000LL / t;
-        int hashfull = tt_hashfull_permille(&g_tt);
-        printf("info depth %d seldepth %d nodes %d time %lld nps %lld score cp %d hashfull %d",
-               info.depth, info.seldepth, info.nodes, info.time_ms, nps, info.score, hashfull);
-        if (root_pv_len > 0) {
-            printf(" pv");
-            for (int p = 0; p < root_pv_len; ++p) {
-                char pv_move[8];
-                move_to_uci(&root_pv[p], pv_move);
-                printf(" %s", pv_move);
+        if (!g_silent) {
+            long long t = info.time_ms > 0 ? info.time_ms : 1;
+            long long nps = info.nodes * 1000LL / t;
+            int hashfull = tt_hashfull_permille(&g_tt);
+            printf("info depth %d seldepth %d nodes %lld time %lld nps %lld ",
+                   info.depth, info.seldepth, info.nodes, info.time_ms, nps);
+            print_score(info.score);
+            printf(" hashfull %d", hashfull);
+            if (root_pv_len > 0) {
+                printf(" pv");
+                for (int p = 0; p < root_pv_len; ++p) {
+                    char pv_move[8];
+                    move_to_uci(&root_pv[p], pv_move);
+                    printf(" %s", pv_move);
+                }
             }
+            printf("\n");
+            fflush(stdout);
         }
-        printf("\n");
-        fflush(stdout);
 
+        if (infinite) continue;
         if (!fixed_depth_mode && time_limit_ms > 0 && info.time_ms > time_limit_ms / 2) break;
-        if (abs(best_score) > MATE_SCORE - 1000) break;
+        if (abs(best_score) > MATE_BOUND) break;
     }
+    info.nodes = ctx.nodes;
 
-    if (!info.has_best) {
-        Move fallback[MAX_MOVES];
-        int n = generate_legal_moves(b, fallback, 0);
-        if (n > 0) best = fallback[0];
-    }
+    if (!info.has_best && n > 0) best = moves[0];
 
     if (out_info) *out_info = info;
     return best;
@@ -1873,11 +2072,189 @@ static long long compute_time_for_move(const Board* b, int wtime, int btime, int
     return t;
 }
 
-int main(void) {
+// ---------------------------------------------------------------------------
+// Testing tools: perft, bench, genfens
+// ---------------------------------------------------------------------------
+
+static int g_perft_hash_errors = 0;
+
+static uint64_t perft(Board* b, int depth) {
+    if (depth == 0) return 1;
+    Move moves[MAX_MOVES];
+    int n = generate_legal_moves(b, moves, 0);
+    if (depth == 1) return (uint64_t)n;
+    uint64_t total = 0;
+    for (int i = 0; i < n; ++i) {
+        board_make_move(b, &moves[i]);
+        if (b->hash != board_hash(b)) g_perft_hash_errors++;
+        total += perft(b, depth - 1);
+        board_unmake_move(b);
+    }
+    return total;
+}
+
+// Prints per-move counts ("divide"), the total, and verifies the incremental hash.
+static void perft_divide(Board* b, int depth) {
+    long long start = now_ms();
+    g_perft_hash_errors = 0;
+    Move moves[MAX_MOVES];
+    int n = generate_legal_moves(b, moves, 0);
+    uint64_t total = 0;
+    for (int i = 0; i < n; ++i) {
+        board_make_move(b, &moves[i]);
+        if (b->hash != board_hash(b)) g_perft_hash_errors++;
+        uint64_t cnt = depth > 1 ? perft(b, depth - 1) : 1;
+        board_unmake_move(b);
+        char mv[8];
+        move_to_uci(&moves[i], mv);
+        printf("%s: %llu\n", mv, (unsigned long long)cnt);
+        total += cnt;
+    }
+    long long ms = now_ms() - start;
+    printf("\nNodes searched: %llu\n", (unsigned long long)total);
+    printf("Time: %lld ms\n", ms);
+    if (g_perft_hash_errors) printf("HASH ERRORS: %d\n", g_perft_hash_errors);
+    fflush(stdout);
+}
+
+static const char* BENCH_FENS[] = {
+    "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+    "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
+    "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4",
+    "r1bq1rk1/pp2bppp/2n1pn2/3p4/2PP4/2N1PN2/PP3PPP/R1BQKB1R w KQ - 0 8",
+    "r2q1rk1/pp1nbppp/2p1pn2/3p4/2PP1B2/2N1PN2/PP1Q1PPP/R3KB1R w KQ - 0 9",
+    "rnbqk2r/ppp1bppp/4pn2/3p4/2PP4/5NP1/PP2PPBP/RNBQK2R b KQkq - 1 5",
+    "r1b2rk1/2q1bppp/p2p1n2/np2p3/3PP3/5N1P/PPBN1PP1/R1BQR1K1 b - - 0 13",
+    "2rq1rk1/pb1nbppp/1p2pn2/2pp4/2PP4/1P1BPN2/PB1N1PPP/2RQ1RK1 w - - 4 13",
+    "r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10",
+    "3r2k1/pp3pp1/2p1b2p/8/3P4/2PB1N2/PP3PPP/4R1K1 w - - 0 22",
+    "r3r1k1/pp3pp1/2p2n1p/3p4/3P4/2NQ1N1P/PPq2PP1/R4RK1 w - - 0 18",
+    "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1",
+    "8/5pk1/6p1/3P4/1p3P2/6P1/5K2/8 w - - 0 45",
+    "6k1/5p2/6p1/8/7p/8/6PP/6K1 b - - 0 1",
+    "8/8/4k3/3p4/3P4/4K3/8/8 w - - 0 1",
+    "4r1k1/p4ppp/1p6/2p5/2P5/1P3N2/P4PPP/6K1 w - - 0 25",
+    "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8",
+    "r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1",
+};
+
+#define BENCH_DEFAULT_DEPTH 9
+
+static void run_bench(int depth) {
+    // Static rather than heap: on macOS a heap-allocated Board searched up to 6x slower.
+    static Board bench_storage;
+    Board* bench_board = &bench_storage;
+    int count = (int)(sizeof(BENCH_FENS) / sizeof(BENCH_FENS[0]));
+    long long total_nodes = 0;
+    long long start = now_ms();
+    int old_silent = g_silent;
+    g_silent = 1;
+    for (int i = 0; i < count; ++i) {
+        board_set_fen(bench_board, BENCH_FENS[i]);
+        tt_clear(&g_tt);
+        long long pos_start = now_ms();
+        SearchInfo info;
+        Move best = search_best_move(bench_board, depth, 0, 0, 1, 0, &info);
+        char mv[8];
+        move_to_uci(&best, mv);
+        printf("position %2d  bestmove %-6s  nodes %10lld  time %6lld ms\n", i + 1, mv, info.nodes, now_ms() - pos_start);
+        total_nodes += info.nodes;
+    }
+    g_silent = old_silent;
+    long long ms = now_ms() - start;
+    if (ms <= 0) ms = 1;
+    // Final line in the format OpenBench expects.
+    printf("%lld nodes %lld nps\n", total_nodes, total_nodes * 1000LL / ms);
+    fflush(stdout);
+    tt_clear(&g_tt);
+}
+
+static void board_to_fen(const Board* b, char* out, size_t out_size) {
+    static const char piece_chars[] = " PNBRQK  pnbrqk";
+    char buf[128];
+    int pos = 0;
+    for (int r = 7; r >= 0; --r) {
+        int empty = 0;
+        for (int f = 0; f < 8; ++f) {
+            int p = b->squares[square_of(r, f)];
+            if (!p) { empty++; continue; }
+            if (empty) { buf[pos++] = (char)('0' + empty); empty = 0; }
+            buf[pos++] = piece_chars[p];
+        }
+        if (empty) buf[pos++] = (char)('0' + empty);
+        if (r > 0) buf[pos++] = '/';
+    }
+    buf[pos] = '\0';
+    char castle[5] = {0};
+    int ci = 0;
+    if (b->castling_rights & CASTLE_WHITE_K) castle[ci++] = 'K';
+    if (b->castling_rights & CASTLE_WHITE_Q) castle[ci++] = 'Q';
+    if (b->castling_rights & CASTLE_BLACK_K) castle[ci++] = 'k';
+    if (b->castling_rights & CASTLE_BLACK_Q) castle[ci++] = 'q';
+    if (!ci) castle[ci++] = '-';
+    char ep[3] = "-";
+    if (b->ep_sq >= 0) {
+        ep[0] = (char)('a' + file_of(b->ep_sq));
+        ep[1] = (char)('1' + rank_of(b->ep_sq));
+        ep[2] = '\0';
+    }
+    snprintf(out, out_size, "%s %c %s %s %d %d", buf, b->side_to_move == COLOR_WHITE ? 'w' : 'b',
+             castle, ep, b->halfmove_clock, b->fullmove_number);
+}
+
+// Generates random, roughly balanced opening positions for engine-vs-engine testing.
+// Usage: genfens <count> [seed <n>] [plies <n>]
+static void run_genfens(int count, uint64_t seed, int plies) {
+    static Board genfens_storage;
+    Board* gb = &genfens_storage;
+    int old_silent = g_silent;
+    g_silent = 1;
+    int produced = 0;
+    long long attempts = 0;
+    while (produced < count && attempts < (long long)count * 1000) {
+        attempts++;
+        board_set_startpos(gb);
+        int ok = 1;
+        for (int ply = 0; ply < plies; ++ply) {
+            Move moves[MAX_MOVES];
+            int n = generate_legal_moves(gb, moves, 0);
+            if (n == 0) { ok = 0; break; }
+            int idx = (int)(splitmix64_next(&seed) % (uint64_t)n);
+            board_make_move(gb, &moves[idx]);
+        }
+        if (!ok) continue;
+        Move moves[MAX_MOVES];
+        if (generate_legal_moves(gb, moves, 0) == 0) continue;
+        // Keep only positions a shallow search considers roughly balanced.
+        tt_clear(&g_tt);
+        SearchInfo info;
+        search_best_move(gb, 6, 0, 0, 1, 0, &info);
+        if (abs(info.score) > 120) continue;
+        gb->history_count = 0;
+        char fen[128];
+        board_to_fen(gb, fen, sizeof(fen));
+        printf("%s\n", fen);
+        produced++;
+    }
+    g_silent = old_silent;
+    tt_clear(&g_tt);
+    fflush(stdout);
+}
+
+int main(int argc, char** argv) {
     init_zobrist();
     tt_init_mb(&g_tt, DEFAULT_TT_MB);
 
-    Board board;
+    if (argc > 1 && strcmp(argv[1], "bench") == 0) {
+        run_bench(argc > 2 ? atoi(argv[2]) : BENCH_DEFAULT_DEPTH);
+        tt_free(&g_tt);
+        return 0;
+    }
+
+    // Unbuffered input so polling stdin during search sees every pending command.
+    setvbuf(stdin, NULL, _IONBF, 0);
+
+    static Board board;
     board_set_startpos(&board);
 
     char line[MAX_LINE];
@@ -1959,6 +2336,9 @@ int main(void) {
             int winc = 0, binc = 0;
             int movestogo = -1;
             int depth_specified = 0;
+            int infinite = 0;
+            long long nodes_limit = 0;
+            int perft_depth = 0;
 
             for (int i = 1; i < n; ++i) {
                 if (strcmp(tokens[i], "depth") == 0 && i + 1 < n) {
@@ -1971,17 +2351,49 @@ int main(void) {
                 else if (strcmp(tokens[i], "winc") == 0 && i + 1 < n) winc = atoi(tokens[++i]);
                 else if (strcmp(tokens[i], "binc") == 0 && i + 1 < n) binc = atoi(tokens[++i]);
                 else if (strcmp(tokens[i], "movestogo") == 0 && i + 1 < n) movestogo = atoi(tokens[++i]);
+                else if (strcmp(tokens[i], "nodes") == 0 && i + 1 < n) nodes_limit = atoll(tokens[++i]);
+                else if (strcmp(tokens[i], "perft") == 0 && i + 1 < n) perft_depth = atoi(tokens[++i]);
+                else if (strcmp(tokens[i], "infinite") == 0) infinite = 1;
             }
+            if (perft_depth > 0) {
+                perft_divide(&board, perft_depth);
+                continue;
+            }
+            if (depth < 1) depth = 1;
 
-            long long limit_ms = compute_time_for_move(&board, wtime, btime, winc, binc, movetime, movestogo);
+            long long limit_ms = infinite ? 0 : compute_time_for_move(&board, wtime, btime, winc, binc, movetime, movestogo);
             SearchInfo info;
-            Move best = search_best_move(&board, depth > MAX_DEPTH ? MAX_DEPTH : depth, limit_ms, depth_specified, &info);
+            Move best = search_best_move(&board, depth > MAX_DEPTH ? MAX_DEPTH : depth, limit_ms, nodes_limit,
+                                         depth_specified || nodes_limit > 0, infinite, &info);
+
+            // In infinite mode, bestmove may only be sent after "stop".
+            if (infinite && !g_quit) {
+                char wait_line[MAX_LINE];
+                while (fgets(wait_line, sizeof(wait_line), stdin)) {
+                    if (strncmp(wait_line, "quit", 4) == 0) { g_quit = 1; break; }
+                    if (strncmp(wait_line, "stop", 4) == 0) break;
+                    if (strncmp(wait_line, "isready", 7) == 0) { printf("readyok\n"); fflush(stdout); }
+                }
+            }
 
             char best_str[8];
             move_to_uci(&best, best_str);
             if (best_str[0] == '\0') strcpy(best_str, "0000");
             printf("bestmove %s\n", best_str);
             fflush(stdout);
+            if (g_quit) break;
+        } else if (strcmp(tokens[0], "perft") == 0 && n > 1) {
+            perft_divide(&board, atoi(tokens[1]));
+        } else if (strcmp(tokens[0], "bench") == 0) {
+            run_bench(n > 1 ? atoi(tokens[1]) : BENCH_DEFAULT_DEPTH);
+        } else if (strcmp(tokens[0], "genfens") == 0 && n > 1) {
+            uint64_t seed = 1;
+            int plies = 8;
+            for (int i = 2; i + 1 < n; ++i) {
+                if (strcmp(tokens[i], "seed") == 0) seed = (uint64_t)atoll(tokens[++i]);
+                else if (strcmp(tokens[i], "plies") == 0) plies = atoi(tokens[++i]);
+            }
+            run_genfens(atoi(tokens[1]), seed, plies);
         } else if (strcmp(tokens[0], "quit") == 0) {
             break;
         } else if (strcmp(tokens[0], "stop") == 0) {
