@@ -14,10 +14,14 @@ int g_move_overhead = 20;
 
 #define HISTORY_MAX 16384
 
+// History indexed by [piece][to-square] of a follow-up move.
+typedef int PieceToHistory[12][64];
+
 typedef struct {
     int static_eval;
     Move move;
-    int piece;          // piece that made `move`
+    int piece;              // piece that made `move`
+    PieceToHistory* cont;   // continuation history for moves following `move`
     Move killers[2];
 } StackEntry;
 
@@ -45,6 +49,8 @@ typedef struct {
 // History tables survive between moves of the same game.
 static int history[2][64][64];
 static Move countermoves[12][64];
+static PieceToHistory cont_history[12][64];  // [previous piece][previous to]
+static PieceToHistory cont_sentinel;         // used after null moves and at the root
 static int lmr_table[64][64];
 
 static SearchState S;
@@ -57,6 +63,7 @@ void search_init(void) {
 void search_clear(void) {
     memset(history, 0, sizeof(history));
     memset(countermoves, 0, sizeof(countermoves));
+    memset(cont_history, 0, sizeof(cont_history));
 }
 
 // ---------------------------------------------------------------------------
@@ -110,6 +117,12 @@ enum {
     SCORE_BAD_NOISY = -(1 << 28),
 };
 
+// Combined quiet-move history: butterfly + 1-ply and 2-ply continuation history.
+static inline int quiet_history(const StackEntry* ss, int side, int piece, Move m) {
+    int to = move_to(m);
+    return history[side][move_from(m)][to] + (*ss[-1].cont)[piece][to] + (*ss[-2].cont)[piece][to];
+}
+
 static void score_moves(MoveList* list, Move tt_move, int ply) {
     const Position* pos = &S.pos;
     const StackEntry* ss = &S.stack[ply + 4];
@@ -135,7 +148,7 @@ static void score_moves(MoveList* list, Move tt_move, int ply) {
         } else if (m == counter) {
             score = SCORE_COUNTER;
         } else {
-            score = history[pos->side][move_from(m)][move_to(m)];
+            score = quiet_history(ss, pos->side, pos->board[move_from(m)], m);
         }
         list->moves[i].score = score;
     }
@@ -167,9 +180,15 @@ static void update_quiet_heuristics(int ply, int depth, Move best, const Move* q
     }
     if (ply > 0 && ss[-1].move != MOVE_NONE) countermoves[ss[-1].piece][move_to(ss[-1].move)] = best;
 
-    history_update(&history[side][move_from(best)][move_to(best)], bonus);
-    for (int i = 0; i < quiet_count; ++i)
-        history_update(&history[side][move_from(quiets[i])][move_to(quiets[i])], -bonus);
+    const Position* pos = &S.pos;
+    for (int i = -1; i < quiet_count; ++i) {
+        Move m = i < 0 ? best : quiets[i];
+        int b = i < 0 ? bonus : -bonus;
+        int pc = pos->board[move_from(m)], to = move_to(m);
+        history_update(&history[side][move_from(m)][to], b);
+        history_update(&(*ss[-1].cont)[pc][to], b);
+        history_update(&(*ss[-2].cont)[pc][to], b);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -239,6 +258,7 @@ static int qsearch(int alpha, int beta, int ply) {
         StackEntry* ss = &S.stack[ply + 4];
         ss->move = m;
         ss->piece = moved_piece(pos, m);
+        ss->cont = &cont_history[ss->piece][move_to(m)];
         pos_make_move(pos, m);
         int score = -qsearch(-beta, -alpha, ply + 1);
         pos_unmake_move(pos, m);
@@ -331,6 +351,7 @@ static int search(int alpha, int beta, int depth, int ply) {
             int r = 3 + depth / 3 + ((eval - beta) / 200 < 3 ? (eval - beta) / 200 : 3);
             ss->move = MOVE_NONE;
             ss->piece = NO_PIECE;
+            ss->cont = &cont_sentinel;
             pos_make_null(pos);
             int score = -search(-beta, -beta + 1, depth - r, ply + 1);
             pos_unmake_null(pos);
@@ -378,8 +399,10 @@ static int search(int alpha, int beta, int depth, int ply) {
             }
         }
 
+        int hist = quiet ? quiet_history(ss, pos->side, pos->board[move_from(m)], m) : 0;
         ss->move = m;
         ss->piece = moved_piece(pos, m);
+        ss->cont = &cont_history[ss->piece][move_to(m)];
         pos_make_move(pos, m);
         tt_prefetch(pos->st->key);
         int gives_check = in_check(pos);
@@ -392,7 +415,7 @@ static int search(int alpha, int beta, int depth, int ply) {
             r += !improving;
             r -= gives_check;
             r -= (m == ss->killers[0] || m == ss->killers[1]);
-            r -= history[pos->side ^ 1][move_from(m)][move_to(m)] / 8192;
+            r -= hist / 16384;
             if (r < 0) r = 0;
             if (r > new_depth - 1) r = new_depth - 1;
             score = -search(-alpha - 1, -alpha, new_depth - r, ply + 1);
@@ -463,7 +486,10 @@ SearchResult search_run(const Position* pos, const SearchLimits* limits, int sil
     memcpy(&S.pos, pos, sizeof(Position));
     S.pos.st = S.pos.states + (pos->st - pos->states);
     memset(S.stack, 0, sizeof(S.stack));
-    for (int i = 0; i < MAX_PLY + 8; ++i) S.stack[i].static_eval = VALUE_NONE;
+    for (int i = 0; i < MAX_PLY + 8; ++i) {
+        S.stack[i].static_eval = VALUE_NONE;
+        S.stack[i].cont = &cont_sentinel;
+    }
     S.nodes = 0;
     S.seldepth = 0;
     S.stop = 0;
