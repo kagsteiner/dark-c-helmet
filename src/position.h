@@ -3,7 +3,9 @@
 
 #include "bitboard.h"
 
+#ifndef NNUE_HIDDEN
 #define NNUE_HIDDEN 256
+#endif
 
 // Pieces changed by the move that led to a state (for incremental NNUE updates).
 // from == NO_SQ means the piece appeared, to == NO_SQ means it disappeared.

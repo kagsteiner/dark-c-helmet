@@ -5,6 +5,8 @@
 #include <string.h>
 
 #define INPUTS 768
+#define BUCKETS 8
+#define NET_MAGIC 0x32484344u  // "DCH2"
 #define QA 255
 #define QB 64
 #define SCALE 150  // must match tools/nnue/trainer.c
@@ -13,25 +15,31 @@ int g_use_nnue = 0;
 
 static int16_t ft_weights[INPUTS][NNUE_HIDDEN];
 static int16_t ft_bias[NNUE_HIDDEN];
-static int16_t out_weights[2 * NNUE_HIDDEN];
-static int32_t out_bias;
+static int16_t out_weights[BUCKETS][2 * NNUE_HIDDEN];
+static int32_t out_bias[BUCKETS];
 
 // Provided by the generated src/nnue_net.c (size 0 if no network is embedded).
 extern const unsigned char NNUE_EMBEDDED[];
 extern const size_t NNUE_EMBEDDED_SIZE;
 
-#define NET_SIZE (sizeof(ft_weights) + sizeof(ft_bias) + sizeof(out_weights) + sizeof(out_bias))
+#define HEADER_SIZE (3 * sizeof(uint32_t))
+#define NET_SIZE (HEADER_SIZE + sizeof(ft_weights) + sizeof(ft_bias) + sizeof(out_weights) + sizeof(out_bias))
 
 static int load_memory(const unsigned char* data, size_t size) {
     if (size != NET_SIZE) return 0;
-    // The file is little-endian, like every platform this engine targets.
+    // Header: magic, hidden size, buckets. The file is little-endian, like every platform
+    // this engine targets.
+    uint32_t header[3];
+    memcpy(header, data, sizeof(header));
+    if (header[0] != NET_MAGIC || header[1] != NNUE_HIDDEN || header[2] != BUCKETS) return 0;
+    data += HEADER_SIZE;
     memcpy(ft_weights, data, sizeof(ft_weights));
     data += sizeof(ft_weights);
     memcpy(ft_bias, data, sizeof(ft_bias));
     data += sizeof(ft_bias);
     memcpy(out_weights, data, sizeof(out_weights));
     data += sizeof(out_weights);
-    memcpy(&out_bias, data, sizeof(out_bias));
+    memcpy(out_bias, data, sizeof(out_bias));
     return 1;
 }
 
@@ -146,8 +154,10 @@ int nnue_evaluate(Position* pos) {
 #endif
     const Accumulator* acc = &pos->acc[idx];
     int stm = pos->side;
-    int64_t sum = (int64_t)screlu_dot(acc->values[stm], out_weights) +
-                  screlu_dot(acc->values[stm ^ 1], out_weights + NNUE_HIDDEN);
-    int64_t out = sum / QA + out_bias;
+    int bucket = (popcount(pos->occupied) - 2) / 4;
+    if (bucket >= BUCKETS) bucket = BUCKETS - 1;
+    int64_t sum = (int64_t)screlu_dot(acc->values[stm], out_weights[bucket]) +
+                  screlu_dot(acc->values[stm ^ 1], out_weights[bucket] + NNUE_HIDDEN);
+    int64_t out = sum / QA + out_bias[bucket];
     return (int)(out * SCALE / (QA * QB));
 }
