@@ -8,7 +8,7 @@ static int hash_errors;
 
 // Recomputes the incrementally maintained keys from scratch to verify make/unmake.
 static int verify_state(const Position* pos) {
-    Position copy;
+    static Position copy;  // static: Position is large (accumulators)
     char fen[128];
     pos_to_fen(pos, fen, sizeof(fen));
     pos_set_fen(&copy, fen);

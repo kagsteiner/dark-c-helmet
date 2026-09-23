@@ -3,6 +3,23 @@
 
 #include "bitboard.h"
 
+#define NNUE_HIDDEN 256
+
+// Pieces changed by the move that led to a state (for incremental NNUE updates).
+// from == NO_SQ means the piece appeared, to == NO_SQ means it disappeared.
+typedef struct {
+    int count;
+    int piece[3];
+    int from[3];
+    int to[3];
+} DirtyPieces;
+
+// NNUE first-layer output for both perspectives, one per state.
+typedef struct {
+    int16_t values[2][NNUE_HIDDEN];
+    int computed;
+} Accumulator;
+
 // Per-ply state. make_move pushes a copy and modifies it; unmake pops it.
 typedef struct {
     uint64_t key;
@@ -17,6 +34,7 @@ typedef struct {
     Bitboard pinned;     // own pieces pinned to own king (side to move)
     int psq_mg, psq_eg;  // material + piece-square score, white's point of view
     int phase;           // 0 (pawn endgame) .. 24 (all pieces)
+    DirtyPieces dirty;
 } State;
 
 typedef struct {
@@ -30,6 +48,7 @@ typedef struct {
     int game_ply;        // plies since the FEN
     State states[MAX_GAME_PLY + MAX_PLY + 8];
     State* st;
+    Accumulator acc[MAX_GAME_PLY + MAX_PLY + 8];  // acc[i] belongs to states[i]
 } Position;
 
 extern uint64_t ZOBRIST_PIECE[12][64];

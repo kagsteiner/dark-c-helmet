@@ -80,6 +80,14 @@ static inline void state_add(State* st, int pc, int sq) {
     if (piece_type(pc) == PAWN) st->pawn_key ^= ZOBRIST_PIECE[pc][sq];
 }
 
+static inline void add_dirty(State* st, int pc, int from, int to) {
+    DirtyPieces* d = &st->dirty;
+    d->piece[d->count] = pc;
+    d->from[d->count] = from;
+    d->to[d->count] = to;
+    d->count++;
+}
+
 static inline void state_remove(State* st, int pc, int sq) {
     st->key ^= ZOBRIST_PIECE[pc][sq];
     st->psq_mg -= PSQ_MG[pc][sq];
@@ -175,6 +183,8 @@ int pos_set_fen(Position* pos, const char* fen) {
     if (st->ep_sq != NO_SQ) st->key ^= ZOBRIST_EP[file_of(st->ep_sq)];
     if (pos->side == BLACK) st->key ^= ZOBRIST_SIDE;
     set_check_info(pos);
+    st->dirty.count = 0;
+    pos->acc[0].computed = 0;
     return 1;
 }
 
@@ -248,6 +258,7 @@ void pos_make_move(Position* pos, Move m) {
     st->rule50++;
     st->plies_from_null++;
     st->captured = NO_PIECE;
+    st->dirty.count = 0;
     st->key ^= ZOBRIST_SIDE;
     if (prev->ep_sq != NO_SQ) {
         st->key ^= ZOBRIST_EP[file_of(prev->ep_sq)];
@@ -264,6 +275,8 @@ void pos_make_move(Position* pos, Move m) {
         state_add(st, pc, to);
         state_remove(st, rook, rook_from);
         state_add(st, rook, rook_to);
+        add_dirty(st, pc, from, to);
+        add_dirty(st, rook, rook_from, rook_to);
     } else {
         if (flags & FLAG_CAPTURE) {
             int cap_sq = (flags == FLAG_EP) ? (to ^ 8) : to;
@@ -272,10 +285,12 @@ void pos_make_move(Position* pos, Move m) {
             state_remove(st, captured, cap_sq);
             st->captured = captured;
             st->rule50 = 0;
+            add_dirty(st, captured, cap_sq, NO_SQ);
         }
         move_piece(pos, from, to);
         state_remove(st, pc, from);
         state_add(st, pc, to);
+        if (!(flags & FLAG_PROMO)) add_dirty(st, pc, from, to);
 
         if (piece_type(pc) == PAWN) {
             st->rule50 = 0;
@@ -291,6 +306,8 @@ void pos_make_move(Position* pos, Move m) {
                 put_piece(pos, promo, to);
                 state_remove(st, pc, to);
                 state_add(st, promo, to);
+                add_dirty(st, pc, from, NO_SQ);
+                add_dirty(st, promo, NO_SQ, to);
             }
         }
     }
@@ -303,6 +320,7 @@ void pos_make_move(Position* pos, Move m) {
 
     pos->side = them;
     pos->game_ply++;
+    pos->acc[pos->game_ply].computed = 0;
     set_check_info(pos);
 }
 
@@ -341,6 +359,7 @@ void pos_make_null(Position* pos) {
     st->captured = NO_PIECE;
     st->rule50++;
     st->plies_from_null = 0;
+    st->dirty.count = 0;
     st->key ^= ZOBRIST_SIDE;
     if (prev->ep_sq != NO_SQ) {
         st->key ^= ZOBRIST_EP[file_of(prev->ep_sq)];
@@ -348,6 +367,7 @@ void pos_make_null(Position* pos) {
     }
     pos->side ^= 1;
     pos->game_ply++;
+    pos->acc[pos->game_ply].computed = 0;
     set_check_info(pos);
 }
 

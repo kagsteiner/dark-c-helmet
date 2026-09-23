@@ -1,4 +1,7 @@
 #include "eval.h"
+#ifndef TUNE
+#include "nnue.h"
+#endif
 
 #include <stdio.h>
 #include <string.h>
@@ -396,6 +399,10 @@ static int scale_factor(const Position* pos, int eg) {
 }
 
 int evaluate(const Position* pos) {
+#ifndef TUNE
+    // The accumulators are a cache inside the position, hence the cast.
+    if (g_use_nnue) return nnue_evaluate((Position*)pos);
+#endif
     EvalInfo ei;
     memset(&ei, 0, sizeof(ei));
     Score score;

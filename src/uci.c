@@ -15,6 +15,7 @@
 #include "datagen.h"
 #include "eval.h"
 #include "movegen.h"
+#include "nnue.h"
 #include "perft.h"
 #include "search.h"
 #include "tt.h"
@@ -24,7 +25,8 @@
 #define DEFAULT_HASH_MB 64
 #define BENCH_DEPTH 16
 
-static Position g_pos;  // static: on macOS a heap/stack-allocated board measured much slower
+static Position g_pos;
+static int nnue_available = 0;  // static: on macOS a heap/stack-allocated board measured much slower
 static int g_quit = 0;
 
 // ---------------------------------------------------------------------------
@@ -263,6 +265,15 @@ static void cmd_setoption(char* args) {
     if (!strcmp(name, "hash") && value) tt_resize((size_t)atoll(value));
     else if (!strcmp(name, "move overhead") && value) g_move_overhead = atoi(value);
     else if (!strcmp(name, "clear hash")) tt_clear();
+    else if (!strcmp(name, "usennue") && value) g_use_nnue = !strcmp(value, "true") && nnue_available;
+    else if (!strcmp(name, "evalfile") && value && *value && strcmp(value, "<embedded>")) {
+        if (nnue_load_file(value)) {
+            nnue_available = 1;
+            printf("info string loaded network %s\n", value);
+        } else {
+            printf("info string could not load network %s\n", value);
+        }
+    }
     // "Threads" is accepted but the engine is single-threaded for now.
 }
 
@@ -283,6 +294,8 @@ static void uci_loop(void) {
             printf("option name Threads type spin default 1 min 1 max 1\n");
             printf("option name Move Overhead type spin default %d min 0 max 5000\n", g_move_overhead);
             printf("option name Clear Hash type button\n");
+            printf("option name UseNNUE type check default %s\n", g_use_nnue ? "true" : "false");
+            printf("option name EvalFile type string default <embedded>\n");
             printf("uciok\n");
         } else if (!strcmp(cmd, "isready")) {
             printf("readyok\n");
@@ -325,6 +338,7 @@ int main(int argc, char** argv) {
     position_init();
     eval_init();
     search_init();
+    nnue_available = nnue_init();
     tt_resize(DEFAULT_HASH_MB);
     pos_set_fen(&g_pos, START_FEN);
 
