@@ -24,7 +24,7 @@
 
 #define HIDDEN 256
 #define INPUTS 768
-#define SCALE 400.0
+#define SCALE 150.0  // cp per sigmoid unit; matches the classical eval (10-base K ~ 1.2)
 #define QA 255
 #define QB 64
 #ifndef THREADS

@@ -7,7 +7,7 @@
 #define INPUTS 768
 #define QA 255
 #define QB 64
-#define SCALE 400
+#define SCALE 150  // must match tools/nnue/trainer.c
 
 int g_use_nnue = 0;
 
