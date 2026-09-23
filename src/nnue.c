@@ -72,29 +72,46 @@ static void refresh(const Position* pos, Accumulator* acc) {
     acc->computed = 1;
 }
 
+// dst = src + sum(added rows) - sum(removed rows), in one pass per perspective.
 static void update(Accumulator* dst, const Accumulator* src, const DirtyPieces* d) {
     for (int p = 0; p < 2; ++p) {
-        int16_t* v = dst->values[p];
-        memcpy(v, src->values[p], sizeof(dst->values[p]));
+        const int16_t* add[3];
+        const int16_t* sub[3];
+        int na = 0, ns = 0;
         for (int i = 0; i < d->count; ++i) {
-            if (d->from[i] != NO_SQ) {
-                const int16_t* w = ft_weights[feature(p, d->piece[i], d->from[i])];
-                for (int h = 0; h < NNUE_HIDDEN; ++h) v[h] -= w[h];
-            }
-            if (d->to[i] != NO_SQ) {
-                const int16_t* w = ft_weights[feature(p, d->piece[i], d->to[i])];
-                for (int h = 0; h < NNUE_HIDDEN; ++h) v[h] += w[h];
-            }
+            if (d->from[i] != NO_SQ) sub[ns++] = ft_weights[feature(p, d->piece[i], d->from[i])];
+            if (d->to[i] != NO_SQ) add[na++] = ft_weights[feature(p, d->piece[i], d->to[i])];
+        }
+        int16_t* v = dst->values[p];
+        const int16_t* s = src->values[p];
+        if (na == 1 && ns == 1) {  // quiet move
+            const int16_t *a0 = add[0], *s0 = sub[0];
+            for (int h = 0; h < NNUE_HIDDEN; ++h) v[h] = (int16_t)(s[h] + a0[h] - s0[h]);
+        } else if (na == 1 && ns == 2) {  // capture or promotion
+            const int16_t *a0 = add[0], *s0 = sub[0], *s1 = sub[1];
+            for (int h = 0; h < NNUE_HIDDEN; ++h) v[h] = (int16_t)(s[h] + a0[h] - s0[h] - s1[h]);
+        } else if (na == 2 && ns == 2) {  // castling
+            const int16_t *a0 = add[0], *a1 = add[1], *s0 = sub[0], *s1 = sub[1];
+            for (int h = 0; h < NNUE_HIDDEN; ++h) v[h] = (int16_t)(s[h] + a0[h] + a1[h] - s0[h] - s1[h]);
+        } else {  // null move, promotion-capture
+            memcpy(v, s, sizeof(dst->values[p]));
+            for (int i = 0; i < ns; ++i)
+                for (int h = 0; h < NNUE_HIDDEN; ++h) v[h] -= sub[i][h];
+            for (int i = 0; i < na; ++i)
+                for (int h = 0; h < NNUE_HIDDEN; ++h) v[h] += add[i][h];
         }
     }
     dst->computed = 1;
 }
 
-static inline int64_t screlu_dot(const int16_t* v, const int16_t* w) {
-    int64_t sum = 0;
+// Output weights are limited to |w| <= 127 by the trainer, so c * w fits in int16 and the
+// int32 sum cannot overflow in practice; this form vectorises well.
+static inline int32_t screlu_dot(const int16_t* v, const int16_t* w) {
+    int32_t sum = 0;
     for (int h = 0; h < NNUE_HIDDEN; ++h) {
-        int32_t c = v[h] < 0 ? 0 : v[h] > QA ? QA : v[h];
-        sum += (int64_t)(c * w[h]) * c;
+        int16_t c = v[h] < 0 ? 0 : v[h] > QA ? QA : v[h];
+        int16_t cw = (int16_t)(c * w[h]);
+        sum += (int32_t)cw * c;
     }
     return sum;
 }
@@ -129,7 +146,8 @@ int nnue_evaluate(Position* pos) {
 #endif
     const Accumulator* acc = &pos->acc[idx];
     int stm = pos->side;
-    int64_t sum = screlu_dot(acc->values[stm], out_weights) + screlu_dot(acc->values[stm ^ 1], out_weights + NNUE_HIDDEN);
+    int64_t sum = (int64_t)screlu_dot(acc->values[stm], out_weights) +
+                  screlu_dot(acc->values[stm ^ 1], out_weights + NNUE_HIDDEN);
     int64_t out = sum / QA + out_bias;
     return (int)(out * SCALE / (QA * QB));
 }

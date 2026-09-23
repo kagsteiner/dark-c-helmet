@@ -334,6 +334,11 @@ static int train(const char* data_path, const char* out_path, int epochs, double
                 double update = (m[i] / c1) / (sqrt(v[i] / c2) + eps);
                 params[i] -= (float)(epoch_lr * (update + weight_decay * params[i]));
             }
+            // The engine computes clamp(acc) * w in int16: keep |w * QB| <= 127.
+            for (int h = 0; h < 2 * HIDDEN; ++h) {
+                if (net.out_w[h] > 1.98f) net.out_w[h] = 1.98f;
+                if (net.out_w[h] < -1.98f) net.out_w[h] = -1.98f;
+            }
             // Keep feature weights inside the range the int16 quantisation can represent.
             for (int i = 0; i < INPUTS; ++i)
                 for (int h = 0; h < HIDDEN; ++h) {
