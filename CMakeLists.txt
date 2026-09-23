@@ -11,3 +11,10 @@ else()
 endif()
 
 add_executable(vibechess_c engine_c.c)
+
+# New engine (bitboards), sources in src/
+file(GLOB DARKHELMET_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/*.c)
+add_executable(darkhelmet ${DARKHELMET_SOURCES})
+if(NOT MSVC)
+  target_link_libraries(darkhelmet m)
+endif()

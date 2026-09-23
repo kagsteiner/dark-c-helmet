@@ -7,6 +7,7 @@ CMakeCache.txt
 CMakeFiles/
 cmake_install.cmake
 Makefile
+!/Makefile
 *.cmake
 !CMakeLists.txt
 
@@ -44,3 +45,5 @@ archive/
 *.swp
 *.swo
 *~
+tools/games/
+data/
