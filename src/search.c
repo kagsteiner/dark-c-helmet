@@ -10,6 +10,16 @@
 #include "tt.h"
 #include "util.h"
 
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+typedef HANDLE ThreadHandle;
+#else
+#include <pthread.h>
+typedef pthread_t ThreadHandle;
+#endif
+
 int g_move_overhead = 20;
 
 #define HISTORY_MAX 16384
@@ -26,7 +36,7 @@ typedef struct {
     Move excluded;      // move skipped by the singular-extension verification search
 } StackEntry;
 
-typedef struct {
+typedef struct SearchThread {
     Position pos;
     StackEntry stack[MAX_PLY + 8];
     Move pv[MAX_PLY + 1][MAX_PLY + 1];
@@ -46,16 +56,24 @@ typedef struct {
     Move root_best;
     int root_best_score;
     int root_depth;
-} SearchState;
 
-// History tables survive between moves of the same game.
-static int history[2][64][64];
-static Move countermoves[12][64];
-static PieceToHistory cont_history[12][64];  // [previous piece][previous to]
-static PieceToHistory cont_sentinel;         // used after null moves and at the root
+    int id;              // 0 = main thread (time management, output)
+    SearchResult result;
+
+    // History tables survive between moves of the same game.
+    int history[2][64][64];
+    Move countermoves[12][64];
+    PieceToHistory cont_history[12][64];  // [previous piece][previous to]
+} SearchThread;
+
+static PieceToHistory cont_sentinel;  // used after null moves and at the root (never updated)
 static int lmr_table[64][64];
 
-static SearchState S;
+// Static rather than heap: see the note on g_pos in uci.c. Untouched threads cost no memory.
+#define MAX_THREADS 64
+static SearchThread threads[MAX_THREADS];
+static int thread_count = 1;
+static volatile int stop_all;  // set by the main thread, read by helpers
 
 void search_init(void) {
     for (int d = 1; d < 64; ++d)
@@ -63,33 +81,47 @@ void search_init(void) {
 }
 
 void search_clear(void) {
-    memset(history, 0, sizeof(history));
-    memset(countermoves, 0, sizeof(countermoves));
-    memset(cont_history, 0, sizeof(cont_history));
+    for (int i = 0; i < thread_count; ++i) {
+        SearchThread* t = &threads[i];
+        memset(t->history, 0, sizeof(t->history));
+        memset(t->countermoves, 0, sizeof(t->countermoves));
+        memset(t->cont_history, 0, sizeof(t->cont_history));
+    }
+}
+
+void search_set_threads(int n) {
+    if (n < 1) n = 1;
+    if (n > MAX_THREADS) n = MAX_THREADS;
+    thread_count = n;
+    search_clear();
 }
 
 // ---------------------------------------------------------------------------
 // Time and stop handling
 // ---------------------------------------------------------------------------
 
-static void check_stop(void) {
-    if (S.max_nodes && S.nodes >= S.max_nodes) S.stop = 1;
-    if ((S.nodes & 2047) != 0) return;
-    if (S.use_time && now_ms() - S.start_ms >= S.hard_ms) S.stop = 1;
-    if (!S.silent && S.poll_stop && S.poll_stop()) S.stop = 1;
+static void check_stop(SearchThread* t) {
+    if (t->id != 0) {
+        if (stop_all) t->stop = 1;
+        return;
+    }
+    if (t->max_nodes && t->nodes >= t->max_nodes) t->stop = 1;
+    if ((t->nodes & 2047) != 0) return;
+    if (t->use_time && now_ms() - t->start_ms >= t->hard_ms) t->stop = 1;
+    if (!t->silent && t->poll_stop && t->poll_stop()) t->stop = 1;
 }
 
-static void init_time(const SearchLimits* lim, int side) {
-    S.use_time = 0;
-    S.soft_ms = S.hard_ms = 0;
+static void init_time(SearchThread* t, const SearchLimits* lim, int side) {
+    t->use_time = 0;
+    t->soft_ms = t->hard_ms = 0;
     if (lim->infinite) return;
     if (lim->movetime >= 0) {
-        S.use_time = 1;
-        S.soft_ms = S.hard_ms = lim->movetime - g_move_overhead > 1 ? lim->movetime - g_move_overhead : 1;
+        t->use_time = 1;
+        t->soft_ms = t->hard_ms = lim->movetime - g_move_overhead > 1 ? lim->movetime - g_move_overhead : 1;
         return;
     }
     if (lim->time[side] < 0) return;
-    S.use_time = 1;
+    t->use_time = 1;
     long long avail = lim->time[side] - g_move_overhead;
     if (avail < 1) avail = 1;
     long long inc = lim->inc[side];
@@ -102,8 +134,8 @@ static void init_time(const SearchLimits* lim, int side) {
     if (soft > hard) soft = hard;
     if (soft < 1) soft = 1;
     if (hard < 1) hard = 1;
-    S.soft_ms = soft;
-    S.hard_ms = hard;
+    t->soft_ms = soft;
+    t->hard_ms = hard;
 }
 
 // ---------------------------------------------------------------------------
@@ -120,16 +152,16 @@ enum {
 };
 
 // Combined quiet-move history: butterfly + 1-ply and 2-ply continuation history.
-static inline int quiet_history(const StackEntry* ss, int side, int piece, Move m) {
+static inline int quiet_history(SearchThread* t, const StackEntry* ss, int side, int piece, Move m) {
     int to = move_to(m);
-    return history[side][move_from(m)][to] + (*ss[-1].cont)[piece][to] + (*ss[-2].cont)[piece][to];
+    return t->history[side][move_from(m)][to] + (*ss[-1].cont)[piece][to] + (*ss[-2].cont)[piece][to];
 }
 
-static void score_moves(MoveList* list, Move tt_move, int ply) {
-    const Position* pos = &S.pos;
-    const StackEntry* ss = &S.stack[ply + 4];
+static void score_moves(SearchThread* t, MoveList* list, Move tt_move, int ply) {
+    const Position* pos = &t->pos;
+    const StackEntry* ss = &t->stack[ply + 4];
     Move counter = MOVE_NONE;
-    if (ply > 0 && ss[-1].move != MOVE_NONE) counter = countermoves[ss[-1].piece][move_to(ss[-1].move)];
+    if (ply > 0 && ss[-1].move != MOVE_NONE) counter = t->countermoves[ss[-1].piece][move_to(ss[-1].move)];
 
     for (int i = 0; i < list->count; ++i) {
         Move m = list->moves[i].move;
@@ -150,7 +182,7 @@ static void score_moves(MoveList* list, Move tt_move, int ply) {
         } else if (m == counter) {
             score = SCORE_COUNTER;
         } else {
-            score = quiet_history(ss, pos->side, pos->board[move_from(m)], m);
+            score = quiet_history(t, ss, pos->side, pos->board[move_from(m)], m);
         }
         list->moves[i].score = score;
     }
@@ -170,9 +202,9 @@ static inline void history_update(int* entry, int bonus) {
     *entry += bonus - *entry * abs(bonus) / HISTORY_MAX;
 }
 
-static void update_quiet_heuristics(int ply, int depth, Move best, const Move* quiets, int quiet_count) {
-    StackEntry* ss = &S.stack[ply + 4];
-    int side = S.pos.side;
+static void update_quiet_heuristics(SearchThread* t, int ply, int depth, Move best, const Move* quiets, int quiet_count) {
+    StackEntry* ss = &t->stack[ply + 4];
+    int side = t->pos.side;
     int bonus = depth * depth * 16;
     if (bonus > 1600) bonus = 1600;
 
@@ -180,14 +212,14 @@ static void update_quiet_heuristics(int ply, int depth, Move best, const Move* q
         ss->killers[1] = ss->killers[0];
         ss->killers[0] = best;
     }
-    if (ply > 0 && ss[-1].move != MOVE_NONE) countermoves[ss[-1].piece][move_to(ss[-1].move)] = best;
+    if (ply > 0 && ss[-1].move != MOVE_NONE) t->countermoves[ss[-1].piece][move_to(ss[-1].move)] = best;
 
-    const Position* pos = &S.pos;
+    const Position* pos = &t->pos;
     for (int i = -1; i < quiet_count; ++i) {
         Move m = i < 0 ? best : quiets[i];
         int b = i < 0 ? bonus : -bonus;
         int pc = pos->board[move_from(m)], to = move_to(m);
-        history_update(&history[side][move_from(m)][to], b);
+        history_update(&t->history[side][move_from(m)][to], b);
         history_update(&(*ss[-1].cont)[pc][to], b);
         history_update(&(*ss[-2].cont)[pc][to], b);
     }
@@ -197,15 +229,15 @@ static void update_quiet_heuristics(int ply, int depth, Move best, const Move* q
 // Search
 // ---------------------------------------------------------------------------
 
-static int qsearch(int alpha, int beta, int ply) {
-    Position* pos = &S.pos;
+static int qsearch(SearchThread* t, int alpha, int beta, int ply) {
+    Position* pos = &t->pos;
     int pv_node = beta - alpha > 1;
-    S.pv_len[ply] = 0;
+    t->pv_len[ply] = 0;
 
-    S.nodes++;
-    check_stop();
-    if (S.stop) return 0;
-    if (ply > S.seldepth) S.seldepth = ply;
+    t->nodes++;
+    check_stop(t);
+    if (t->stop) return 0;
+    if (ply > t->seldepth) t->seldepth = ply;
     if (ply >= MAX_PLY - 1) return in_check(pos) ? 0 : evaluate(pos);
 
     int hit;
@@ -236,7 +268,7 @@ static int qsearch(int alpha, int beta, int ply) {
         futility_base = best + 150;
         generate_moves(pos, &list, GEN_NOISY);
     }
-    score_moves(&list, tt_move, ply);
+    score_moves(t, &list, tt_move, ply);
 
     Move best_move = MOVE_NONE;
     int legal = 0;
@@ -257,14 +289,14 @@ static int qsearch(int alpha, int beta, int ply) {
             }
         }
 
-        StackEntry* ss = &S.stack[ply + 4];
+        StackEntry* ss = &t->stack[ply + 4];
         ss->move = m;
         ss->piece = moved_piece(pos, m);
-        ss->cont = &cont_history[ss->piece][move_to(m)];
+        ss->cont = &t->cont_history[ss->piece][move_to(m)];
         pos_make_move(pos, m);
-        int score = -qsearch(-beta, -alpha, ply + 1);
+        int score = -qsearch(t, -beta, -alpha, ply + 1);
         pos_unmake_move(pos, m);
-        if (S.stop) return 0;
+        if (t->stop) return 0;
 
         if (score > best) {
             best = score;
@@ -283,23 +315,23 @@ static int qsearch(int alpha, int beta, int ply) {
     return best;
 }
 
-static int search(int alpha, int beta, int depth, int ply) {
-    Position* pos = &S.pos;
+static int search(SearchThread* t, int alpha, int beta, int depth, int ply) {
+    Position* pos = &t->pos;
     int pv_node = beta - alpha > 1;
     int root = ply == 0;
-    StackEntry* ss = &S.stack[ply + 4];
+    StackEntry* ss = &t->stack[ply + 4];
     int checked = in_check(pos);
     Move excluded = ss->excluded;
 
     // Check extension
     if (checked && depth < MAX_PLY) depth++;
-    if (depth <= 0) return qsearch(alpha, beta, ply);
+    if (depth <= 0) return qsearch(t, alpha, beta, ply);
 
-    S.pv_len[ply] = 0;
-    S.nodes++;
-    check_stop();
-    if (S.stop) return 0;
-    if (ply > S.seldepth) S.seldepth = ply;
+    t->pv_len[ply] = 0;
+    t->nodes++;
+    check_stop(t);
+    if (t->stop) return 0;
+    if (ply > t->seldepth) t->seldepth = ply;
 
     if (!root) {
         if (pos_is_draw(pos, ply)) return VALUE_DRAW;
@@ -317,7 +349,7 @@ static int search(int alpha, int beta, int depth, int ply) {
     TTEntry* tte = tt_probe(key, &hit);
     int tt_score = hit ? score_from_tt(tte->score, ply) : VALUE_NONE;
     Move tt_move = hit ? tte->move : MOVE_NONE;
-    if (root && S.pv_len[0] == 0 && S.root_best != MOVE_NONE) tt_move = S.root_best;
+    if (root && t->pv_len[0] == 0 && t->root_best != MOVE_NONE) tt_move = t->root_best;
 
     if (!pv_node && !excluded && hit && tt_depth(tte) >= depth && tt_score != VALUE_NONE &&
         (tt_bound(tte) & (tt_score >= beta ? BOUND_LOWER : BOUND_UPPER)))
@@ -344,7 +376,7 @@ static int search(int alpha, int beta, int depth, int ply) {
 
         // Razoring
         if (depth <= 3 && eval + 250 * depth <= alpha) {
-            int score = qsearch(alpha, beta, ply);
+            int score = qsearch(t, alpha, beta, ply);
             if (score <= alpha) return score;
         }
 
@@ -356,9 +388,9 @@ static int search(int alpha, int beta, int depth, int ply) {
             ss->piece = NO_PIECE;
             ss->cont = &cont_sentinel;
             pos_make_null(pos);
-            int score = -search(-beta, -beta + 1, depth - r, ply + 1);
+            int score = -search(t, -beta, -beta + 1, depth - r, ply + 1);
             pos_unmake_null(pos);
-            if (S.stop) return 0;
+            if (t->stop) return 0;
             if (score >= beta) return score >= VALUE_MATE_IN_MAX ? beta : score;
         }
     }
@@ -368,7 +400,7 @@ static int search(int alpha, int beta, int depth, int ply) {
 
     MoveList list;
     generate_moves(pos, &list, GEN_ALL);
-    score_moves(&list, tt_move, ply);
+    score_moves(t, &list, tt_move, ply);
 
     int best = -VALUE_INF;
     Move best_move = MOVE_NONE;
@@ -406,22 +438,22 @@ static int search(int alpha, int beta, int depth, int ply) {
         // score, the hash move is forced and deserves an extra ply.
         int extension = 0;
         if (!root && m == tt_move && !excluded && depth >= 8 && hit && tt_depth(tte) >= depth - 3 &&
-            (tt_bound(tte) & BOUND_LOWER) && abs(tt_score) < VALUE_MATE_IN_MAX && ply < 2 * S.root_depth) {
+            (tt_bound(tte) & BOUND_LOWER) && abs(tt_score) < VALUE_MATE_IN_MAX && ply < 2 * t->root_depth) {
             int singular_beta = tt_score - 2 * depth;
             ss->excluded = m;
-            int s = search(singular_beta - 1, singular_beta, (depth - 1) / 2, ply);
+            int s = search(t, singular_beta - 1, singular_beta, (depth - 1) / 2, ply);
             ss->excluded = MOVE_NONE;
-            if (S.stop) return 0;
+            if (t->stop) return 0;
             if (s < singular_beta) extension = 1;
             else if (singular_beta >= beta) return singular_beta;  // multi-cut: several moves beat beta
             else if (tt_score >= beta) extension = -1;
         }
 
-        int hist = quiet ? quiet_history(ss, pos->side, pos->board[move_from(m)], m) : 0;
+        int hist = quiet ? quiet_history(t, ss, pos->side, pos->board[move_from(m)], m) : 0;
 
         ss->move = m;
         ss->piece = moved_piece(pos, m);
-        ss->cont = &cont_history[ss->piece][move_to(m)];
+        ss->cont = &t->cont_history[ss->piece][move_to(m)];
         pos_make_move(pos, m);
         tt_prefetch(pos->st->key);
         int gives_check = in_check(pos);
@@ -437,17 +469,17 @@ static int search(int alpha, int beta, int depth, int ply) {
             r -= hist / 16384;
             if (r < 0) r = 0;
             if (r > new_depth - 1) r = new_depth - 1;
-            score = -search(-alpha - 1, -alpha, new_depth - r, ply + 1);
-            if (score > alpha && r > 0) score = -search(-alpha - 1, -alpha, new_depth, ply + 1);
+            score = -search(t, -alpha - 1, -alpha, new_depth - r, ply + 1);
+            if (score > alpha && r > 0) score = -search(t, -alpha - 1, -alpha, new_depth, ply + 1);
         } else if (!pv_node || legal > 1) {
-            score = -search(-alpha - 1, -alpha, new_depth, ply + 1);
+            score = -search(t, -alpha - 1, -alpha, new_depth, ply + 1);
         } else {
             score = alpha + 1;  // force the full-window search below for the first PV move
         }
-        if (pv_node && (legal == 1 || score > alpha)) score = -search(-beta, -alpha, new_depth, ply + 1);
+        if (pv_node && (legal == 1 || score > alpha)) score = -search(t, -beta, -alpha, new_depth, ply + 1);
 
         pos_unmake_move(pos, m);
-        if (S.stop) return 0;
+        if (t->stop) return 0;
 
         if (score > best) {
             best = score;
@@ -455,16 +487,16 @@ static int search(int alpha, int beta, int depth, int ply) {
                 best_move = m;
                 alpha = score;
                 if (pv_node) {
-                    S.pv[ply][0] = m;
-                    for (int j = 0; j < S.pv_len[ply + 1]; ++j) S.pv[ply][j + 1] = S.pv[ply + 1][j];
-                    S.pv_len[ply] = S.pv_len[ply + 1] + 1;
+                    t->pv[ply][0] = m;
+                    for (int j = 0; j < t->pv_len[ply + 1]; ++j) t->pv[ply][j + 1] = t->pv[ply + 1][j];
+                    t->pv_len[ply] = t->pv_len[ply + 1] + 1;
                 }
                 if (root) {
-                    S.root_best = m;
-                    S.root_best_score = score;
+                    t->root_best = m;
+                    t->root_best_score = score;
                 }
                 if (score >= beta) {
-                    if (quiet) update_quiet_heuristics(ply, depth, m, quiets, quiet_count);
+                    if (quiet) update_quiet_heuristics(t, ply, depth, m, quiets, quiet_count);
                     break;
                 }
             }
@@ -484,18 +516,25 @@ static int search(int alpha, int beta, int depth, int ply) {
 // ---------------------------------------------------------------------------
 
 // Prints the search result; the PV always starts with `best` (the move that will be played).
-static void print_info(int depth, int score, Move best) {
-    long long elapsed = now_ms() - S.start_ms;
-    long long nps = S.nodes * 1000 / (elapsed > 0 ? elapsed : 1);
-    printf("info depth %d seldepth %d ", depth, S.seldepth);
+static long long total_nodes(void) {
+    long long n = 0;
+    for (int i = 0; i < thread_count; ++i) n += threads[i].nodes;
+    return n;
+}
+
+static void print_info(SearchThread* t, int depth, int score, Move best) {
+    long long elapsed = now_ms() - t->start_ms;
+    long long nodes = total_nodes();
+    long long nps = nodes * 1000 / (elapsed > 0 ? elapsed : 1);
+    printf("info depth %d seldepth %d ", depth, t->seldepth);
     if (score >= VALUE_MATE_IN_MAX) printf("score mate %d ", (VALUE_MATE - score + 1) / 2);
     else if (score <= -VALUE_MATE_IN_MAX) printf("score mate -%d ", (VALUE_MATE + score) / 2);
     else printf("score cp %d ", score);
-    printf("nodes %lld nps %lld hashfull %d time %lld pv", S.nodes, nps, tt_hashfull(), elapsed);
+    printf("nodes %lld nps %lld hashfull %d time %lld pv", nodes, nps, tt_hashfull(), elapsed);
     char buf[6];
-    if (S.pv_len[0] > 0 && S.pv[0][0] == best) {
-        for (int i = 0; i < S.pv_len[0]; ++i) {
-            move_to_str(S.pv[0][i], buf);
+    if (t->pv_len[0] > 0 && t->pv[0][0] == best) {
+        for (int i = 0; i < t->pv_len[0]; ++i) {
+            move_to_str(t->pv[0][i], buf);
             printf(" %s", buf);
         }
     } else {
@@ -506,41 +545,20 @@ static void print_info(int depth, int score, Move best) {
     fflush(stdout);
 }
 
-SearchResult search_run(const Position* pos, const SearchLimits* limits, int silent, int (*poll_stop)(void)) {
-    // Copy the position including its state history (needed for repetition detection).
-    memcpy(&S.pos, pos, sizeof(Position));
-    S.pos.st = S.pos.states + (pos->st - pos->states);
-    memset(S.stack, 0, sizeof(S.stack));
-    for (int i = 0; i < MAX_PLY + 8; ++i) {
-        S.stack[i].static_eval = VALUE_NONE;
-        S.stack[i].cont = &cont_sentinel;
-    }
-    S.nodes = 0;
-    S.seldepth = 0;
-    S.stop = 0;
-    S.silent = silent;
-    S.poll_stop = poll_stop;
-    S.start_ms = now_ms();
-    S.max_nodes = limits->nodes;
-    S.root_best = MOVE_NONE;
-    S.root_best_score = 0;
-    init_time(limits, pos->side);
-    tt_new_search();
+// ---------------------------------------------------------------------------
+// Iterative deepening (every thread runs this; only the main thread manages time and output)
+// ---------------------------------------------------------------------------
 
-    SearchResult result = {MOVE_NONE, 0, 0, 0};
-    MoveList legal_moves;
-    generate_legal(&S.pos, &legal_moves);
-    if (legal_moves.count == 0) return result;
-    result.best_move = legal_moves.moves[0].move;
-
-    int max_depth = limits->depth > 0 ? limits->depth : MAX_PLY - 8;
+static void iterative_deepening(SearchThread* t, int max_depth) {
     Move prev_best = MOVE_NONE;
     int stability = 0;
     int score = 0;
+    int main = t->id == 0;
+    SearchResult* result = &t->result;
 
     for (int depth = 1; depth <= max_depth; ++depth) {
-        S.seldepth = 0;
-        S.root_depth = depth;
+        t->seldepth = 0;
+        t->root_depth = depth;
         int delta = 20;
         int alpha = -VALUE_INF, beta = VALUE_INF;
         if (depth >= 4) {
@@ -549,8 +567,8 @@ SearchResult search_run(const Position* pos, const SearchLimits* limits, int sil
         }
         // Aspiration windows: widen on fail-low/high until the score fits.
         for (;;) {
-            int s = search(alpha, beta, depth, 0);
-            if (S.stop) break;
+            int s = search(t, alpha, beta, depth, 0);
+            if (t->stop) break;
             if (s <= alpha) {
                 beta = (alpha + beta) / 2;
                 alpha = s - delta > -VALUE_INF ? s - delta : -VALUE_INF;
@@ -565,29 +583,114 @@ SearchResult search_run(const Position* pos, const SearchLimits* limits, int sil
 
         // A move that raised alpha at the root was fully searched, so it is usable even if
         // this iteration was interrupted.
-        if (S.root_best != MOVE_NONE) result.best_move = S.root_best;
-        if (S.stop) {
+        if (t->root_best != MOVE_NONE) result->best_move = t->root_best;
+        if (t->stop) {
             // The interrupted iteration found a better move: report it so the last info line
             // matches the bestmove sent to the GUI.
-            if (!silent && result.best_move != prev_best && prev_best != MOVE_NONE)
-                print_info(depth, S.root_best_score, result.best_move);
+            if (main && !t->silent && result->best_move != prev_best && prev_best != MOVE_NONE)
+                print_info(t, depth, t->root_best_score, result->best_move);
             break;
         }
 
-        result.score = score;
-        result.depth = depth;
-        if (!silent) print_info(depth, score, result.best_move);
+        result->score = score;
+        result->depth = depth;
+        if (!main) continue;
+        if (!t->silent) print_info(t, depth, score, result->best_move);
 
-        if (result.best_move == prev_best) stability++;
+        if (result->best_move == prev_best) stability++;
         else stability = 0;
-        prev_best = result.best_move;
+        prev_best = result->best_move;
 
-        if (S.use_time) {
+        if (t->use_time) {
             static const double scale[5] = {2.5, 1.2, 0.9, 0.8, 0.75};
-            long long elapsed = now_ms() - S.start_ms;
-            if (elapsed >= (long long)(S.soft_ms * scale[stability < 4 ? stability : 4])) break;
+            long long elapsed = now_ms() - t->start_ms;
+            if (elapsed >= (long long)(t->soft_ms * scale[stability < 4 ? stability : 4])) break;
         }
     }
-    result.nodes = S.nodes;
+}
+
+static int helper_max_depth;
+
+#ifdef _WIN32
+static DWORD WINAPI helper_main(LPVOID arg) {
+    iterative_deepening((SearchThread*)arg, helper_max_depth);
+    return 0;
+}
+#else
+static void* helper_main(void* arg) {
+    iterative_deepening((SearchThread*)arg, helper_max_depth);
+    return NULL;
+}
+#endif
+
+static void thread_start(ThreadHandle* h, SearchThread* t) {
+    // Deep recursion needs more than the default secondary-thread stack (512 KB on macOS).
+#ifdef _WIN32
+    *h = CreateThread(NULL, 8 << 20, helper_main, t, 0, NULL);
+#else
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setstacksize(&attr, 8 << 20);
+    pthread_create(h, &attr, helper_main, t);
+    pthread_attr_destroy(&attr);
+#endif
+}
+
+static void thread_join(ThreadHandle h) {
+#ifdef _WIN32
+    WaitForSingleObject(h, INFINITE);
+    CloseHandle(h);
+#else
+    pthread_join(h, NULL);
+#endif
+}
+
+SearchResult search_run(const Position* pos, const SearchLimits* limits, int silent, int (*poll_stop)(void)) {
+    long long start = now_ms();
+    stop_all = 0;
+    tt_new_search();
+
+    for (int i = 0; i < thread_count; ++i) {
+        SearchThread* t = &threads[i];
+        // Copy the position including its state history (needed for repetition detection).
+        memcpy(&t->pos, pos, sizeof(Position));
+        t->pos.st = t->pos.states + (pos->st - pos->states);
+        memset(t->stack, 0, sizeof(t->stack));
+        for (int j = 0; j < MAX_PLY + 8; ++j) {
+            t->stack[j].static_eval = VALUE_NONE;
+            t->stack[j].cont = &cont_sentinel;
+        }
+        t->id = i;
+        t->nodes = 0;
+        t->seldepth = 0;
+        t->stop = 0;
+        t->silent = silent;
+        t->poll_stop = poll_stop;
+        t->start_ms = start;
+        t->max_nodes = limits->nodes;
+        t->root_best = MOVE_NONE;
+        t->root_best_score = 0;
+        t->use_time = 0;
+        memset(&t->result, 0, sizeof(t->result));
+    }
+    SearchThread* main_thread = &threads[0];
+    init_time(main_thread, limits, pos->side);
+
+    MoveList legal_moves;
+    generate_legal(&main_thread->pos, &legal_moves);
+    if (legal_moves.count == 0) return main_thread->result;
+    for (int i = 0; i < thread_count; ++i) threads[i].result.best_move = legal_moves.moves[0].move;
+
+    int max_depth = limits->depth > 0 ? limits->depth : MAX_PLY - 8;
+    helper_max_depth = MAX_PLY - 8;  // helpers run until the main thread stops them
+
+    ThreadHandle handles[MAX_THREADS];
+    for (int i = 1; i < thread_count; ++i) thread_start(&handles[i], &threads[i]);
+    iterative_deepening(main_thread, max_depth);
+    stop_all = 1;
+    for (int i = 1; i < thread_count; ++i) thread_join(handles[i]);
+
+    SearchResult result = main_thread->result;
+    result.nodes = total_nodes();
     return result;
 }

@@ -22,12 +22,40 @@
 #include "util.h"
 
 #define MAX_LINE 65536
+#define MAX_LINE_PENDING 8192
 #define DEFAULT_HASH_MB 64
 #define BENCH_DEPTH 16
 
 static Position g_pos;
 static int nnue_available = 0;  // static: on macOS a heap/stack-allocated board measured much slower
 static int g_quit = 0;
+static int g_stop_received = 0;  // "stop" already consumed while searching
+
+// Commands that arrive during a search but are not meant for it are kept and executed
+// afterwards, in order.
+#define PENDING_MAX 64
+static char pending[PENDING_MAX][MAX_LINE_PENDING];
+static int pending_head = 0, pending_count = 0;
+
+static void pending_push(const char* line) {
+    if (pending_count == PENDING_MAX) return;
+    int idx = (pending_head + pending_count) % PENDING_MAX;
+    strncpy(pending[idx], line, MAX_LINE_PENDING - 1);
+    pending[idx][MAX_LINE_PENDING - 1] = '\0';
+    pending_count++;
+}
+
+// Next command: queued ones first, then stdin.
+static char* read_command(char* buf, int size) {
+    if (pending_count) {
+        strncpy(buf, pending[pending_head], size - 1);
+        buf[size - 1] = '\0';
+        pending_head = (pending_head + 1) % PENDING_MAX;
+        pending_count--;
+        return buf;
+    }
+    return fgets(buf, size, stdin);
+}
 
 // ---------------------------------------------------------------------------
 // Non-blocking input check, used to receive "stop" while searching
@@ -65,7 +93,7 @@ static int input_waiting(void) {
 // Called by the search every few thousand nodes. Returns 1 if the search must stop.
 static int poll_stop(void) {
     if (!input_waiting()) return 0;
-    char line[256];
+    static char line[MAX_LINE_PENDING];
     if (!fgets(line, sizeof(line), stdin)) {
         g_quit = 1;
         return 1;
@@ -74,10 +102,15 @@ static int poll_stop(void) {
         g_quit = 1;
         return 1;
     }
-    if (strncmp(line, "stop", 4) == 0) return 1;
+    if (strncmp(line, "stop", 4) == 0) {
+        g_stop_received = 1;
+        return 1;
+    }
     if (strncmp(line, "isready", 7) == 0) {
         printf("readyok\n");
         fflush(stdout);
+    } else if (strncmp(line, "ponderhit", 9) != 0) {
+        pending_push(line);
     }
     return 0;
 }
@@ -232,15 +265,17 @@ static void cmd_go(char* args) {
 #undef NEXT_INT
     }
 
+    g_stop_received = 0;
     SearchResult r = search_run(&g_pos, &lim, 0, poll_stop);
 
-    // In infinite mode bestmove may only be sent after "stop".
-    if (lim.infinite && !g_quit) {
-        char line[256];
+    // In infinite mode bestmove may only be sent after "stop" (unless it already arrived).
+    if (lim.infinite && !g_quit && !g_stop_received) {
+        static char line[MAX_LINE_PENDING];
         while (fgets(line, sizeof(line), stdin)) {
             if (strncmp(line, "quit", 4) == 0) { g_quit = 1; break; }
             if (strncmp(line, "stop", 4) == 0) break;
             if (strncmp(line, "isready", 7) == 0) { printf("readyok\n"); fflush(stdout); }
+            else if (strncmp(line, "ponderhit", 9) != 0) pending_push(line);
         }
     }
     char buf[6];
@@ -274,12 +309,12 @@ static void cmd_setoption(char* args) {
             printf("info string could not load network %s\n", value);
         }
     }
-    // "Threads" is accepted but the engine is single-threaded for now.
+    else if (!strcmp(name, "threads") && value) search_set_threads(atoi(value));
 }
 
 static void uci_loop(void) {
     static char line[MAX_LINE];
-    while (!g_quit && fgets(line, sizeof(line), stdin)) {
+    while (!g_quit && read_command(line, sizeof(line))) {
         char* nl = strpbrk(line, "\r\n");
         if (nl) *nl = '\0';
         char* cmd = line;
@@ -291,7 +326,7 @@ static void uci_loop(void) {
         if (!strcmp(cmd, "uci")) {
             printf("id name %s %s\nid author %s\n", ENGINE_NAME, ENGINE_VERSION, ENGINE_AUTHOR);
             printf("option name Hash type spin default %d min 1 max 65536\n", DEFAULT_HASH_MB);
-            printf("option name Threads type spin default 1 min 1 max 1\n");
+            printf("option name Threads type spin default 1 min 1 max 64\n");
             printf("option name Move Overhead type spin default %d min 0 max 5000\n", g_move_overhead);
             printf("option name Clear Hash type button\n");
             printf("option name UseNNUE type check default %s\n", g_use_nnue ? "true" : "false");
