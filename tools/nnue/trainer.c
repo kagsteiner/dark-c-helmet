@@ -1,6 +1,7 @@
 // NNUE trainer for Dark C. Helmet 2 (CPU, multithreaded, no dependencies besides pthreads).
 //
-// Network: (768 -> HIDDEN) x 2 perspectives -> SCReLU -> 1
+// Network: (768 -> HIDDEN) x 2 perspectives -> SCReLU -> 1 (one of BUCKETS output layers,
+//   chosen by the number of pieces on the board)
 //   Inputs are piece-square features seen from each side (own pieces first, board flipped
 //   for Black). Both perspectives share the feature-transformer weights; the output layer
 //   sees [side to move accumulator, other side accumulator].
@@ -22,7 +23,10 @@
 #include <string.h>
 #include <time.h>
 
+#ifndef HIDDEN
 #define HIDDEN 256
+#endif
+#define BUCKETS 8
 #define INPUTS 768
 #define SCALE 150.0  // cp per sigmoid unit; matches the classical eval (10-base K ~ 1.2)
 #define QA 255
@@ -134,9 +138,15 @@ static int convert(const char* out_path, int nfiles, char** files) {
 typedef struct {
     float ft_w[INPUTS][HIDDEN];
     float ft_b[HIDDEN];
-    float out_w[2 * HIDDEN];
-    float out_b;
+    float out_w[BUCKETS][2 * HIDDEN];
+    float out_b[BUCKETS];
 } Net;
+
+// Output bucket from the number of pieces (2..32) -> 0..7.
+static inline int output_bucket(const PackedPos* p) {
+    int b = (__builtin_popcountll(p->occupancy) - 2) / 4;
+    return b < 0 ? 0 : b >= BUCKETS ? BUCKETS - 1 : b;
+}
 
 #define NET_PARAMS ((int)(sizeof(Net) / sizeof(float)))
 
@@ -177,9 +187,11 @@ static void* train_worker(void* arg) {
                 for (int h = 0; h < HIDDEN; ++h) acc[s][h] += row[h];
             }
         }
-        float out = net.out_b;
+        int bucket = output_bucket(p);
+        const float* ow = net.out_w[bucket];
+        float out = net.out_b[bucket];
         for (int s = 0; s < 2; ++s)
-            for (int h = 0; h < HIDDEN; ++h) out += screlu(acc[s][h]) * net.out_w[s * HIDDEN + h];
+            for (int h = 0; h < HIDDEN; ++h) out += screlu(acc[s][h]) * ow[s * HIDDEN + h];
 
         double score_stm = p->stm == 0 ? p->score : -p->score;
         double wdl = p->result / 2.0;
@@ -190,14 +202,15 @@ static void* train_worker(void* arg) {
         w->loss += err * err;
 
         float g_out = (float)(2.0 * err * pred * (1.0 - pred));
-        w->grad.out_b += g_out;
+        w->grad.out_b[bucket] += g_out;
+        float* g_ow = w->grad.out_w[bucket];
         for (int s = 0; s < 2; ++s) {
             float g_acc[HIDDEN];
             for (int h = 0; h < HIDDEN; ++h) {
                 float a = acc[s][h];
                 float clamped = a < 0 ? 0 : a > 1 ? 1 : a;
-                w->grad.out_w[s * HIDDEN + h] += g_out * clamped * clamped;
-                g_acc[h] = (a > 0 && a < 1) ? g_out * net.out_w[s * HIDDEN + h] * 2.0f * a : 0.0f;
+                g_ow[s * HIDDEN + h] += g_out * clamped * clamped;
+                g_acc[h] = (a > 0 && a < 1) ? g_out * ow[s * HIDDEN + h] * 2.0f * a : 0.0f;
             }
             for (int h = 0; h < HIDDEN; ++h) w->grad.ft_b[h] += g_acc[h];
             for (int f = 0; f < n; ++f) {
@@ -222,9 +235,10 @@ static double validation_loss(long long count) {
             for (int f = 0; f < n; ++f)
                 for (int h = 0; h < HIDDEN; ++h) acc[s][h] += net.ft_w[feats[s][f]][h];
         }
-        float out = net.out_b;
+        int bucket = output_bucket(p);
+        float out = net.out_b[bucket];
         for (int s = 0; s < 2; ++s)
-            for (int h = 0; h < HIDDEN; ++h) out += screlu(acc[s][h]) * net.out_w[s * HIDDEN + h];
+            for (int h = 0; h < HIDDEN; ++h) out += screlu(acc[s][h]) * net.out_w[bucket][s * HIDDEN + h];
         double score_stm = p->stm == 0 ? p->score : -p->score;
         double wdl = p->result / 2.0;
         if (p->stm == 1) wdl = 1.0 - wdl;
@@ -251,13 +265,18 @@ static void init_net(void) {
         for (int h = 0; h < HIDDEN; ++h) net.ft_w[i][h] = (float)((rand_uniform() * 2 - 1) * ft_scale * 0.5);
     for (int h = 0; h < HIDDEN; ++h) net.ft_b[h] = 0.0f;
     double out_scale = 1.0 / sqrt(2.0 * HIDDEN);
-    for (int h = 0; h < 2 * HIDDEN; ++h) net.out_w[h] = (float)((rand_uniform() * 2 - 1) * out_scale);
-    net.out_b = 0.0f;
+    for (int b = 0; b < BUCKETS; ++b) {
+        for (int h = 0; h < 2 * HIDDEN; ++h) net.out_w[b][h] = (float)((rand_uniform() * 2 - 1) * out_scale);
+        net.out_b[b] = 0.0f;
+    }
 }
 
 static void save_quantised(const char* path) {
     FILE* f = fopen(path, "wb");
     if (!f) return;
+    // Header: magic, hidden size, number of output buckets.
+    uint32_t header[3] = {0x32484344u /* "DCH2" */, HIDDEN, BUCKETS};
+    fwrite(header, sizeof(header), 1, f);
     // Clip to what int16 arithmetic in the engine can hold safely.
     for (int i = 0; i < INPUTS; ++i)
         for (int h = 0; h < HIDDEN; ++h) {
@@ -269,13 +288,16 @@ static void save_quantised(const char* path) {
         int16_t q = (int16_t)lround(net.ft_b[h] * QA);
         fwrite(&q, 2, 1, f);
     }
-    for (int h = 0; h < 2 * HIDDEN; ++h) {
-        long v = lround(net.out_w[h] * QB);
-        int16_t q = (int16_t)(v > 32767 ? 32767 : v < -32768 ? -32768 : v);
-        fwrite(&q, 2, 1, f);
+    for (int b = 0; b < BUCKETS; ++b)
+        for (int h = 0; h < 2 * HIDDEN; ++h) {
+            long v = lround(net.out_w[b][h] * QB);
+            int16_t q = (int16_t)(v > 32767 ? 32767 : v < -32768 ? -32768 : v);
+            fwrite(&q, 2, 1, f);
+        }
+    for (int b = 0; b < BUCKETS; ++b) {
+        int32_t ob = (int32_t)lround(net.out_b[b] * QA * QB);
+        fwrite(&ob, 4, 1, f);
     }
-    int32_t ob = (int32_t)lround(net.out_b * QA * QB);
-    fwrite(&ob, 4, 1, f);
     fclose(f);
 }
 
@@ -293,17 +315,17 @@ static int train(const char* data_path, const char* out_path, int epochs, double
     long long train_count = data_count - validation;
     order = malloc(sizeof(int) * train_count);
     for (long long i = 0; i < train_count; ++i) order[i] = (int)i;
-    fprintf(stderr, "positions: %lld (training %lld, validation %lld), hidden %d, lambda %.2f\n",
-            data_count, train_count, validation, HIDDEN, lambda_);
+    fprintf(stderr, "positions: %lld (training %lld, validation %lld), hidden %d, buckets %d, lambda %.2f\n",
+            data_count, train_count, validation, HIDDEN, BUCKETS, lambda_);
 
     init_net();
     const double b1 = 0.9, b2 = 0.999, eps = 1e-8, weight_decay = 0.01;
     long long step = 0;
+    long long total_steps = (long long)epochs * (train_count / BATCH);
     time_t start = time(NULL);
 
     for (int epoch = 1; epoch <= epochs; ++epoch) {
-        // Learning-rate schedule: constant, then step down for the last epochs.
-        double epoch_lr = lr * (epoch > epochs * 3 / 4 ? 0.1 : 1.0);
+        double epoch_lr = lr;
         for (long long i = train_count - 1; i > 0; --i) {
             long long j = (long long)(rng() % (uint64_t)(i + 1));
             int t = order[i];
@@ -321,6 +343,8 @@ static int train(const char* data_path, const char* out_path, int epochs, double
             for (int t = 0; t < THREADS; ++t) pthread_join(threads[t], NULL);
 
             step++;
+            // Cosine decay from lr to 1% of lr over the whole run.
+            epoch_lr = lr * (0.01 + 0.99 * 0.5 * (1.0 + cos(3.14159265358979 * (double)step / (double)total_steps)));
             float* params = (float*)&net;
             float* m = (float*)&adam_m;
             float* v = (float*)&adam_v;
@@ -335,10 +359,11 @@ static int train(const char* data_path, const char* out_path, int epochs, double
                 params[i] -= (float)(epoch_lr * (update + weight_decay * params[i]));
             }
             // The engine computes clamp(acc) * w in int16: keep |w * QB| <= 127.
-            for (int h = 0; h < 2 * HIDDEN; ++h) {
-                if (net.out_w[h] > 1.98f) net.out_w[h] = 1.98f;
-                if (net.out_w[h] < -1.98f) net.out_w[h] = -1.98f;
-            }
+            for (int b = 0; b < BUCKETS; ++b)
+                for (int h = 0; h < 2 * HIDDEN; ++h) {
+                    if (net.out_w[b][h] > 1.98f) net.out_w[b][h] = 1.98f;
+                    if (net.out_w[b][h] < -1.98f) net.out_w[b][h] = -1.98f;
+                }
             // Keep feature weights inside the range the int16 quantisation can represent.
             for (int i = 0; i < INPUTS; ++i)
                 for (int h = 0; h < HIDDEN; ++h) {

@@ -79,7 +79,8 @@ previous version. Nothing is merged on intuition.
 
 ## NNUE training
 
-The default evaluation is a (768 -> 256) x 2 -> 1 network with SCReLU activation, trained on
+The default evaluation is a (768 -> 256) x 2 -> 1 network with SCReLU activation and 8
+output buckets (chosen by piece count), trained on
 self-play positions by `tools/nnue/trainer.c` (CPU, pthreads; ~6 s per epoch for 26M
 positions on 16 threads).
 
@@ -104,6 +105,8 @@ Nets so far:
 | Net | Data | Result |
 |---|---|---|
 | `nets/net_v2.nnue` | 26M positions from classical-eval self-play (5000 nodes/move) | +217 ± 38 Elo vs tuned classical eval |
+| `nets/net_v3.nnue` (default) | 75M positions (v2 data + 49M from NNUE self-play), 256 hidden, 8 output buckets | +152 ± 34 Elo vs v2 |
+| `nets/net_v3_512.nnue` | same data, 512 hidden (build with `-DNNUE_HIDDEN=512`) | +137 ± 30 vs v2; −15 ± 15 vs net_v3 at 8+0.08 |
 
 ## UCI extensions
 
