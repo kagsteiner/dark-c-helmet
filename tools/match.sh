@@ -10,6 +10,7 @@
 #   SPRT=1           run an SPRT test instead of a fixed number of games
 #   ELO0=0 ELO1=5    SPRT hypotheses (use ELO0=-5 ELO1=0 for "no regression" tests)
 #   HASH=16          hash size (MB) for both engines
+#   NEW_THREADS=1 BASE_THREADS=1   search threads per engine
 #   FASTCHESS=...    path to the fastchess binary
 set -euo pipefail
 
@@ -27,8 +28,8 @@ mkdir -p "$OUT"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 
 ARGS=(
-  -engine "cmd=$NEW" "name=$(basename "$NEW")"
-  -engine "cmd=$BASE" "name=$(basename "$BASE")-base"
+  -engine "cmd=$NEW" "name=$(basename "$NEW")" "option.Threads=${NEW_THREADS:-1}"
+  -engine "cmd=$BASE" "name=$(basename "$BASE")-base" "option.Threads=${BASE_THREADS:-1}"
   -each proto=uci "tc=$TC" "option.Hash=$HASH"
   -openings "file=$BOOK" format=epd order=random
   -repeat -games 2 -rounds $((GAMES / 2))
