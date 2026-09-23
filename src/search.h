@@ -24,6 +24,7 @@ extern int g_move_overhead;
 
 void search_init(void);
 void search_clear(void);  // forget history tables (new game)
+void search_set_threads(int n);
 
 // Runs a search on a copy of pos. If silent, prints nothing and ignores stdin.
 // poll_stop is called periodically and returns 1 when the GUI asked to stop.

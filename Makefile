@@ -8,7 +8,7 @@ all: $(EXE)
 
 $(EXE): $(SRCS) $(wildcard src/*.h)
 	@mkdir -p $(dir $(EXE))
-	$(CC) $(CFLAGS) -o $(EXE) $(SRCS) -lm
+	$(CC) $(CFLAGS) -o $(EXE) $(SRCS) -lm -lpthread
 
 reference: engine_c.c
 	@mkdir -p bin
