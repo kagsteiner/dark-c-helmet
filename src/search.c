@@ -23,6 +23,7 @@ typedef struct {
     int piece;              // piece that made `move`
     PieceToHistory* cont;   // continuation history for moves following `move`
     Move killers[2];
+    Move excluded;      // move skipped by the singular-extension verification search
 } StackEntry;
 
 typedef struct {
@@ -44,6 +45,7 @@ typedef struct {
 
     Move root_best;
     int root_best_score;
+    int root_depth;
 } SearchState;
 
 // History tables survive between moves of the same game.
@@ -287,6 +289,7 @@ static int search(int alpha, int beta, int depth, int ply) {
     int root = ply == 0;
     StackEntry* ss = &S.stack[ply + 4];
     int checked = in_check(pos);
+    Move excluded = ss->excluded;
 
     // Check extension
     if (checked && depth < MAX_PLY) depth++;
@@ -316,7 +319,7 @@ static int search(int alpha, int beta, int depth, int ply) {
     Move tt_move = hit ? tte->move : MOVE_NONE;
     if (root && S.pv_len[0] == 0 && S.root_best != MOVE_NONE) tt_move = S.root_best;
 
-    if (!pv_node && hit && tt_depth(tte) >= depth && tt_score != VALUE_NONE &&
+    if (!pv_node && !excluded && hit && tt_depth(tte) >= depth && tt_score != VALUE_NONE &&
         (tt_bound(tte) & (tt_score >= beta ? BOUND_LOWER : BOUND_UPPER)))
         return tt_score;
 
@@ -335,7 +338,7 @@ static int search(int alpha, int beta, int depth, int ply) {
 
     ss[1].killers[0] = ss[1].killers[1] = MOVE_NONE;
 
-    if (!pv_node && !checked) {
+    if (!pv_node && !checked && !excluded) {
         // Reverse futility pruning
         if (depth <= 8 && eval - 80 * (depth - improving) >= beta && eval < VALUE_MATE_IN_MAX) return eval;
 
@@ -376,7 +379,7 @@ static int search(int alpha, int beta, int depth, int ply) {
 
     for (int i = 0; i < list.count; ++i) {
         Move m = pick_move(&list, i);
-        if (!pos_is_legal(pos, m)) continue;
+        if (m == excluded || !pos_is_legal(pos, m)) continue;
         legal++;
         int quiet = !move_is_tactical(m);
         if (quiet && skip_quiets) continue;
@@ -399,14 +402,30 @@ static int search(int alpha, int beta, int depth, int ply) {
             }
         }
 
+        // Singular extension: if every alternative to the hash move fails well below its
+        // score, the hash move is forced and deserves an extra ply.
+        int extension = 0;
+        if (!root && m == tt_move && !excluded && depth >= 8 && hit && tt_depth(tte) >= depth - 3 &&
+            (tt_bound(tte) & BOUND_LOWER) && abs(tt_score) < VALUE_MATE_IN_MAX && ply < 2 * S.root_depth) {
+            int singular_beta = tt_score - 2 * depth;
+            ss->excluded = m;
+            int s = search(singular_beta - 1, singular_beta, (depth - 1) / 2, ply);
+            ss->excluded = MOVE_NONE;
+            if (S.stop) return 0;
+            if (s < singular_beta) extension = 1;
+            else if (singular_beta >= beta) return singular_beta;  // multi-cut: several moves beat beta
+            else if (tt_score >= beta) extension = -1;
+        }
+
         int hist = quiet ? quiet_history(ss, pos->side, pos->board[move_from(m)], m) : 0;
+
         ss->move = m;
         ss->piece = moved_piece(pos, m);
         ss->cont = &cont_history[ss->piece][move_to(m)];
         pos_make_move(pos, m);
         tt_prefetch(pos->st->key);
         int gives_check = in_check(pos);
-        int new_depth = depth - 1;
+        int new_depth = depth - 1 + extension;
         int score;
 
         if (depth >= 3 && legal > 1 + pv_node && quiet) {
@@ -453,10 +472,10 @@ static int search(int alpha, int beta, int depth, int ply) {
         if (quiet && m != best_move && quiet_count < 64) quiets[quiet_count++] = m;
     }
 
-    if (legal == 0) return checked ? -VALUE_MATE + ply : VALUE_DRAW;
+    if (legal == 0) return excluded ? alpha : checked ? -VALUE_MATE + ply : VALUE_DRAW;
 
     int bound = best >= beta ? BOUND_LOWER : (best > alpha_orig ? BOUND_EXACT : BOUND_UPPER);
-    tt_store(tte, key, depth, score_to_tt(best, ply), raw_eval, bound, best_move);
+    if (!excluded) tt_store(tte, key, depth, score_to_tt(best, ply), raw_eval, bound, best_move);
     return best;
 }
 
@@ -521,6 +540,7 @@ SearchResult search_run(const Position* pos, const SearchLimits* limits, int sil
 
     for (int depth = 1; depth <= max_depth; ++depth) {
         S.seldepth = 0;
+        S.root_depth = depth;
         int delta = 20;
         int alpha = -VALUE_INF, beta = VALUE_INF;
         if (depth >= 4) {
