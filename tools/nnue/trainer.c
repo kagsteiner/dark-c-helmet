@@ -27,7 +27,9 @@
 #define SCALE 400.0
 #define QA 255
 #define QB 64
+#ifndef THREADS
 #define THREADS 16
+#endif
 #define BATCH 16384
 #define MAX_FEATURES 32
 
