@@ -69,10 +69,10 @@ log "data generation done: $positions new positions"
 # ---------------------------------------------------------------- 2. training
 cc -O3 -march=native -std=c11 -o bin/nnue-trainer tools/nnue/trainer.c -lm -lpthread
 cc -O3 -march=native -std=c11 -DHIDDEN=512 -o bin/nnue-trainer-512 tools/nnue/trainer.c -lm -lpthread
-./bin/nnue-trainer convert "data/nnue/train_$ROUND.bin" "${OLD_DATA[@]}" "$OUT"/selfplay_*.txt 2>>"$SUMMARY"
+./bin/nnue-trainer convert "$OUT/train.bin" "${OLD_DATA[@]}" "$OUT"/selfplay_*.txt 2>>"$SUMMARY"
 for h in 256 512; do
   trainer=./bin/nnue-trainer; [[ $h == 512 ]] && trainer=./bin/nnue-trainer-512
-  $trainer train "data/nnue/train_$ROUND.bin" "data/nnue/net_${ROUND}_$h.nnue" "$EPOCHS" 0.001 0.75 \
+  $trainer train "$OUT/train.bin" "data/nnue/net_${ROUND}_$h.nnue" "$EPOCHS" 0.001 0.75 \
     > "$OUT/train_$h.log" 2>&1
   log "net $h: $(tail -1 "$OUT/train_$h.log")"
 done
