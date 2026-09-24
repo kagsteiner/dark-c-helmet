@@ -11,6 +11,7 @@
 #   DATAGEN_HOURS [5]     hard deadline for data generation
 #   EPOCHS [20]           training epochs
 #   SPRT_MINUTES [90]     time limit for the SPRT stage
+#   DATAGEN_ONLY [0]      1 = stop after data generation
 #
 # Run under caffeinate so the Mac does not sleep, e.g.
 #   caffeinate -ims tools/nnue/pipeline.sh v4 data/v3/selfplay_*.txt
@@ -65,6 +66,10 @@ done
 wait_until $(( $(date +%s) + DATAGEN_HOURS * 3600 )) "${pids[@]}"
 positions=$(cat "$OUT"/selfplay_*.txt | wc -l | tr -d ' ')
 log "data generation done: $positions new positions"
+if [[ "${DATAGEN_ONLY:-0}" == "1" ]]; then
+  log "=== round $ROUND: data generation only, finished ==="
+  exit 0
+fi
 
 # ---------------------------------------------------------------- 2. training
 cc -O3 -march=native -std=c11 -o bin/nnue-trainer tools/nnue/trainer.c -lm -lpthread
