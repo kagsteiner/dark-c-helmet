@@ -4,7 +4,7 @@
 #include "bitboard.h"
 
 #ifndef NNUE_HIDDEN
-#define NNUE_HIDDEN 256
+#define NNUE_HIDDEN 512
 #endif
 
 // Pieces changed by the move that led to a state (for incremental NNUE updates).

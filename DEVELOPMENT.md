@@ -79,7 +79,7 @@ previous version. Nothing is merged on intuition.
 
 ## NNUE training
 
-The default evaluation is a (768 -> 256) x 2 -> 1 network with SCReLU activation and 8
+The default evaluation is a (768 -> 512) x 2 -> 1 network with SCReLU activation and 8
 output buckets (chosen by piece count), trained on
 self-play positions by `tools/nnue/trainer.c` (CPU, pthreads; ~6 s per epoch for 26M
 positions on 16 threads).
@@ -91,11 +91,17 @@ positions on 16 threads).
    bin/nnue-trainer convert data/train.bin data/selfplay_*.txt
    ```
 3. Train: `bin/nnue-trainer train data/train.bin nets/net_vN.nnue [epochs=20] [lr=0.001] [lambda=0.75]`
-   (`lambda` blends search score and game result in the target). The output scale
+   (`lambda` blends search score and game result in the target). Hidden size is a
+   compile-time constant: `-DHIDDEN=512` for the trainer, `NNUE_HIDDEN` (default 512, in
+   `src/position.h`) for the engine; the network header is checked on load. The output scale
    (`SCALE`, 150 cp) must match `src/nnue.c`.
 4. Embed and build: `python3 tools/nnue/embed.py nets/net_vN.nnue && make`, then SPRT
    against the previous build. `python3 tools/nnue/embed.py` without an argument builds an
    engine without a network (classical evaluation).
+
+`tools/nnue/pipeline.sh <round> [older data]` runs a whole round unattended (datagen,
+training of a 256 and a 512 net, builds, SPRT against the current engine) and writes
+`data/<round>/SUMMARY.txt`; run it under `caffeinate -ims` on macOS.
 
 At runtime `setoption name EvalFile value <file>` loads another network and
 `setoption name UseNNUE value false` switches to the classical evaluation.
@@ -105,8 +111,9 @@ Nets so far:
 | Net | Data | Result |
 |---|---|---|
 | `nets/net_v2.nnue` | 26M positions from classical-eval self-play (5000 nodes/move) | +217 ± 38 Elo vs tuned classical eval |
-| `nets/net_v3.nnue` (default) | 75M positions (v2 data + 49M from NNUE self-play), 256 hidden, 8 output buckets | +152 ± 34 Elo vs v2 |
+| `nets/net_v3.nnue` | 75M positions (v2 data + 49M from NNUE self-play), 256 hidden, 8 output buckets | +152 ± 34 Elo vs v2 |
 | `nets/net_v3_512.nnue` | same data, 512 hidden (build with `-DNNUE_HIDDEN=512`) | +137 ± 30 vs v2; −15 ± 15 vs net_v3 at 8+0.08 |
+| `nets/net_v4.nnue` (default) | 150M positions (49M v3 + 100M from v3-engine self-play), 512 hidden, 8 buckets | +100 ± 18 Elo vs net_v3; +4 ± 15 vs a 256-hidden net on the same data |
 
 ## UCI extensions
 
