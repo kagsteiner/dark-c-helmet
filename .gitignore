@@ -47,3 +47,6 @@ archive/
 *~
 tools/games/
 data/
+
+# Obsidian vault settings (per-user editor state)
+.obsidian/
