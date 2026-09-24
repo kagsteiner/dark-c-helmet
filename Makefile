@@ -4,11 +4,19 @@ EXE ?= bin/darkhelmet
 CFLAGS ?= -O3 -march=native -flto -Wall -Wextra -Wpedantic -std=c11
 SRCS = $(wildcard src/*.c)
 
+# Version shown to the GUI ("id name"): running commit count, "+" for uncommitted changes
+# in src/, short hash and build time. Kept separate from CFLAGS so overriding CFLAGS keeps it.
+GIT_COUNT := $(shell git rev-list --count HEAD 2>/dev/null || echo 0)
+GIT_HASH  := $(shell git rev-parse --short HEAD 2>/dev/null || echo nogit)
+GIT_DIRTY := $(shell git diff --quiet HEAD -- src 2>/dev/null || echo +)
+BUILD_TIME = $(shell date '+%Y-%m-%d %H:%M')
+VERSION_DEF = -DENGINE_VERSION='"build $(GIT_COUNT)$(GIT_DIRTY) ($(GIT_HASH) $(BUILD_TIME))"'
+
 all: $(EXE)
 
 $(EXE): $(SRCS) $(wildcard src/*.h)
 	@mkdir -p $(dir $(EXE))
-	$(CC) $(CFLAGS) -o $(EXE) $(SRCS) -lm -lpthread
+	$(CC) $(CFLAGS) $(VERSION_DEF) -o $(EXE) $(SRCS) -lm -lpthread
 
 reference: engine_c.c
 	@mkdir -p bin

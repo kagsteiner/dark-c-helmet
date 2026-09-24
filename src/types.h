@@ -5,7 +5,11 @@
 #include <stddef.h>
 
 #define ENGINE_NAME "Dark C. Helmet 2"
+// Set by the build (Makefile / CMake) from git: "build <commit count>[+] (<hash> <date time>)".
+// A "+" means the build contains uncommitted changes in src/.
+#ifndef ENGINE_VERSION
 #define ENGINE_VERSION "dev"
+#endif
 #define ENGINE_AUTHOR "Karlheinz Agsteiner + Claude"
 
 typedef uint64_t Bitboard;
