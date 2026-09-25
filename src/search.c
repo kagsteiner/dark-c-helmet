@@ -56,6 +56,7 @@ typedef struct SearchThread {
     Move root_best;
     int root_best_score;
     int root_depth;
+    long long root_move_nodes[64 * 64];  // nodes spent below each root move (from * 64 + to)
 
     int id;              // 0 = main thread (time management, output)
     SearchResult result;
@@ -454,6 +455,7 @@ static int search(SearchThread* t, int alpha, int beta, int depth, int ply) {
         ss->move = m;
         ss->piece = moved_piece(pos, m);
         ss->cont = &t->cont_history[ss->piece][move_to(m)];
+        long long nodes_before = t->nodes;
         pos_make_move(pos, m);
         tt_prefetch(pos->st->key);
         int gives_check = in_check(pos);
@@ -479,6 +481,7 @@ static int search(SearchThread* t, int alpha, int beta, int depth, int ply) {
         if (pv_node && (legal == 1 || score > alpha)) score = -search(t, -beta, -alpha, new_depth, ply + 1);
 
         pos_unmake_move(pos, m);
+        if (root) t->root_move_nodes[move_from(m) * 64 + move_to(m)] += t->nodes - nodes_before;
         if (t->stop) return 0;
 
         if (score > best) {
@@ -552,7 +555,7 @@ static void print_info(SearchThread* t, int depth, int score, Move best) {
 static void iterative_deepening(SearchThread* t, int max_depth) {
     Move prev_best = MOVE_NONE;
     int stability = 0;
-    int score = 0;
+    int score = 0, prev_score = VALUE_NONE;
     int main = t->id == 0;
     SearchResult* result = &t->result;
 
@@ -602,10 +605,25 @@ static void iterative_deepening(SearchThread* t, int max_depth) {
         prev_best = result->best_move;
 
         if (t->use_time) {
-            static const double scale[5] = {2.5, 1.2, 0.9, 0.8, 0.75};
+            // Soft limit, scaled by three signals:
+            //  - stability: the best move has not changed for several iterations -> less time
+            //  - effort: share of nodes spent on the best move; a clear favourite -> less time
+            //  - score trend: the score dropped since the last iteration -> more time
+            static const double stability_scale[5] = {2.5, 1.2, 0.9, 0.8, 0.75};
+            double scale = stability_scale[stability < 4 ? stability : 4];
+            if (depth >= 6 && t->nodes > 0) {
+                Move b = result->best_move;
+                double best_share = (double)t->root_move_nodes[move_from(b) * 64 + move_to(b)] / (double)t->nodes;
+                scale *= (1.5 - best_share) * 1.35;
+            }
+            if (prev_score != VALUE_NONE && abs(score) < VALUE_MATE_IN_MAX) {
+                double trend = 1.0 + (prev_score - score) * 0.01;
+                scale *= trend < 0.75 ? 0.75 : trend > 1.5 ? 1.5 : trend;
+            }
             long long elapsed = now_ms() - t->start_ms;
-            if (elapsed >= (long long)(t->soft_ms * scale[stability < 4 ? stability : 4])) break;
+            if (elapsed >= (long long)(t->soft_ms * scale)) break;
         }
+        prev_score = score;
     }
 }
 
@@ -671,6 +689,7 @@ SearchResult search_run(const Position* pos, const SearchLimits* limits, int sil
         t->root_best = MOVE_NONE;
         t->root_best_score = 0;
         t->use_time = 0;
+        memset(t->root_move_nodes, 0, sizeof(t->root_move_nodes));
         memset(&t->result, 0, sizeof(t->result));
     }
     SearchThread* main_thread = &threads[0];
