@@ -99,6 +99,11 @@ positions on 16 threads).
    against the previous build. `python3 tools/nnue/embed.py` without an argument builds an
    engine without a network (classical evaluation).
 
+King buckets: the trainer's `-DKING_BUCKETS=8` adds (king bucket, piece, square) features
+with left-right mirroring; the engine reads the bucket count from the network header.
+`tools/nnue/train_round.sh <round> <data...>` trains a plain and a king-bucket candidate on
+existing data and SPRTs both.
+
 `tools/nnue/pipeline.sh <round> [older data]` runs a whole round unattended (datagen,
 training of a 256 and a 512 net, builds, SPRT against the current engine) and writes
 `data/<round>/SUMMARY.txt`; run it under `caffeinate -ims` on macOS.
@@ -113,7 +118,9 @@ Nets so far:
 | `nets/net_v2.nnue` | 26M positions from classical-eval self-play (5000 nodes/move) | +217 ± 38 Elo vs tuned classical eval |
 | `nets/net_v3.nnue` | 75M positions (v2 data + 49M from NNUE self-play), 256 hidden, 8 output buckets | +152 ± 34 Elo vs v2 |
 | `nets/net_v3_512.nnue` | same data, 512 hidden (build with `-DNNUE_HIDDEN=512`) | +137 ± 30 vs v2; −15 ± 15 vs net_v3 at 8+0.08 |
-| `nets/net_v4.nnue` (default) | 150M positions (49M v3 + 100M from v3-engine self-play), 512 hidden, 8 buckets | +100 ± 18 Elo vs net_v3; +4 ± 15 vs a 256-hidden net on the same data |
+| `nets/net_v4.nnue` | 150M positions (49M v3 + 100M from v3-engine self-play), 512 hidden, 8 buckets | +100 ± 18 Elo vs net_v3; +4 ± 15 vs a 256-hidden net on the same data |
+| `nets/net_v5.nnue` (default) | 273M positions (v4 + 173M from v4-engine self-play), 512 hidden, 8 output buckets | +58 ± 14 Elo vs net_v4 |
+| `nets/net_v5_kb8.nnue` | same data, 8 king buckets with mirroring | +33 ± 11 vs net_v4: overfits (train 0.0072 vs validation 0.0088) and 15% slower; needs much more data |
 
 ## UCI extensions
 
