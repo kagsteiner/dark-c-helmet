@@ -49,7 +49,7 @@ of 20 bytes?
   capture?", "is this a promotion?". The move carries its own meaning.
 
 What the move does *not* store is the moving or captured piece — those are read from the
-board when needed, and the captured piece is remembered in the state stack (2.5).
+board when needed, and the captured piece is remembered in the state stack (2.4).
 
 ## 2.2 Pseudo-legal generation, split by type
 
@@ -224,7 +224,7 @@ This design has three advantages over hand-written undo records:
    decrement. Adding a new incrementally-updated value later (we did: the NNUE dirty-piece
    list) needs no unmake code at all.
 2. **The history is free.** `states[]` *is* the list of all previous positions, which is
-   exactly what repetition detection needs (2.7).
+   exactly what repetition detection needs (2.6).
 3. **The search can read the parent state**, e.g. "what did the opponent just capture?".
 
 ### Castling rights with one mask
