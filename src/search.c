@@ -64,6 +64,7 @@ typedef struct SearchThread {
     int history[2][64][64];
     Move countermoves[12][64];
     PieceToHistory cont_history[12][64];  // [previous piece][previous to]
+    int capture_history[12][64][6];       // [moving piece][to][captured piece type]
 } SearchThread;
 
 static PieceToHistory cont_sentinel;  // used after null moves and at the root (never updated)
@@ -86,6 +87,7 @@ void search_clear(void) {
         memset(t->history, 0, sizeof(t->history));
         memset(t->countermoves, 0, sizeof(t->countermoves));
         memset(t->cont_history, 0, sizeof(t->cont_history));
+        memset(t->capture_history, 0, sizeof(t->capture_history));
     }
 }
 
@@ -157,6 +159,12 @@ static inline int quiet_history(SearchThread* t, const StackEntry* ss, int side,
     return t->history[side][move_from(m)][to] + (*ss[-1].cont)[piece][to] + (*ss[-2].cont)[piece][to];
 }
 
+// Type of the captured piece, or -1 for non-captures.
+static inline int captured_type(const Position* pos, Move m) {
+    if (!move_is_capture(m)) return -1;
+    return move_flags(m) == FLAG_EP ? PAWN : piece_type(pos->board[move_to(m)]);
+}
+
 static void score_moves(SearchThread* t, MoveList* list, Move tt_move, int ply) {
     const Position* pos = &t->pos;
     const StackEntry* ss = &t->stack[ply + 4];
@@ -169,12 +177,14 @@ static void score_moves(SearchThread* t, MoveList* list, Move tt_move, int ply) 
         if (m == tt_move) {
             score = SCORE_TT;
         } else if (move_is_tactical(m)) {
-            int victim = move_is_capture(m) ? (move_flags(m) == FLAG_EP ? PAWN : piece_type(pos->board[move_to(m)])) : -1;
+            int victim = captured_type(pos, m);
             int value = victim >= 0 ? SEE_VALUE[victim] : 0;
             if (move_is_promo(m)) value += (move_promo_type(m) == QUEEN) ? SEE_VALUE[QUEEN] : -1000;
             int attacker = piece_type(pos->board[move_from(m)]);
             int good = move_is_promo(m) ? move_promo_type(m) == QUEEN : see_ge(pos, m, 0);
-            score = (good ? SCORE_GOOD_NOISY : SCORE_BAD_NOISY) + value * 16 - attacker;
+            // Victim value first; capture history breaks ties between similar captures.
+            int hist = victim >= 0 ? t->capture_history[pos->board[move_from(m)]][move_to(m)][victim] / 16 : 0;
+            score = (good ? SCORE_GOOD_NOISY : SCORE_BAD_NOISY) + value * 16 - attacker + hist;
         } else if (m == ss->killers[0]) {
             score = SCORE_KILLER1;
         } else if (m == ss->killers[1]) {
@@ -222,6 +232,19 @@ static void update_quiet_heuristics(SearchThread* t, int ply, int depth, Move be
         history_update(&t->history[side][move_from(m)][to], b);
         history_update(&(*ss[-1].cont)[pc][to], b);
         history_update(&(*ss[-2].cont)[pc][to], b);
+    }
+}
+
+// Reward the capture that caused a cutoff (if any) and punish the captures tried before it.
+static void update_capture_history(SearchThread* t, int depth, Move best, const Move* captures, int capture_count) {
+    const Position* pos = &t->pos;
+    int bonus = depth * depth * 16;
+    if (bonus > 1600) bonus = 1600;
+    int victim = captured_type(pos, best);
+    if (victim >= 0) history_update(&t->capture_history[pos->board[move_from(best)]][move_to(best)][victim], bonus);
+    for (int i = 0; i < capture_count; ++i) {
+        Move m = captures[i];
+        history_update(&t->capture_history[pos->board[move_from(m)]][move_to(m)][captured_type(pos, m)], -bonus);
     }
 }
 
@@ -406,8 +429,8 @@ static int search(SearchThread* t, int alpha, int beta, int depth, int ply) {
     Move best_move = MOVE_NONE;
     int alpha_orig = alpha;
     int legal = 0, skip_quiets = 0;
-    Move quiets[64];
-    int quiet_count = 0;
+    Move quiets[64], captures[32];
+    int quiet_count = 0, capture_count = 0;
 
     for (int i = 0; i < list.count; ++i) {
         Move m = pick_move(&list, i);
@@ -497,11 +520,13 @@ static int search(SearchThread* t, int alpha, int beta, int depth, int ply) {
                 }
                 if (score >= beta) {
                     if (quiet) update_quiet_heuristics(t, ply, depth, m, quiets, quiet_count);
+                    update_capture_history(t, depth, m, captures, capture_count);
                     break;
                 }
             }
         }
         if (quiet && m != best_move && quiet_count < 64) quiets[quiet_count++] = m;
+        if (move_is_capture(m) && m != best_move && capture_count < 32) captures[capture_count++] = m;
     }
 
     if (legal == 0) return excluded ? alpha : checked ? -VALUE_MATE + ply : VALUE_DRAW;
