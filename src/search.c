@@ -24,6 +24,12 @@ int g_move_overhead = 20;
 
 #define HISTORY_MAX 16384
 
+// Correction history: per pawn structure, how far the static eval tends to be from the search
+// result. Stored in units of 1/CORR_GRAIN centipawn, indexed by side to move and pawn key.
+#define CORR_SIZE 16384
+#define CORR_GRAIN 256
+#define CORR_LIMIT (CORR_GRAIN * 64)
+
 // History indexed by [piece][to-square] of a follow-up move.
 typedef int PieceToHistory[12][64];
 
@@ -64,6 +70,7 @@ typedef struct SearchThread {
     int history[2][64][64];
     Move countermoves[12][64];
     PieceToHistory cont_history[12][64];  // [previous piece][previous to]
+    int correction[2][CORR_SIZE];         // [side to move][pawn key]
 } SearchThread;
 
 static PieceToHistory cont_sentinel;  // used after null moves and at the root (never updated)
@@ -86,6 +93,7 @@ void search_clear(void) {
         memset(t->history, 0, sizeof(t->history));
         memset(t->countermoves, 0, sizeof(t->countermoves));
         memset(t->cont_history, 0, sizeof(t->cont_history));
+        memset(t->correction, 0, sizeof(t->correction));
     }
 }
 
@@ -225,6 +233,24 @@ static void update_quiet_heuristics(SearchThread* t, int ply, int depth, Move be
     }
 }
 
+static inline int* correction_entry(SearchThread* t) {
+    return &t->correction[t->pos.side][t->pos.st->pawn_key & (CORR_SIZE - 1)];
+}
+
+// Static evaluation adjusted by the learned correction for this pawn structure.
+static inline int corrected_eval(SearchThread* t, int raw) {
+    int v = raw + *correction_entry(t) / CORR_GRAIN;
+    return v >= VALUE_MATE_IN_MAX ? VALUE_MATE_IN_MAX - 1 : v <= -VALUE_MATE_IN_MAX ? -VALUE_MATE_IN_MAX + 1 : v;
+}
+
+// Move the correction towards (search result - static eval), weighted by depth.
+static void update_correction(SearchThread* t, int depth, int diff) {
+    int* e = correction_entry(t);
+    int weight = depth + 1 < 16 ? depth + 1 : 16;
+    int v = (*e * (256 - weight) + diff * CORR_GRAIN * weight) / 256;
+    *e = v > CORR_LIMIT ? CORR_LIMIT : v < -CORR_LIMIT ? -CORR_LIMIT : v;
+}
+
 // ---------------------------------------------------------------------------
 // Search
 // ---------------------------------------------------------------------------
@@ -257,7 +283,7 @@ static int qsearch(SearchThread* t, int alpha, int beta, int ply) {
         generate_moves(pos, &list, GEN_ALL);
     } else {
         raw_eval = (hit && tte->eval != VALUE_NONE) ? tte->eval : evaluate(pos);
-        best = raw_eval;
+        best = corrected_eval(t, raw_eval);
         if (tt_score != VALUE_NONE && (tt_bound(tte) & (tt_score > best ? BOUND_LOWER : BOUND_UPPER)))
             best = tt_score;
         if (best >= beta) {
@@ -361,7 +387,7 @@ static int search(SearchThread* t, int alpha, int beta, int depth, int ply) {
         ss->static_eval = VALUE_NONE;
     } else {
         raw_eval = (hit && tte->eval != VALUE_NONE) ? tte->eval : evaluate(pos);
-        ss->static_eval = eval = raw_eval;
+        ss->static_eval = eval = corrected_eval(t, raw_eval);
         if (tt_score != VALUE_NONE && (tt_bound(tte) & (tt_score > eval ? BOUND_LOWER : BOUND_UPPER)))
             eval = tt_score;
         if (ply >= 2 && ss[-2].static_eval != VALUE_NONE) improving = ss->static_eval > ss[-2].static_eval;
@@ -508,6 +534,13 @@ static int search(SearchThread* t, int alpha, int beta, int depth, int ply) {
 
     int bound = best >= beta ? BOUND_LOWER : (best > alpha_orig ? BOUND_EXACT : BOUND_UPPER);
     if (!excluded) tt_store(tte, key, depth, score_to_tt(best, ply), raw_eval, bound, best_move);
+
+    // Learn the eval correction from quiet positions whose score is trustworthy relative to
+    // the static eval (a fail-high above it, a fail-low below it, or an exact score).
+    if (!checked && !excluded && (best_move == MOVE_NONE || !move_is_tactical(best_move)) &&
+        abs(best) < VALUE_MATE_IN_MAX && ss->static_eval != VALUE_NONE &&
+        !(bound == BOUND_LOWER && best <= ss->static_eval) && !(bound == BOUND_UPPER && best >= ss->static_eval))
+        update_correction(t, depth, best - ss->static_eval);
     return best;
 }
 
