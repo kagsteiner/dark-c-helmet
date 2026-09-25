@@ -184,7 +184,7 @@ int pos_set_fen(Position* pos, const char* fen) {
     if (pos->side == BLACK) st->key ^= ZOBRIST_SIDE;
     set_check_info(pos);
     st->dirty.count = 0;
-    pos->acc[0].computed = 0;
+    pos->acc[0].computed[WHITE] = pos->acc[0].computed[BLACK] = 0;
     return 1;
 }
 
@@ -320,7 +320,7 @@ void pos_make_move(Position* pos, Move m) {
 
     pos->side = them;
     pos->game_ply++;
-    pos->acc[pos->game_ply].computed = 0;
+    pos->acc[pos->game_ply].computed[WHITE] = pos->acc[pos->game_ply].computed[BLACK] = 0;
     set_check_info(pos);
 }
 
@@ -367,7 +367,7 @@ void pos_make_null(Position* pos) {
     }
     pos->side ^= 1;
     pos->game_ply++;
-    pos->acc[pos->game_ply].computed = 0;
+    pos->acc[pos->game_ply].computed[WHITE] = pos->acc[pos->game_ply].computed[BLACK] = 0;
     set_check_info(pos);
 }
 

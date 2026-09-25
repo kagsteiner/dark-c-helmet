@@ -1,6 +1,6 @@
 // NNUE trainer for Dark C. Helmet 2 (CPU, multithreaded, no dependencies besides pthreads).
 //
-// Network: (768 -> HIDDEN) x 2 perspectives -> SCReLU -> 1 (one of BUCKETS output layers,
+// Network: (768 * KING_BUCKETS -> HIDDEN) x 2 perspectives -> SCReLU -> 1 (one of BUCKETS output layers,
 //   chosen by the number of pieces on the board)
 //   Inputs are piece-square features seen from each side (own pieces first, board flipped
 //   for Black). Both perspectives share the feature-transformer weights; the output layer
@@ -27,7 +27,10 @@
 #define HIDDEN 256
 #endif
 #define BUCKETS 8
-#define INPUTS 768
+#ifndef KING_BUCKETS
+#define KING_BUCKETS 8   // 1 = no king buckets and no mirroring (writes the same net as before)
+#endif
+#define INPUTS (768 * KING_BUCKETS)
 #define SCALE 150.0  // cp per sigmoid unit; matches the classical eval (10-base K ~ 1.2)
 #define QA 255
 #define QB 64
@@ -80,23 +83,57 @@ static int pack_fen(const char* fen, PackedPos* out) {
     return 1;
 }
 
+// King bucket by the perspective's own king square (flipped to its view, mirrored to files
+// a-d), indexed rank * 4 + file. Must match src/nnue.c.
+static const int KING_BUCKET_LAYOUT[32] = {
+    0, 1, 2, 3,
+    4, 4, 5, 5,
+    6, 6, 6, 6,
+    6, 6, 6, 6,
+    7, 7, 7, 7,
+    7, 7, 7, 7,
+    7, 7, 7, 7,
+    7, 7, 7, 7,
+};
+
+// Bucket offset and square transformation for one perspective (see src/nnue.c).
+static inline void king_view(int perspective, int king_sq, int* offset, int* flip) {
+    *flip = perspective == 0 ? 0 : 56;
+    *offset = 0;
+    if (KING_BUCKETS == 1) return;
+    int rel = king_sq ^ *flip;
+    if ((rel & 7) >= 4) {
+        *flip ^= 7;
+        rel ^= 7;
+    }
+    *offset = KING_BUCKET_LAYOUT[(rel >> 3) * 4 + (rel & 7)] * 768;
+}
+
 // Feature index of a piece seen from `perspective`.
-static inline int feature(int perspective, int piece, int sq) {
+static inline int feature(int perspective, int offset, int flip, int piece, int sq) {
     int color = piece / 6, type = piece % 6;
-    int rel_sq = perspective == 0 ? sq : sq ^ 56;
-    return (color == perspective ? 0 : 384) + type * 64 + rel_sq;
+    return offset + (color == perspective ? 0 : 384) + type * 64 + (sq ^ flip);
 }
 
 static int extract(const PackedPos* p, int stm_feats[MAX_FEATURES], int nstm_feats[MAX_FEATURES]) {
+    int squares[32], pieces[32], n = 0, king_sq[2] = {0, 0};
     uint64_t occ = p->occupancy;
-    int n = 0, stm = p->stm;
     while (occ) {
         int sq = __builtin_ctzll(occ);
         occ &= occ - 1;
         int piece = (p->pieces[n / 2] >> (4 * (n & 1))) & 15;
-        stm_feats[n] = feature(stm, piece, sq);
-        nstm_feats[n] = feature(stm ^ 1, piece, sq);
+        if (piece == 5) king_sq[0] = sq;
+        if (piece == 11) king_sq[1] = sq;
+        squares[n] = sq;
+        pieces[n] = piece;
         n++;
+    }
+    int stm = p->stm, off_s, flip_s, off_n, flip_n;
+    king_view(stm, king_sq[stm], &off_s, &flip_s);
+    king_view(stm ^ 1, king_sq[stm ^ 1], &off_n, &flip_n);
+    for (int i = 0; i < n; ++i) {
+        stm_feats[i] = feature(stm, off_s, flip_s, pieces[i], squares[i]);
+        nstm_feats[i] = feature(stm ^ 1, off_n, flip_n, pieces[i], squares[i]);
     }
     return n;
 }
@@ -275,7 +312,8 @@ static void save_quantised(const char* path) {
     FILE* f = fopen(path, "wb");
     if (!f) return;
     // Header: magic, hidden size, number of output buckets.
-    uint32_t header[3] = {0x32484344u /* "DCH2" */, HIDDEN, BUCKETS};
+    // Header: magic "DCH3", hidden size, output buckets, king buckets.
+    uint32_t header[4] = {0x33484344u, HIDDEN, BUCKETS, KING_BUCKETS};
     fwrite(header, sizeof(header), 1, f);
     // Clip to what int16 arithmetic in the engine can hold safely.
     for (int i = 0; i < INPUTS; ++i)
@@ -315,8 +353,8 @@ static int train(const char* data_path, const char* out_path, int epochs, double
     long long train_count = data_count - validation;
     order = malloc(sizeof(int) * train_count);
     for (long long i = 0; i < train_count; ++i) order[i] = (int)i;
-    fprintf(stderr, "positions: %lld (training %lld, validation %lld), hidden %d, buckets %d, lambda %.2f\n",
-            data_count, train_count, validation, HIDDEN, BUCKETS, lambda_);
+    fprintf(stderr, "positions: %lld (training %lld, validation %lld), hidden %d, king buckets %d, output buckets %d, lambda %.2f\n",
+            data_count, train_count, validation, HIDDEN, KING_BUCKETS, BUCKETS, lambda_);
 
     init_net();
     const double b1 = 0.9, b2 = 0.999, eps = 1e-8, weight_decay = 0.01;
@@ -381,8 +419,59 @@ static int train(const char* data_path, const char* out_path, int epochs, double
     return 0;
 }
 
+// Evaluate positions from a text file with a saved (quantised) network, using the same
+// integer arithmetic as src/nnue.c. Output: "<fen> | <eval from the side to move>".
+// Comparing this with the engine's "eval" command verifies trainer and engine agree.
+static int check(const char* net_path, const char* txt_path, int count) {
+    FILE* f = fopen(net_path, "rb");
+    if (!f) return 1;
+    uint32_t header[4];
+    if (fread(header, sizeof(header), 1, f) != 1 || header[0] != 0x33484344u || header[1] != HIDDEN ||
+        header[2] != BUCKETS || header[3] != KING_BUCKETS) {
+        fprintf(stderr, "network does not match this trainer build\n");
+        return 1;
+    }
+    static int16_t ftw[INPUTS][HIDDEN], ftb[HIDDEN], ow[BUCKETS][2 * HIDDEN];
+    static int32_t ob[BUCKETS];
+    if (fread(ftw, sizeof(ftw), 1, f) != 1 || fread(ftb, sizeof(ftb), 1, f) != 1 ||
+        fread(ow, sizeof(ow), 1, f) != 1 || fread(ob, sizeof(ob), 1, f) != 1)
+        return 1;
+    fclose(f);
+    FILE* in = fopen(txt_path, "r");
+    if (!in) return 1;
+    char line[512];
+    int done = 0;
+    while (done < count && fgets(line, sizeof(line), in)) {
+        char* bar = strchr(line, '|');
+        if (bar) *bar = '\0';
+        PackedPos p;
+        if (!pack_fen(line, &p)) continue;
+        int feats[2][MAX_FEATURES];
+        int n = extract(&p, feats[0], feats[1]);
+        int16_t acc[2][HIDDEN];
+        for (int s = 0; s < 2; ++s) {
+            memcpy(acc[s], ftb, sizeof(ftb));
+            for (int k = 0; k < n; ++k)
+                for (int h = 0; h < HIDDEN; ++h) acc[s][h] += ftw[feats[s][k]][h];
+        }
+        int bucket = output_bucket(&p);
+        int64_t sum = 0;
+        for (int s = 0; s < 2; ++s)
+            for (int h = 0; h < HIDDEN; ++h) {
+                int16_t c = acc[s][h] < 0 ? 0 : acc[s][h] > QA ? QA : acc[s][h];
+                sum += (int32_t)(int16_t)(c * ow[bucket][s * HIDDEN + h]) * c;
+            }
+        int64_t out = sum / QA + ob[bucket];
+        printf("%s | %d\n", line, (int)(out * (int)SCALE / (QA * QB)));
+        done++;
+    }
+    fclose(in);
+    return 0;
+}
+
 int main(int argc, char** argv) {
     if (argc >= 4 && !strcmp(argv[1], "convert")) return convert(argv[2], argc - 3, argv + 3);
+    if (argc >= 4 && !strcmp(argv[1], "check")) return check(argv[2], argv[3], argc > 4 ? atoi(argv[4]) : 1000);
     if (argc >= 4 && !strcmp(argv[1], "train")) {
         int epochs = argc > 4 ? atoi(argv[4]) : 20;
         double lr = argc > 5 ? atof(argv[5]) : 0.001;
@@ -391,6 +480,7 @@ int main(int argc, char** argv) {
     }
     fprintf(stderr,
             "usage:\n  trainer convert <out.bin> <in.txt>...\n"
-            "  trainer train <data.bin> <out.nnue> [epochs=20] [lr=0.001] [lambda=0.75]\n");
+            "  trainer train <data.bin> <out.nnue> [epochs=20] [lr=0.001] [lambda=0.75]\n"
+            "  trainer check <net.nnue> <positions.txt> [count=1000]   (evaluate like the engine)\n");
     return 1;
 }

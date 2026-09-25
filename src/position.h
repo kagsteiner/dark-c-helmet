@@ -16,10 +16,11 @@ typedef struct {
     int to[3];
 } DirtyPieces;
 
-// NNUE first-layer output for both perspectives, one per state.
+// NNUE first-layer output for both perspectives, one per state. Each perspective is brought
+// up to date separately (with king buckets, a king move refreshes only its own side).
 typedef struct {
     int16_t values[2][NNUE_HIDDEN];
-    int computed;
+    int computed[2];
 } Accumulator;
 
 // Per-ply state. make_move pushes a copy and modifies it; unmake pops it.
