@@ -108,6 +108,22 @@ existing data and SPRTs both.
 training of a 256 and a 512 net, builds, SPRT against the current engine) and writes
 `data/<round>/SUMMARY.txt`; run it under `caffeinate -ims` on macOS.
 
+### Generating data on a Windows PC
+
+`tools/datagen.ps1` runs the data stage on Windows: N datagen processes at below-normal
+priority, the PC kept awake, everything stopped after a set time. In the Developer
+PowerShell for VS 2022, in the project folder:
+
+```powershell
+cmake -S . -B build
+cmake --build build --config Release --target darkhelmet
+powershell -ExecutionPolicy Bypass -File tools\datagen.ps1 -Procs 8 -Hours 10
+```
+
+Output goes to `%USERPROFILE%\VibeEngineData\pc` (one text file per process). Zip it, copy
+it to the Mac (e.g. `~/VibeEngineData/pc`) and pass the files to `train_round.sh` together
+with the Mac's data. Use the same engine build as the Mac so both produce comparable data.
+
 At runtime `setoption name EvalFile value <file>` loads another network and
 `setoption name UseNNUE value false` switches to the classical evaluation.
 

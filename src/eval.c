@@ -1,4 +1,5 @@
 #include "eval.h"
+#define S MAKE_SCORE
 #ifndef TUNE
 #include "nnue.h"
 #endif

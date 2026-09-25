@@ -3,9 +3,10 @@
 
 #include "position.h"
 
-// A Score packs a middlegame and an endgame value into one int.
+// A Score packs a middlegame and an endgame value into one int. MAKE_SCORE is a macro so it
+// can be used in static initializers; eval.c and the tuner alias it as S(mg, eg).
 typedef int Score;
-#define S(mg, eg) ((int)((unsigned int)(eg) << 16) + (mg))
+#define MAKE_SCORE(mg, eg) ((int)((unsigned int)(eg) << 16) + (mg))
 static inline int mg_value(Score s) { return (int16_t)(uint16_t)(unsigned int)s; }
 static inline int eg_value(Score s) { return (int16_t)(uint16_t)((unsigned int)(s + 0x8000) >> 16); }
 
