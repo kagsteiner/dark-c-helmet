@@ -151,6 +151,7 @@ SPRT [0, 5] Elo at 8+0.08, each against the build before it (`tools/sprt_queue.s
 | Capture history | +3.5 ± 2.8 (18,942 games) |
 | Time management: best-move node share, score trend | +3.1 ± 3.9 after 9,400 games; merged before the SPRT finished (short games understate it) |
 | Correction history (pawn-structure eval correction) | +10.5 ± 5.7 (4,312 games) |
+| Staged move picker (hash move before generation, lazy SEE, quiets generated on demand) | +45.3 ± 12.6 (1,018 games); +39% nodes/s |
 
 ## UCI extensions
 
