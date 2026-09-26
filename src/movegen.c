@@ -107,6 +107,8 @@ void generate_moves(const Position* pos, MoveList* list, int type) {
     if (type & GEN_QUIET) gen_castling(pos, list);
 }
 
+void generate_castling(const Position* pos, MoveList* list) { gen_castling(pos, list); }
+
 void generate_legal(const Position* pos, MoveList* list) {
     MoveList pseudo;
     generate_moves(pos, &pseudo, GEN_ALL);

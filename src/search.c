@@ -174,7 +174,9 @@ static inline int captured_type(const Position* pos, Move m) {
     return move_flags(m) == FLAG_EP ? PAWN : piece_type(pos->board[move_to(m)]);
 }
 
-static void score_moves(SearchThread* t, MoveList* list, Move tt_move, int ply) {
+// Scores a full move list (used by quiescence search). With use_see == 0 captures are not
+// split into winning and losing ones; the caller prunes losing captures itself.
+static void score_moves(SearchThread* t, MoveList* list, Move tt_move, int ply, int use_see) {
     const Position* pos = &t->pos;
     const StackEntry* ss = &t->stack[ply + 4];
     Move counter = MOVE_NONE;
@@ -190,7 +192,7 @@ static void score_moves(SearchThread* t, MoveList* list, Move tt_move, int ply) 
             int value = victim >= 0 ? SEE_VALUE[victim] : 0;
             if (move_is_promo(m)) value += (move_promo_type(m) == QUEEN) ? SEE_VALUE[QUEEN] : -1000;
             int attacker = piece_type(pos->board[move_from(m)]);
-            int good = move_is_promo(m) ? move_promo_type(m) == QUEEN : see_ge(pos, m, 0);
+            int good = move_is_promo(m) ? move_promo_type(m) == QUEEN : (!use_see || see_ge(pos, m, 0));
             // Victim value first; capture history breaks ties between similar captures.
             int hist = victim >= 0 ? t->capture_history[pos->board[move_from(m)]][move_to(m)][victim] / 16 : 0;
             score = (good ? SCORE_GOOD_NOISY : SCORE_BAD_NOISY) + value * 16 - attacker + hist;
@@ -215,6 +217,132 @@ static Move pick_move(MoveList* list, int index) {
     list->moves[index] = list->moves[best];
     list->moves[best] = tmp;
     return list->moves[index].move;
+}
+
+// ---------------------------------------------------------------------------
+// Staged move picker for the main search: moves are produced lazily, so a cutoff by the
+// hash move or a good capture saves generating (and scoring) the quiet moves, and the
+// static exchange evaluation is only computed for captures that are actually picked.
+// ---------------------------------------------------------------------------
+
+enum {
+    STAGE_TT, STAGE_GEN_NOISY, STAGE_GOOD_NOISY, STAGE_KILLER1, STAGE_KILLER2, STAGE_COUNTER,
+    STAGE_GEN_QUIET, STAGE_QUIET, STAGE_BAD_NOISY, STAGE_DONE
+};
+
+typedef struct {
+    int stage;
+    Move tt_move, killer1, killer2, counter;
+    MoveList list;
+    int index;
+    Move bad[MAX_MOVES];  // losing captures, tried after the quiet moves
+    int bad_count, bad_index;
+} MovePicker;
+
+static void picker_init(MovePicker* mp, SearchThread* t, Move tt_move, int ply) {
+    const Position* pos = &t->pos;
+    const StackEntry* ss = &t->stack[ply + 4];
+    mp->stage = STAGE_TT;
+    mp->tt_move = pos_is_pseudo_legal(pos, tt_move) ? tt_move : MOVE_NONE;
+    mp->killer1 = ss->killers[0];
+    mp->killer2 = ss->killers[1];
+    mp->counter = (ply > 0 && ss[-1].move != MOVE_NONE) ? t->countermoves[ss[-1].piece][move_to(ss[-1].move)]
+                                                         : MOVE_NONE;
+    mp->index = 0;
+    mp->bad_count = mp->bad_index = 0;
+}
+
+// A refutation move (killer / countermove) worth trying before the quiet moves are generated.
+static inline int good_refutation(const Position* pos, const MovePicker* mp, Move m) {
+    return m != MOVE_NONE && m != mp->tt_move && !move_is_tactical(m) && pos_is_pseudo_legal(pos, m);
+}
+
+static Move picker_next(MovePicker* mp, SearchThread* t, int ply, int skip_quiets) {
+    const Position* pos = &t->pos;
+    const StackEntry* ss = &t->stack[ply + 4];
+    for (;;) {
+        switch (mp->stage) {
+            case STAGE_TT:
+                mp->stage = STAGE_GEN_NOISY;
+                if (mp->tt_move != MOVE_NONE) return mp->tt_move;
+                break;
+
+            case STAGE_GEN_NOISY:
+                generate_moves(pos, &mp->list, GEN_NOISY);
+                for (int i = 0; i < mp->list.count; ++i) {
+                    Move m = mp->list.moves[i].move;
+                    int victim = captured_type(pos, m);
+                    int value = (victim >= 0 ? SEE_VALUE[victim] : 0) + (move_is_promo(m) ? SEE_VALUE[QUEEN] : 0);
+                    int hist = victim >= 0 ? t->capture_history[pos->board[move_from(m)]][move_to(m)][victim] / 16 : 0;
+                    mp->list.moves[i].score = value * 16 - piece_type(pos->board[move_from(m)]) + hist;
+                }
+                mp->index = 0;
+                mp->stage = STAGE_GOOD_NOISY;
+                break;
+
+            case STAGE_GOOD_NOISY:
+                while (mp->index < mp->list.count) {
+                    Move m = pick_move(&mp->list, mp->index++);
+                    if (m == mp->tt_move) continue;
+                    if (!move_is_promo(m) && !see_ge(pos, m, 0)) {  // losing capture: postpone
+                        mp->bad[mp->bad_count++] = m;
+                        continue;
+                    }
+                    return m;
+                }
+                mp->stage = STAGE_KILLER1;
+                break;
+
+            case STAGE_KILLER1:
+                mp->stage = STAGE_KILLER2;
+                if (!skip_quiets && good_refutation(pos, mp, mp->killer1)) return mp->killer1;
+                break;
+
+            case STAGE_KILLER2:
+                mp->stage = STAGE_COUNTER;
+                if (!skip_quiets && mp->killer2 != mp->killer1 && good_refutation(pos, mp, mp->killer2))
+                    return mp->killer2;
+                break;
+
+            case STAGE_COUNTER:
+                mp->stage = STAGE_GEN_QUIET;
+                if (!skip_quiets && mp->counter != mp->killer1 && mp->counter != mp->killer2 &&
+                    good_refutation(pos, mp, mp->counter))
+                    return mp->counter;
+                break;
+
+            case STAGE_GEN_QUIET:
+                if (skip_quiets) {
+                    mp->stage = STAGE_BAD_NOISY;
+                    break;
+                }
+                generate_moves(pos, &mp->list, GEN_QUIET);
+                for (int i = 0; i < mp->list.count; ++i) {
+                    Move m = mp->list.moves[i].move;
+                    mp->list.moves[i].score = quiet_history(t, ss, pos->side, pos->board[move_from(m)], m);
+                }
+                mp->index = 0;
+                mp->stage = STAGE_QUIET;
+                break;
+
+            case STAGE_QUIET:
+                while (!skip_quiets && mp->index < mp->list.count) {
+                    Move m = pick_move(&mp->list, mp->index++);
+                    if (m == mp->tt_move || m == mp->killer1 || m == mp->killer2 || m == mp->counter) continue;
+                    return m;
+                }
+                mp->stage = STAGE_BAD_NOISY;
+                break;
+
+            case STAGE_BAD_NOISY:
+                if (mp->bad_index < mp->bad_count) return mp->bad[mp->bad_index++];
+                mp->stage = STAGE_DONE;
+                break;
+
+            default:
+                return MOVE_NONE;
+        }
+    }
 }
 
 static inline void history_update(int* entry, int bonus) {
@@ -318,7 +446,7 @@ static int qsearch(SearchThread* t, int alpha, int beta, int ply) {
         futility_base = best + 150;
         generate_moves(pos, &list, GEN_NOISY);
     }
-    score_moves(t, &list, tt_move, ply);
+    score_moves(t, &list, tt_move, ply, checked);
 
     Move best_move = MOVE_NONE;
     int legal = 0;
@@ -448,9 +576,8 @@ static int search(SearchThread* t, int alpha, int beta, int depth, int ply) {
     // Internal iterative reduction: without a hash move, this node is probably less important.
     if (depth >= 4 && tt_move == MOVE_NONE && !root) depth--;
 
-    MoveList list;
-    generate_moves(pos, &list, GEN_ALL);
-    score_moves(t, &list, tt_move, ply);
+    MovePicker mp;
+    picker_init(&mp, t, tt_move, ply);
 
     int best = -VALUE_INF;
     Move best_move = MOVE_NONE;
@@ -459,8 +586,8 @@ static int search(SearchThread* t, int alpha, int beta, int depth, int ply) {
     Move quiets[64], captures[32];
     int quiet_count = 0, capture_count = 0;
 
-    for (int i = 0; i < list.count; ++i) {
-        Move m = pick_move(&list, i);
+    Move m;
+    while ((m = picker_next(&mp, t, ply, skip_quiets)) != MOVE_NONE) {
         if (m == excluded || !pos_is_legal(pos, m)) continue;
         legal++;
         int quiet = !move_is_tactical(m);

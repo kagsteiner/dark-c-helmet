@@ -407,6 +407,52 @@ int pos_is_legal(const Position* pos, Move m) {
     return 1;
 }
 
+// Whether m is a move the generator could produce in this position. Moves from the
+// transposition table or the killer/countermove tables come from other positions and must
+// pass this test before they are tried without generating the move list.
+int pos_is_pseudo_legal(const Position* pos, Move m) {
+    if (m == MOVE_NONE) return 0;
+    int us = pos->side, them = us ^ 1;
+    int from = move_from(m), to = move_to(m), flags = move_flags(m);
+    int pc = pos->board[from];
+    if (pc == NO_PIECE || piece_color(pc) != us) return 0;
+    int target = pos->board[to];
+    if (target != NO_PIECE && piece_color(target) == us) return 0;
+    int type = piece_type(pc);
+
+    if (flags == FLAG_KING_CASTLE || flags == FLAG_QUEEN_CASTLE) {
+        if (type != KING) return 0;
+        MoveList list;
+        list.count = 0;
+        generate_castling(pos, &list);
+        for (int i = 0; i < list.count; ++i)
+            if (list.moves[i].move == m) return 1;
+        return 0;
+    }
+    if (flags == FLAG_EP)
+        return type == PAWN && to == pos->st->ep_sq && (PAWN_ATTACKS[us][from] & BB(to));
+    if (flags == 6 || flags == 7) return 0;                        // unused flag combinations
+
+    int capture = (flags & FLAG_CAPTURE) != 0;
+    if (capture != (target != NO_PIECE)) return 0;              // capture flag must match the board
+    if (target != NO_PIECE && piece_type(target) == KING) return 0;
+
+    if (type == PAWN) {
+        int promo_rank = relative_rank(us, to) == 7;
+        if (promo_rank != ((flags & FLAG_PROMO) != 0)) return 0;
+        int up = us == WHITE ? 8 : -8;
+        if (capture) return (PAWN_ATTACKS[us][from] & BB(to)) != 0;
+        if (flags == FLAG_DOUBLE_PUSH)
+            return relative_rank(us, from) == 1 && to == from + 2 * up &&
+                   pos->board[from + up] == NO_PIECE;               // target emptiness checked above
+        if (flags != FLAG_QUIET && !(flags & FLAG_PROMO)) return 0;
+        return to == from + up;                                     // single push (or promotion)
+    }
+    if (flags != FLAG_QUIET && flags != FLAG_CAPTURE) return 0;     // no special flags for pieces
+    (void)them;
+    return (piece_attacks(type, from, pos->occupied) & BB(to)) != 0;
+}
+
 int pos_is_repetition(const Position* pos, int ply_from_root) {
     const State* st = pos->st;
     int end = st->rule50 < st->plies_from_null ? st->rule50 : st->plies_from_null;

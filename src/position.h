@@ -80,6 +80,7 @@ void pos_make_null(Position* pos);
 void pos_unmake_null(Position* pos);
 
 int pos_is_legal(const Position* pos, Move m);
+int pos_is_pseudo_legal(const Position* pos, Move m);  // could the generator produce m here?
 int pos_is_repetition(const Position* pos, int ply_from_root);
 int pos_is_draw(const Position* pos, int ply_from_root);
 int see_ge(const Position* pos, Move m, int threshold);

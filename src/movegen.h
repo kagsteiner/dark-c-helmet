@@ -9,5 +9,6 @@ enum { GEN_NOISY = 1, GEN_QUIET = 2, GEN_ALL = 3 };
 
 void generate_moves(const Position* pos, MoveList* list, int type);
 void generate_legal(const Position* pos, MoveList* list);
+void generate_castling(const Position* pos, MoveList* list);  // appends castling moves
 
 #endif
