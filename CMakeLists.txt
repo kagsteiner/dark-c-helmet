@@ -34,8 +34,22 @@ if(GIT_FOUND)
   endif()
 endif()
 string(TIMESTAMP DH_TIME "%Y-%m-%d %H:%M")
-target_compile_definitions(darkhelmet PRIVATE
-  ENGINE_VERSION="build ${DH_COUNT}${DH_DIRTY} (${DH_HASH} ${DH_TIME})")
+# Written to a generated header: compilers cannot take a define containing parentheses on
+# the command line.
+file(WRITE ${CMAKE_BINARY_DIR}/dh_version.h
+     "#define ENGINE_VERSION \"build ${DH_COUNT}${DH_DIRTY} (${DH_HASH} ${DH_TIME})\"\n")
+target_include_directories(darkhelmet PRIVATE ${CMAKE_BINARY_DIR})
+target_compile_definitions(darkhelmet PRIVATE DH_VERSION_HEADER)
+# Use the full instruction set of the build machine (AVX2 on x86 Windows, -march=native
+# elsewhere). Turn off with -DDH_NATIVE=OFF for a binary that runs on older CPUs.
+option(DH_NATIVE "Optimise for the build machine's CPU" ON)
+if(DH_NATIVE)
+  if(MSVC)
+    target_compile_options(darkhelmet PRIVATE /arch:AVX2)
+  else()
+    target_compile_options(darkhelmet PRIVATE -march=native)
+  endif()
+endif()
 find_package(Threads REQUIRED)
 target_link_libraries(darkhelmet Threads::Threads)
 if(NOT MSVC)

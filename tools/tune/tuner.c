@@ -16,6 +16,7 @@
 #include <string.h>
 
 #include "eval.h"
+#define S MAKE_SCORE
 #include "position.h"
 
 #define THREADS 16
