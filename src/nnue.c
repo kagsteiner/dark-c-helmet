@@ -4,6 +4,24 @@
 #include <stdlib.h>
 #include <string.h>
 
+// Explicit AVX2 for the accumulator updates and the output layer, used only with MSVC, whose
+// automatic vectorisation of the plain loops is weak. clang/gcc vectorise the plain loops
+// well: on Apple silicon, clang's automatic NEON code measured faster than hand-written NEON
+// (3.42M vs 3.30M nodes/s), so the plain loops are used there. The integer arithmetic is
+// identical to the plain code (verified: same bench node count when the AVX2 path is built
+// with clang for x86 and run under Rosetta), so the search does not depend on the path.
+// Define NNUE_FORCE_AVX2 to use it with other compilers.
+#if defined(__AVX2__) && (defined(_MSC_VER) || defined(NNUE_FORCE_AVX2))
+#include <immintrin.h>
+#define NNUE_AVX2 1
+typedef __m256i vi16;
+#define VLANES 16
+#define VLOAD(p) _mm256_loadu_si256((const __m256i*)(p))
+#define VSTORE(p, x) _mm256_storeu_si256((__m256i*)(p), (x))
+#define VADD(a, b) _mm256_add_epi16((a), (b))
+#define VSUB(a, b) _mm256_sub_epi16((a), (b))
+#endif
+
 // Network: (768 * king buckets -> NNUE_HIDDEN) x 2 perspectives -> SCReLU -> 1 of 8 outputs.
 //
 // Input features are (king bucket, piece, square) seen from each side. The king bucket is
@@ -138,7 +156,11 @@ static void refresh(const Position* pos, Accumulator* acc, int p) {
     while (occ) {
         int sq = pop_lsb(&occ);
         const int16_t* w = ft_weights[feature(p, kv, pos->board[sq], sq)];
+#ifdef VLANES
+        for (int h = 0; h < NNUE_HIDDEN; h += VLANES) VSTORE(v + h, VADD(VLOAD(v + h), VLOAD(w + h)));
+#else
         for (int h = 0; h < NNUE_HIDDEN; ++h) v[h] += w[h];
+#endif
     }
     acc->computed[p] = 1;
 }
@@ -154,6 +176,22 @@ static void update(Accumulator* dst, const Accumulator* src, const DirtyPieces* 
     }
     int16_t* v = dst->values[p];
     const int16_t* s = src->values[p];
+#ifdef VLANES
+    if (na == 1 && ns == 1) {  // quiet move
+        const int16_t *a0 = add[0], *s0 = sub[0];
+        for (int h = 0; h < NNUE_HIDDEN; h += VLANES)
+            VSTORE(v + h, VSUB(VADD(VLOAD(s + h), VLOAD(a0 + h)), VLOAD(s0 + h)));
+    } else if (na == 1 && ns == 2) {  // capture or promotion
+        const int16_t *a0 = add[0], *s0 = sub[0], *s1 = sub[1];
+        for (int h = 0; h < NNUE_HIDDEN; h += VLANES)
+            VSTORE(v + h, VSUB(VSUB(VADD(VLOAD(s + h), VLOAD(a0 + h)), VLOAD(s0 + h)), VLOAD(s1 + h)));
+    } else if (na == 2 && ns == 2) {  // castling
+        const int16_t *a0 = add[0], *a1 = add[1], *s0 = sub[0], *s1 = sub[1];
+        for (int h = 0; h < NNUE_HIDDEN; h += VLANES)
+            VSTORE(v + h, VSUB(VSUB(VADD(VADD(VLOAD(s + h), VLOAD(a0 + h)), VLOAD(a1 + h)), VLOAD(s0 + h)),
+                               VLOAD(s1 + h)));
+    } else {
+#else
     if (na == 1 && ns == 1) {  // quiet move
         const int16_t *a0 = add[0], *s0 = sub[0];
         for (int h = 0; h < NNUE_HIDDEN; ++h) v[h] = (int16_t)(s[h] + a0[h] - s0[h]);
@@ -163,7 +201,8 @@ static void update(Accumulator* dst, const Accumulator* src, const DirtyPieces* 
     } else if (na == 2 && ns == 2) {  // castling
         const int16_t *a0 = add[0], *a1 = add[1], *s0 = sub[0], *s1 = sub[1];
         for (int h = 0; h < NNUE_HIDDEN; ++h) v[h] = (int16_t)(s[h] + a0[h] + a1[h] - s0[h] - s1[h]);
-    } else {  // null move, promotion-capture
+    } else {
+#endif  // null move, promotion-capture
         memcpy(v, s, sizeof(dst->values[p]));
         for (int i = 0; i < ns; ++i)
             for (int h = 0; h < NNUE_HIDDEN; ++h) v[h] -= sub[i][h];
@@ -203,6 +242,19 @@ static void make_current(Position* pos, int p) {
 // Output weights are limited to |w| <= 127 by the trainer, so c * w fits in int16 and the
 // int32 sum cannot overflow in practice; this form vectorises well.
 static inline int32_t screlu_dot(const int16_t* v, const int16_t* w) {
+#if defined(NNUE_AVX2)
+    const __m256i zero = _mm256_setzero_si256(), qa = _mm256_set1_epi16(QA);
+    __m256i acc = _mm256_setzero_si256();
+    for (int h = 0; h < NNUE_HIDDEN; h += 16) {
+        __m256i c = _mm256_min_epi16(_mm256_max_epi16(VLOAD(v + h), zero), qa);
+        __m256i cw = _mm256_mullo_epi16(c, VLOAD(w + h));  // same int16 truncation as the scalar code
+        acc = _mm256_add_epi32(acc, _mm256_madd_epi16(c, cw));
+    }
+    __m128i s = _mm_add_epi32(_mm256_castsi256_si128(acc), _mm256_extracti128_si256(acc, 1));
+    s = _mm_add_epi32(s, _mm_shuffle_epi32(s, 0x4E));
+    s = _mm_add_epi32(s, _mm_shuffle_epi32(s, 0xB1));
+    return _mm_cvtsi128_si32(s);
+#else
     int32_t sum = 0;
     for (int h = 0; h < NNUE_HIDDEN; ++h) {
         int16_t c = v[h] < 0 ? 0 : v[h] > QA ? QA : v[h];
@@ -210,6 +262,7 @@ static inline int32_t screlu_dot(const int16_t* v, const int16_t* w) {
         sum += (int32_t)cw * c;
     }
     return sum;
+#endif
 }
 
 int nnue_evaluate(Position* pos) {
