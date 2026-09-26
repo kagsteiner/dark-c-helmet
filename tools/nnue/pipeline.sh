@@ -63,7 +63,7 @@ for i in $(seq 1 "$PROCS"); do
   "./bin/datagen-$ROUND" datagen "$GAMES" "$NODES" $((RANDOM * 100 + i)) "$OUT/selfplay_$i.txt" 2>"$OUT/datagen_$i.log" &
   pids+=($!)
 done
-wait_until $(( $(date +%s) + DATAGEN_HOURS * 3600 )) "${pids[@]}"
+wait_until $(( $(date +%s) + $(awk "BEGIN { printf \"%d\", $DATAGEN_HOURS * 3600 }") )) "${pids[@]}"
 positions=$(cat "$OUT"/selfplay_*.txt | wc -l | tr -d ' ')
 log "data generation done: $positions new positions"
 if [[ "${DATAGEN_ONLY:-0}" == "1" ]]; then
@@ -103,7 +103,7 @@ for h in 256 512; do
     tools/match.sh "bin/nnue_${ROUND}_$h" "bin/base-$ROUND" > "$OUT/sprt_$h.log" 2>&1 &
   sprt_pids+=($!)
 done
-wait_until $(( $(date +%s) + SPRT_MINUTES * 60 )) "${sprt_pids[@]}"
+wait_until $(( $(date +%s) + $(awk "BEGIN { printf \"%d\", $SPRT_MINUTES * 60 }") )) "${sprt_pids[@]}"
 pkill -f "fastchess/fastchess" 2>/dev/null
 for h in 256 512; do
   log "SPRT net $h vs current: $(grep -aE 'Elo:' "$OUT/sprt_$h.log" | tail -1)"

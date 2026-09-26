@@ -59,7 +59,7 @@ for c in $CANDIDATES; do
     tools/match.sh "bin/nnue_${ROUND}_$c" "bin/base-$ROUND" > "$OUT/sprt_$c.log" 2>&1 &
   pids+=($!)
 done
-deadline=$(( $(date +%s) + SPRT_MINUTES * 60 ))
+deadline=$(( $(date +%s) + $(awk "BEGIN { printf \"%d\", $SPRT_MINUTES * 60 }") ))
 while :; do
   alive=0
   for p in "${pids[@]}"; do kill -0 "$p" 2>/dev/null && alive=1; done
