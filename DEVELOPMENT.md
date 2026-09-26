@@ -138,6 +138,19 @@ Nets so far:
 | `nets/net_v5.nnue` (default) | 273M positions (v4 + 173M from v4-engine self-play), 512 hidden, 8 output buckets | +58 ± 14 Elo vs net_v4 |
 | `nets/net_v5_kb8.nnue` | same data, 8 king buckets with mirroring | +33 ± 11 vs net_v4: overfits (train 0.0072 vs validation 0.0088) and 15% slower; needs much more data |
 
+## Search changes and their measured value
+
+SPRT [0, 5] Elo at 8+0.08, each against the build before it (`tools/sprt_queue.sh`).
+
+| Change | Result |
+|---|---|
+| Continuation history (1- and 2-ply) | +25 to +37 Elo (stopped early at a clear lead) |
+| Singular extensions (with multi-cut, negative extension) | +26.4 ± 9.8 (1,738 games) |
+| Lazy SMP | 4 threads vs 1: +176 (62 games) |
+| Capture history | +3.5 ± 2.8 (18,942 games) |
+| Time management: best-move node share, score trend | +3.1 ± 3.9 after 9,400 games; merged before the SPRT finished (short games understate it) |
+| Correction history (pawn-structure eval correction) | +10.5 ± 5.7 (4,312 games) |
+
 ## UCI extensions
 
 | Command | Purpose |
