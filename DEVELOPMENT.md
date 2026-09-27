@@ -137,7 +137,8 @@ Nets so far:
 | `nets/net_v4.nnue` | 150M positions (49M v3 + 100M from v3-engine self-play), 512 hidden, 8 buckets | +100 ± 18 Elo vs net_v3; +4 ± 15 vs a 256-hidden net on the same data |
 | `nets/net_v5.nnue` | 273M positions (v4 + 173M from v4-engine self-play), 512 hidden, 8 output buckets | +58 ± 14 Elo vs net_v4 |
 | `nets/net_v5_kb8.nnue` | same data, 8 king buckets with mirroring | +33 ± 11 vs net_v4: overfits (train 0.0072 vs validation 0.0088) and 15% slower; needs much more data |
-| `nets/net_v6.nnue` (default) | 344M positions (v4 + v5 + 71M from v5-engine self-play), 512 hidden, 8 output buckets | +10.7 ± 6.0 Elo vs net_v5 (4,594 games) |
+| `nets/net_v6.nnue` | 344M positions (v4 + v5 + 71M from v5-engine self-play), 512 hidden, 8 output buckets | +10.7 ± 6.0 Elo vs net_v5 (4,594 games) |
+| `nets/net_v7.nnue` (default) | 483M positions (v4–v6 + 139M from build-56 self-play), 512 hidden, 8 output buckets | +23.3 ± 9.1 Elo vs net_v6 (1,928 games) |
 
 ## Search changes and their measured value
 
