@@ -8,6 +8,7 @@
 #include "eval.h"
 #include "movegen.h"
 #include "tt.h"
+#include "tune.h"
 #include "util.h"
 
 #ifdef _WIN32
@@ -86,7 +87,7 @@ static volatile int stop_all;  // set by the main thread, read by helpers
 
 void search_init(void) {
     for (int d = 1; d < 64; ++d)
-        for (int m = 1; m < 64; ++m) lmr_table[d][m] = (int)(0.75 + log((double)d) * log((double)m) / 2.25);
+        for (int m = 1; m < 64; ++m) lmr_table[d][m] = (int)(lmr_base / 100.0 + log((double)d) * log((double)m) / (lmr_div / 100.0));
 }
 
 void search_clear(void) {
@@ -352,8 +353,8 @@ static inline void history_update(int* entry, int bonus) {
 static void update_quiet_heuristics(SearchThread* t, int ply, int depth, Move best, const Move* quiets, int quiet_count) {
     StackEntry* ss = &t->stack[ply + 4];
     int side = t->pos.side;
-    int bonus = depth * depth * 16;
-    if (bonus > 1600) bonus = 1600;
+    int bonus = depth * depth * hist_bonus_mult;
+    if (bonus > hist_bonus_max) bonus = hist_bonus_max;
 
     if (ss->killers[0] != best) {
         ss->killers[1] = ss->killers[0];
@@ -375,8 +376,8 @@ static void update_quiet_heuristics(SearchThread* t, int ply, int depth, Move be
 // Reward the capture that caused a cutoff (if any) and punish the captures tried before it.
 static void update_capture_history(SearchThread* t, int depth, Move best, const Move* captures, int capture_count) {
     const Position* pos = &t->pos;
-    int bonus = depth * depth * 16;
-    if (bonus > 1600) bonus = 1600;
+    int bonus = depth * depth * hist_bonus_mult;
+    if (bonus > hist_bonus_max) bonus = hist_bonus_max;
     int victim = captured_type(pos, best);
     if (victim >= 0) history_update(&t->capture_history[pos->board[move_from(best)]][move_to(best)][victim], bonus);
     for (int i = 0; i < capture_count; ++i) {
@@ -443,7 +444,7 @@ static int qsearch(SearchThread* t, int alpha, int beta, int ply) {
             return best;
         }
         if (best > alpha) alpha = best;
-        futility_base = best + 150;
+        futility_base = best + qs_fut_margin;
         generate_moves(pos, &list, GEN_NOISY);
     }
     score_moves(t, &list, tt_move, ply, checked);
@@ -550,10 +551,10 @@ static int search(SearchThread* t, int alpha, int beta, int depth, int ply) {
 
     if (!pv_node && !checked && !excluded) {
         // Reverse futility pruning
-        if (depth <= 8 && eval - 80 * (depth - improving) >= beta && eval < VALUE_MATE_IN_MAX) return eval;
+        if (depth <= rfp_depth && eval - rfp_margin * (depth - improving) >= beta && eval < VALUE_MATE_IN_MAX) return eval;
 
         // Razoring
-        if (depth <= 3 && eval + 250 * depth <= alpha) {
+        if (depth <= 3 && eval + razor_margin * depth <= alpha) {
             int score = qsearch(t, alpha, beta, ply);
             if (score <= alpha) return score;
         }
@@ -561,7 +562,7 @@ static int search(SearchThread* t, int alpha, int beta, int depth, int ply) {
         // Null move pruning
         if (depth >= 3 && eval >= beta && ss->static_eval >= beta && ss[-1].move != MOVE_NONE &&
             non_pawn_material(pos, pos->side) && beta > -VALUE_MATE_IN_MAX) {
-            int r = 3 + depth / 3 + ((eval - beta) / 200 < 3 ? (eval - beta) / 200 : 3);
+            int r = nmp_base + depth / nmp_depth_div + ((eval - beta) / nmp_eval_div < 3 ? (eval - beta) / nmp_eval_div : 3);
             ss->move = MOVE_NONE;
             ss->piece = NO_PIECE;
             ss->cont = &cont_sentinel;
@@ -574,7 +575,7 @@ static int search(SearchThread* t, int alpha, int beta, int depth, int ply) {
     }
 
     // Internal iterative reduction: without a hash move, this node is probably less important.
-    if (depth >= 4 && tt_move == MOVE_NONE && !root) depth--;
+    if (depth >= iir_depth && tt_move == MOVE_NONE && !root) depth--;
 
     MovePicker mp;
     picker_init(&mp, t, tt_move, ply);
@@ -596,27 +597,27 @@ static int search(SearchThread* t, int alpha, int beta, int depth, int ply) {
         // Shallow-depth pruning, once a real score is secured
         if (!root && best > -VALUE_MATE_IN_MAX && non_pawn_material(pos, pos->side)) {
             if (quiet) {
-                if (depth <= 8 && legal > (3 + depth * depth) / (2 - improving)) {
+                if (depth <= 8 && legal > (lmp_base + depth * depth) / (2 - improving)) {
                     skip_quiets = 1;
                     continue;
                 }
                 if (!checked && depth <= 8 && ss->static_eval != VALUE_NONE &&
-                    ss->static_eval + 100 + 100 * depth <= alpha) {
+                    ss->static_eval + fut_base + fut_mult * depth <= alpha) {
                     skip_quiets = 1;
                     continue;
                 }
-                if (depth <= 8 && !see_ge(pos, m, -50 * depth)) continue;
+                if (depth <= 8 && !see_ge(pos, m, -see_quiet * depth)) continue;
             } else {
-                if (depth <= 8 && !see_ge(pos, m, -100 * depth)) continue;
+                if (depth <= 8 && !see_ge(pos, m, -see_noisy * depth)) continue;
             }
         }
 
         // Singular extension: if every alternative to the hash move fails well below its
         // score, the hash move is forced and deserves an extra ply.
         int extension = 0;
-        if (!root && m == tt_move && !excluded && depth >= 8 && hit && tt_depth(tte) >= depth - 3 &&
+        if (!root && m == tt_move && !excluded && depth >= se_depth && hit && tt_depth(tte) >= depth - 3 &&
             (tt_bound(tte) & BOUND_LOWER) && abs(tt_score) < VALUE_MATE_IN_MAX && ply < 2 * t->root_depth) {
-            int singular_beta = tt_score - 2 * depth;
+            int singular_beta = tt_score - se_margin * depth / 16;
             ss->excluded = m;
             int s = search(t, singular_beta - 1, singular_beta, (depth - 1) / 2, ply);
             ss->excluded = MOVE_NONE;
@@ -644,7 +645,7 @@ static int search(SearchThread* t, int alpha, int beta, int depth, int ply) {
             r += !improving;
             r -= gives_check;
             r -= (m == ss->killers[0] || m == ss->killers[1]);
-            r -= hist / 16384;
+            r -= hist / lmr_hist_div;
             if (r < 0) r = 0;
             if (r > new_depth - 1) r = new_depth - 1;
             score = -search(t, -alpha - 1, -alpha, new_depth - r, ply + 1);
@@ -747,7 +748,7 @@ static void iterative_deepening(SearchThread* t, int max_depth) {
     for (int depth = 1; depth <= max_depth; ++depth) {
         t->seldepth = 0;
         t->root_depth = depth;
-        int delta = 20;
+        int delta = asp_delta;
         int alpha = -VALUE_INF, beta = VALUE_INF;
         if (depth >= 4) {
             alpha = score - delta > -VALUE_INF ? score - delta : -VALUE_INF;

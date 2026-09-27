@@ -19,7 +19,34 @@
 #include "perft.h"
 #include "search.h"
 #include "tt.h"
+#include "tune.h"
 #include "util.h"
+
+#ifdef SPSA
+// Tunable search constants (see tune.h), settable through UCI options of the same name.
+#define TUNE_DEFINE(name, def, lo, hi) int name = def;
+SEARCH_PARAMS(TUNE_DEFINE)
+#undef TUNE_DEFINE
+
+static void print_tune_options(void) {
+#define TUNE_PRINT(name, def, lo, hi) printf("option name %s type spin default %d min %d max %d\n", #name, def, lo, hi);
+    SEARCH_PARAMS(TUNE_PRINT)
+#undef TUNE_PRINT
+}
+
+static int set_tune_option(const char* name, const char* value) {
+#define TUNE_SET(n, def, lo, hi)                                 \
+    if (!strcmp(name, #n)) {                                     \
+        int v = atoi(value);                                     \
+        n = v < lo ? lo : v > hi ? hi : v;                       \
+        search_init(); /* the LMR table depends on lmr_base / lmr_div */ \
+        return 1;                                                \
+    }
+    SEARCH_PARAMS(TUNE_SET)
+#undef TUNE_SET
+    return 0;
+}
+#endif
 
 #define MAX_LINE 65536
 #define MAX_LINE_PENDING 8192
@@ -310,6 +337,9 @@ static void cmd_setoption(char* args) {
         }
     }
     else if (!strcmp(name, "threads") && value) search_set_threads(atoi(value));
+#ifdef SPSA
+    else if (value) set_tune_option(name, value);
+#endif
 }
 
 static void uci_loop(void) {
@@ -331,6 +361,9 @@ static void uci_loop(void) {
             printf("option name Clear Hash type button\n");
             printf("option name UseNNUE type check default %s\n", g_use_nnue ? "true" : "false");
             printf("option name EvalFile type string default <embedded>\n");
+#ifdef SPSA
+            print_tune_options();
+#endif
             printf("uciok\n");
         } else if (!strcmp(cmd, "isready")) {
             printf("readyok\n");

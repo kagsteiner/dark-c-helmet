@@ -28,7 +28,12 @@ tuner: tools/tune/tuner.c $(wildcard src/*.c) $(wildcard src/*.h)
 	$(CC) -O3 -march=native -std=c11 -DTUNE -Isrc -o bin/tuner tools/tune/tuner.c \
 		src/bitboard.c src/position.c src/movegen.c src/eval.c -lm -lpthread
 
+# Engine with the search constants of src/tune.h exposed as UCI options (for tools/spsa)
+spsa: $(SRCS) $(wildcard src/*.h)
+	@mkdir -p bin
+	$(CC) $(CFLAGS) -DSPSA $(VERSION_DEF) -o bin/darkhelmet-spsa $(SRCS) -lm -lpthread
+
 clean:
 	rm -f $(EXE)
 
-.PHONY: all clean reference tuner
+.PHONY: all clean reference tuner spsa
