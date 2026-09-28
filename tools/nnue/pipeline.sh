@@ -6,7 +6,7 @@
 #
 # Environment (defaults in brackets):
 #   PROCS [17]            datagen processes
-#   GAMES [55000]         games per datagen process
+#   GAMES [500000]        games per datagen process (normally the deadline ends the run)
 #   NODES [5000]          nodes per move in self-play
 #   DATAGEN_HOURS [5]     hard deadline for data generation
 #   EPOCHS [20]           training epochs
@@ -23,7 +23,7 @@ ROUND="${1:?usage: pipeline.sh <round-name> [older data files...]}"
 shift
 OLD_DATA=("$@")
 PROCS="${PROCS:-17}"
-GAMES="${GAMES:-55000}"
+GAMES="${GAMES:-500000}"
 NODES="${NODES:-5000}"
 DATAGEN_HOURS="${DATAGEN_HOURS:-5}"
 EPOCHS="${EPOCHS:-20}"
