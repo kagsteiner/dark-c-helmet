@@ -1,7 +1,8 @@
 // NNUE trainer for Dark C. Helmet 2 (CPU, multithreaded, no dependencies besides pthreads).
 //
 // Network: (768 * KING_BUCKETS -> HIDDEN) x 2 perspectives -> SCReLU -> 1 (one of BUCKETS output layers,
-//   chosen by the number of pieces on the board)
+//   chosen by the number of pieces on the board; with OUT_SCHEME 1 by 4 piece-count ranges x
+//   queens on/off)
 //   Inputs are piece-square features seen from each side (own pieces first, board flipped
 //   for Black). Both perspectives share the feature-transformer weights; the output layer
 //   sees [side to move accumulator, other side accumulator].
@@ -27,6 +28,9 @@
 #define HIDDEN 256
 #endif
 #define BUCKETS 8
+#ifndef OUT_SCHEME
+#define OUT_SCHEME 0     // output buckets: 0 = piece count / 4, 1 = piece-count range x queens on/off
+#endif
 #ifndef KING_BUCKETS
 #define KING_BUCKETS 8   // 1 = no king buckets and no mirroring (writes the same net as before)
 #endif
@@ -179,9 +183,20 @@ typedef struct {
     float out_b[BUCKETS];
 } Net;
 
-// Output bucket from the number of pieces (2..32) -> 0..7.
+// Output bucket 0..7 (must match src/nnue.c). Scheme 0: by the number of pieces (2..32).
+// Scheme 1: piece-count range (2-9, 10-17, 18-25, 26-32) x whether any queen is on the board.
 static inline int output_bucket(const PackedPos* p) {
-    int b = (__builtin_popcountll(p->occupancy) - 2) / 4;
+    int n = __builtin_popcountll(p->occupancy);
+    if (OUT_SCHEME == 1) {
+        int queens = 0;
+        for (int i = 0; i < n; ++i) {
+            int pc = (p->pieces[i / 2] >> (4 * (i & 1))) & 15;
+            if (pc == 4 || pc == 10) queens = 1;
+        }
+        int r = (n - 2) / 8;
+        return (r < 0 ? 0 : r > 3 ? 3 : r) * 2 + queens;
+    }
+    int b = (n - 2) / 4;
     return b < 0 ? 0 : b >= BUCKETS ? BUCKETS - 1 : b;
 }
 
@@ -311,9 +326,8 @@ static void init_net(void) {
 static void save_quantised(const char* path) {
     FILE* f = fopen(path, "wb");
     if (!f) return;
-    // Header: magic, hidden size, number of output buckets.
-    // Header: magic "DCH3", hidden size, output buckets, king buckets.
-    uint32_t header[4] = {0x33484344u, HIDDEN, BUCKETS, KING_BUCKETS};
+    // Header: magic "DCH3", hidden size, output buckets (scheme in the upper 16 bits), king buckets.
+    uint32_t header[4] = {0x33484344u, HIDDEN, BUCKETS | (OUT_SCHEME << 16), KING_BUCKETS};
     fwrite(header, sizeof(header), 1, f);
     // Clip to what int16 arithmetic in the engine can hold safely.
     for (int i = 0; i < INPUTS; ++i)
@@ -427,7 +441,7 @@ static int check(const char* net_path, const char* txt_path, int count) {
     if (!f) return 1;
     uint32_t header[4];
     if (fread(header, sizeof(header), 1, f) != 1 || header[0] != 0x33484344u || header[1] != HIDDEN ||
-        header[2] != BUCKETS || header[3] != KING_BUCKETS) {
+        header[2] != (BUCKETS | (OUT_SCHEME << 16)) || header[3] != KING_BUCKETS) {
         fprintf(stderr, "network does not match this trainer build\n");
         return 1;
     }

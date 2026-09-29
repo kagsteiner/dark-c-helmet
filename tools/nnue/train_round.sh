@@ -5,7 +5,8 @@
 #
 # Candidates (all 512 hidden, 8 output buckets):
 #   plain  - no king buckets (like net v4)
-#   kb8    - 8 king buckets with mirroring
+#   kbN    - N king buckets with mirroring
+#   queens - no king buckets; output buckets by piece-count range x queens on/off
 # Each is trained, built into an engine and SPRT-tested against the current bin/darkhelmet.
 # Nothing is merged; results go to data/<round>/SUMMARY.txt.
 #
@@ -25,14 +26,15 @@ mkdir -p "$OUT" data/nnue
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$SUMMARY"; }
 
-kb_of() { [[ $1 == plain ]] && echo 1 || echo "${1#kb}"; }
+kb_of() { [[ $1 == plain || $1 == queens ]] && echo 1 || echo "${1#kb}"; }
+scheme_of() { [[ $1 == queens ]] && echo 1 || echo 0; }
 
 log "=== training round $ROUND: candidates $CANDIDATES, $EPOCHS epochs ==="
 make >/dev/null 2>&1 || { log "engine build failed"; exit 1; }
 cp bin/darkhelmet "bin/base-$ROUND"
 
 for c in $CANDIDATES; do
-  cc -O3 -march=native -std=c11 -DHIDDEN=512 -DKING_BUCKETS="$(kb_of "$c")" \
+  cc -O3 -march=native -std=c11 -DHIDDEN=512 -DKING_BUCKETS="$(kb_of "$c")" -DOUT_SCHEME="$(scheme_of "$c")" \
      -o "bin/nnue-trainer-$c" tools/nnue/trainer.c -lm -lpthread
 done
 

@@ -45,6 +45,7 @@ static int16_t ft_bias[NNUE_HIDDEN];
 static int16_t out_weights[OUT_BUCKETS][2 * NNUE_HIDDEN];
 static int32_t out_bias[OUT_BUCKETS];
 static int king_buckets = 1;
+static int out_scheme = 0;  // output buckets: 0 = by piece count, 1 = piece-count range x queens on/off
 
 // King bucket by king square (after flipping to the perspective's view and mirroring to
 // files a-d), indexed rank * 4 + file. Must match tools/nnue/trainer.c.
@@ -84,7 +85,10 @@ static int load_memory(const unsigned char* data, size_t size) {
         return 0;
     }
     int kb = (int)header[3];
-    if (header[1] != NNUE_HIDDEN || header[2] != OUT_BUCKETS || kb < 1 || kb > MAX_KING_BUCKETS) return 0;
+    int scheme = (int)(header[2] >> 16);  // upper 16 bits: output bucket scheme
+    if (header[1] != NNUE_HIDDEN || (header[2] & 0xFFFF) != OUT_BUCKETS || scheme > 1 || kb < 1 ||
+        kb > MAX_KING_BUCKETS)
+        return 0;
     if (size != header_size + body_size(kb)) return 0;
 
     data += header_size;
@@ -97,6 +101,7 @@ static int load_memory(const unsigned char* data, size_t size) {
     data += sizeof(out_weights);
     memcpy(out_bias, data, sizeof(out_bias));
     king_buckets = kb;
+    out_scheme = scheme;
     return 1;
 }
 
@@ -285,8 +290,14 @@ int nnue_evaluate(Position* pos) {
 #endif
     const Accumulator* acc = &pos->acc[idx];
     int stm = pos->side;
-    int bucket = (popcount(pos->occupied) - 2) / 4;
-    if (bucket >= OUT_BUCKETS) bucket = OUT_BUCKETS - 1;
+    int bucket;
+    if (out_scheme == 1) {
+        int r = (popcount(pos->occupied) - 2) / 8;
+        bucket = (r > 3 ? 3 : r) * 2 + ((pos->pieces[W_QUEEN] | pos->pieces[B_QUEEN]) != 0);
+    } else {
+        bucket = (popcount(pos->occupied) - 2) / 4;
+        if (bucket >= OUT_BUCKETS) bucket = OUT_BUCKETS - 1;
+    }
     int64_t sum = (int64_t)screlu_dot(acc->values[stm], out_weights[bucket]) +
                   screlu_dot(acc->values[stm ^ 1], out_weights[bucket] + NNUE_HIDDEN);
     int64_t out = sum / QA + out_bias[bucket];
