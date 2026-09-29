@@ -50,3 +50,6 @@ data/
 
 # Obsidian vault settings (per-user editor state)
 .obsidian/
+
+# fastchess writes its state here when run from the project root
+/config.json
