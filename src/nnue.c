@@ -47,9 +47,10 @@ static int32_t out_bias[OUT_BUCKETS];
 static int king_buckets = 1;
 static int out_scheme = 0;  // output buckets: 0 = by piece count, 1 = piece-count range x queens on/off
 
-// King bucket by king square (after flipping to the perspective's view and mirroring to
-// files a-d), indexed rank * 4 + file. Must match tools/nnue/trainer.c.
-static const int KING_BUCKET_LAYOUT[32] = {
+// King bucket layouts by king square (after flipping to the perspective's view and mirroring
+// to files a-d), indexed rank * 4 + file. The bucket count in the net header selects the layout.
+// Must match tools/nnue/trainer.c.
+static const int KING_BUCKET_LAYOUT_8[32] = {
     0, 1, 2, 3,
     4, 4, 5, 5,
     6, 6, 6, 6,
@@ -59,6 +60,30 @@ static const int KING_BUCKET_LAYOUT[32] = {
     7, 7, 7, 7,
     7, 7, 7, 7,
 };
+// 7 buckets: like 8, but ranks 3-8 form one bucket.
+static const int KING_BUCKET_LAYOUT_7[32] = {
+    0, 1, 2, 3,
+    4, 4, 5, 5,
+    6, 6, 6, 6,
+    6, 6, 6, 6,
+    6, 6, 6, 6,
+    6, 6, 6, 6,
+    6, 6, 6, 6,
+    6, 6, 6, 6,
+};
+// 4 buckets: rank 1 queenside (a-b), rank 1 centre (c-d), rank 2, ranks 3-8.
+static const int KING_BUCKET_LAYOUT_4[32] = {
+    0, 0, 1, 1,
+    2, 2, 2, 2,
+    3, 3, 3, 3,
+    3, 3, 3, 3,
+    3, 3, 3, 3,
+    3, 3, 3, 3,
+    3, 3, 3, 3,
+    3, 3, 3, 3,
+};
+
+static const int* king_bucket_layout = KING_BUCKET_LAYOUT_8;
 
 // Provided by the generated src/nnue_net.c (size 0 if no network is embedded).
 extern const unsigned char NNUE_EMBEDDED[];
@@ -85,6 +110,7 @@ static int load_memory(const unsigned char* data, size_t size) {
         return 0;
     }
     int kb = (int)header[3];
+    if (kb != 1 && kb != 4 && kb != 7 && kb != 8) return 0;
     int scheme = (int)(header[2] >> 16);  // upper 16 bits: output bucket scheme
     if (header[1] != NNUE_HIDDEN || (header[2] & 0xFFFF) != OUT_BUCKETS || scheme > 1 || kb < 1 ||
         kb > MAX_KING_BUCKETS)
@@ -101,6 +127,7 @@ static int load_memory(const unsigned char* data, size_t size) {
     data += sizeof(out_weights);
     memcpy(out_bias, data, sizeof(out_bias));
     king_buckets = kb;
+    king_bucket_layout = kb == 4 ? KING_BUCKET_LAYOUT_4 : kb == 7 ? KING_BUCKET_LAYOUT_7 : KING_BUCKET_LAYOUT_8;
     out_scheme = scheme;
     return 1;
 }
@@ -141,7 +168,7 @@ static inline KingView king_view(int perspective, int king_sq) {
         flip ^= 7;
         rel ^= 7;
     }
-    kv.offset = KING_BUCKET_LAYOUT[rank_of(rel) * 4 + file_of(rel)] * INPUTS;
+    kv.offset = king_bucket_layout[rank_of(rel) * 4 + file_of(rel)] * INPUTS;
     kv.flip = flip;
     return kv;
 }

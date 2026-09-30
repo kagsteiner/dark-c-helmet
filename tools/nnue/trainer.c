@@ -18,6 +18,7 @@
 // The .nnue file is quantised exactly as the engine expects (see src/nnue.c).
 
 #include <math.h>
+#include <stddef.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -35,6 +36,12 @@
 #define KING_BUCKETS 8   // 1 = no king buckets and no mirroring (writes the same net as before)
 #endif
 #define INPUTS (768 * KING_BUCKETS)
+// Factorizer (king buckets only): every bucket's weight = shared weight (learned from all
+// positions) + bucket-specific delta. The two are summed when the net is saved, so the
+// engine sees an ordinary king-bucket net.
+#ifndef FACTORIZER
+#define FACTORIZER (KING_BUCKETS > 1)
+#endif
 #define SCALE 150.0  // cp per sigmoid unit; matches the classical eval (10-base K ~ 1.2)
 #define QA 255
 #define QB 64
@@ -87,9 +94,10 @@ static int pack_fen(const char* fen, PackedPos* out) {
     return 1;
 }
 
-// King bucket by the perspective's own king square (flipped to its view, mirrored to files
-// a-d), indexed rank * 4 + file. Must match src/nnue.c.
-static const int KING_BUCKET_LAYOUT[32] = {
+// King bucket layouts by king square (after flipping to the perspective's view and mirroring
+// to files a-d), indexed rank * 4 + file. KING_BUCKETS selects the layout.
+// Must match src/nnue.c.
+static const int KING_BUCKET_LAYOUT_8[32] = {
     0, 1, 2, 3,
     4, 4, 5, 5,
     6, 6, 6, 6,
@@ -99,6 +107,30 @@ static const int KING_BUCKET_LAYOUT[32] = {
     7, 7, 7, 7,
     7, 7, 7, 7,
 };
+// 7 buckets: like 8, but ranks 3-8 form one bucket.
+static const int KING_BUCKET_LAYOUT_7[32] = {
+    0, 1, 2, 3,
+    4, 4, 5, 5,
+    6, 6, 6, 6,
+    6, 6, 6, 6,
+    6, 6, 6, 6,
+    6, 6, 6, 6,
+    6, 6, 6, 6,
+    6, 6, 6, 6,
+};
+// 4 buckets: rank 1 queenside (a-b), rank 1 centre (c-d), rank 2, ranks 3-8.
+static const int KING_BUCKET_LAYOUT_4[32] = {
+    0, 0, 1, 1,
+    2, 2, 2, 2,
+    3, 3, 3, 3,
+    3, 3, 3, 3,
+    3, 3, 3, 3,
+    3, 3, 3, 3,
+    3, 3, 3, 3,
+    3, 3, 3, 3,
+};
+static const int* const KING_BUCKET_LAYOUT =
+    KING_BUCKETS == 4 ? KING_BUCKET_LAYOUT_4 : KING_BUCKETS == 7 ? KING_BUCKET_LAYOUT_7 : KING_BUCKET_LAYOUT_8;
 
 // Bucket offset and square transformation for one perspective (see src/nnue.c).
 static inline void king_view(int perspective, int king_sq, int* offset, int* flip) {
@@ -178,6 +210,9 @@ static int convert(const char* out_path, int nfiles, char** files) {
 
 typedef struct {
     float ft_w[INPUTS][HIDDEN];
+#if FACTORIZER
+    float fac_w[768][HIDDEN];
+#endif
     float ft_b[HIDDEN];
     float out_w[BUCKETS][2 * HIDDEN];
     float out_b[BUCKETS];
@@ -203,6 +238,15 @@ static inline int output_bucket(const PackedPos* p) {
 #define NET_PARAMS ((int)(sizeof(Net) / sizeof(float)))
 
 static Net net, adam_m, adam_v;
+
+// Effective input weight (bucket weight plus the shared factor weight).
+static inline float feature_weight(int feature, int h) {
+#if FACTORIZER
+    return net.ft_w[feature][h] + net.fac_w[feature % 768][h];
+#else
+    return net.ft_w[feature][h];
+#endif
+}
 static PackedPos* data;
 static long long data_count;
 static int* order;
@@ -237,6 +281,10 @@ static void* train_worker(void* arg) {
             for (int f = 0; f < n; ++f) {
                 const float* row = net.ft_w[feats[s][f]];
                 for (int h = 0; h < HIDDEN; ++h) acc[s][h] += row[h];
+#if FACTORIZER
+                const float* frow = net.fac_w[feats[s][f] % 768];
+                for (int h = 0; h < HIDDEN; ++h) acc[s][h] += frow[h];
+#endif
             }
         }
         int bucket = output_bucket(p);
@@ -268,6 +316,10 @@ static void* train_worker(void* arg) {
             for (int f = 0; f < n; ++f) {
                 float* row = w->grad.ft_w[feats[s][f]];
                 for (int h = 0; h < HIDDEN; ++h) row[h] += g_acc[h];
+#if FACTORIZER
+                float* frow = w->grad.fac_w[feats[s][f] % 768];
+                for (int h = 0; h < HIDDEN; ++h) frow[h] += g_acc[h];
+#endif
             }
         }
     }
@@ -285,7 +337,7 @@ static double validation_loss(long long count) {
         for (int s = 0; s < 2; ++s) {
             memcpy(acc[s], net.ft_b, sizeof(acc[s]));
             for (int f = 0; f < n; ++f)
-                for (int h = 0; h < HIDDEN; ++h) acc[s][h] += net.ft_w[feats[s][f]][h];
+                for (int h = 0; h < HIDDEN; ++h) acc[s][h] += feature_weight(feats[s][f], h);
         }
         int bucket = output_bucket(p);
         float out = net.out_b[bucket];
@@ -313,8 +365,16 @@ static double rand_uniform(void) { return (rng() >> 11) * (1.0 / 900719925474099
 static void init_net(void) {
     // Kaiming-like initialisation for the sparse input layer, small output weights.
     double ft_scale = 1.0 / sqrt(32.0);
+#if FACTORIZER
+    // Shared weights start random, bucket deltas at zero: every bucket starts as the plain net.
+    for (int i = 0; i < 768; ++i)
+        for (int h = 0; h < HIDDEN; ++h) net.fac_w[i][h] = (float)((rand_uniform() * 2 - 1) * ft_scale * 0.5);
+    for (int i = 0; i < INPUTS; ++i)
+        for (int h = 0; h < HIDDEN; ++h) net.ft_w[i][h] = 0.0f;
+#else
     for (int i = 0; i < INPUTS; ++i)
         for (int h = 0; h < HIDDEN; ++h) net.ft_w[i][h] = (float)((rand_uniform() * 2 - 1) * ft_scale * 0.5);
+#endif
     for (int h = 0; h < HIDDEN; ++h) net.ft_b[h] = 0.0f;
     double out_scale = 1.0 / sqrt(2.0 * HIDDEN);
     for (int b = 0; b < BUCKETS; ++b) {
@@ -332,7 +392,9 @@ static void save_quantised(const char* path) {
     // Clip to what int16 arithmetic in the engine can hold safely.
     for (int i = 0; i < INPUTS; ++i)
         for (int h = 0; h < HIDDEN; ++h) {
-            long v = lround(net.ft_w[i][h] * QA);
+            float x = feature_weight(i, h);
+            x = x > 1.98f ? 1.98f : x < -1.98f ? -1.98f : x;
+            long v = lround(x * QA);
             int16_t q = (int16_t)(v > 32767 ? 32767 : v < -32768 ? -32768 : v);
             fwrite(&q, 2, 1, f);
         }
@@ -353,6 +415,46 @@ static void save_quantised(const char* path) {
     fclose(f);
 }
 
+// Adam(W) update of all parameters, spread over THREADS threads. Weights read by the engine
+// in int16 arithmetic are clipped to +-1.98 (|w * QB| <= 127 for the output layer).
+typedef struct {
+    long long begin, end;
+    double lr, c1, c2;
+} AdamJob;
+
+static void* adam_worker(void* arg) {
+    const AdamJob* j = (const AdamJob*)arg;
+    const double b1 = 0.9, b2 = 0.999, eps = 1e-8, weight_decay = 0.01;
+    float* params = (float*)&net;
+    float* m = (float*)&adam_m;
+    float* v = (float*)&adam_v;
+    const long long ft_b_at = offsetof(Net, ft_b) / sizeof(float);
+    const long long out_w_at = offsetof(Net, out_w) / sizeof(float);
+    const long long out_b_at = offsetof(Net, out_b) / sizeof(float);
+    for (long long i = j->begin; i < j->end; ++i) {
+        double g = 0;
+        for (int t = 0; t < THREADS; ++t) g += ((float*)&workers[t].grad)[i];
+        g /= BATCH;
+        m[i] = (float)(b1 * m[i] + (1 - b1) * g);
+        v[i] = (float)(b2 * v[i] + (1 - b2) * g * g);
+        double update = (m[i] / j->c1) / (sqrt(v[i] / j->c2) + eps);
+        float x = params[i] - (float)(j->lr * (update + weight_decay * params[i]));
+        if (i < ft_b_at || (i >= out_w_at && i < out_b_at)) x = x > 1.98f ? 1.98f : x < -1.98f ? -1.98f : x;
+        params[i] = x;
+    }
+    return NULL;
+}
+
+static void adam_step(double lr, double c1, double c2) {
+    pthread_t threads[THREADS];
+    AdamJob jobs[THREADS];
+    for (int t = 0; t < THREADS; ++t) {
+        jobs[t] = (AdamJob){(long long)NET_PARAMS * t / THREADS, (long long)NET_PARAMS * (t + 1) / THREADS, lr, c1, c2};
+        pthread_create(&threads[t], NULL, adam_worker, &jobs[t]);
+    }
+    for (int t = 0; t < THREADS; ++t) pthread_join(threads[t], NULL);
+}
+
 static int train(const char* data_path, const char* out_path, int epochs, double lr) {
     FILE* f = fopen(data_path, "rb");
     if (!f) return 1;
@@ -367,11 +469,11 @@ static int train(const char* data_path, const char* out_path, int epochs, double
     long long train_count = data_count - validation;
     order = malloc(sizeof(int) * train_count);
     for (long long i = 0; i < train_count; ++i) order[i] = (int)i;
-    fprintf(stderr, "positions: %lld (training %lld, validation %lld), hidden %d, king buckets %d, output buckets %d, lambda %.2f\n",
-            data_count, train_count, validation, HIDDEN, KING_BUCKETS, BUCKETS, lambda_);
+    fprintf(stderr, "positions: %lld (training %lld, validation %lld), hidden %d, king buckets %d%s, output buckets %d (scheme %d), lambda %.2f\n",
+            data_count, train_count, validation, HIDDEN, KING_BUCKETS, FACTORIZER ? " (factorized)" : "", BUCKETS, OUT_SCHEME, lambda_);
 
     init_net();
-    const double b1 = 0.9, b2 = 0.999, eps = 1e-8, weight_decay = 0.01;
+    const double b1 = 0.9, b2 = 0.999;
     long long step = 0;
     long long total_steps = (long long)epochs * (train_count / BATCH);
     time_t start = time(NULL);
@@ -397,32 +499,7 @@ static int train(const char* data_path, const char* out_path, int epochs, double
             step++;
             // Cosine decay from lr to 1% of lr over the whole run.
             epoch_lr = lr * (0.01 + 0.99 * 0.5 * (1.0 + cos(3.14159265358979 * (double)step / (double)total_steps)));
-            float* params = (float*)&net;
-            float* m = (float*)&adam_m;
-            float* v = (float*)&adam_v;
-            double c1 = 1 - pow(b1, (double)step), c2 = 1 - pow(b2, (double)step);
-            for (int i = 0; i < NET_PARAMS; ++i) {
-                double g = 0;
-                for (int t = 0; t < THREADS; ++t) g += ((float*)&workers[t].grad)[i];
-                g /= BATCH;
-                m[i] = (float)(b1 * m[i] + (1 - b1) * g);
-                v[i] = (float)(b2 * v[i] + (1 - b2) * g * g);
-                double update = (m[i] / c1) / (sqrt(v[i] / c2) + eps);
-                params[i] -= (float)(epoch_lr * (update + weight_decay * params[i]));
-            }
-            // The engine computes clamp(acc) * w in int16: keep |w * QB| <= 127.
-            for (int b = 0; b < BUCKETS; ++b)
-                for (int h = 0; h < 2 * HIDDEN; ++h) {
-                    if (net.out_w[b][h] > 1.98f) net.out_w[b][h] = 1.98f;
-                    if (net.out_w[b][h] < -1.98f) net.out_w[b][h] = -1.98f;
-                }
-            // Keep feature weights inside the range the int16 quantisation can represent.
-            for (int i = 0; i < INPUTS; ++i)
-                for (int h = 0; h < HIDDEN; ++h) {
-                    float* x = &net.ft_w[i][h];
-                    if (*x > 1.98f) *x = 1.98f;
-                    if (*x < -1.98f) *x = -1.98f;
-                }
+            adam_step(epoch_lr, 1 - pow(b1, (double)step), 1 - pow(b2, (double)step));
             for (int t = 0; t < THREADS; ++t) epoch_loss += workers[t].loss;
         }
         double train_loss = epoch_loss / (double)(train_count / BATCH * BATCH);
