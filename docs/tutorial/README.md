@@ -12,11 +12,11 @@ points out the pitfalls that cost real engines real Elo.
 | 1 | [Bitboards: representing the board](01-bitboards.md) | ✅ |
 | 2 | [Move generation, legality, make/unmake, Zobrist hashing, perft](02-move-generation.md) | ✅ |
 | 3 | [Search basics: alpha-beta, PVS, iterative deepening, transposition table, quiescence](03-search-basics.md) | ✅ |
-| 4 | Search, part 2: pruning, reductions and extensions (null move, LMR, singular extensions, …) | planned |
-| 5 | Move ordering and history heuristics | planned |
-| 6 | Classical evaluation and Texel tuning | planned |
-| 7 | NNUE: architecture, incremental updates, quantisation, training | planned |
-| 8 | Testing like engine developers do: perft, bench, SPRT; time management; Lazy SMP | planned |
+| 4 | [Pruning, reductions and extensions (null move, LMR, futility, singular extensions, …)](04-pruning-reductions-extensions.md) | ✅ |
+| 5 | [Move ordering and history heuristics; correction history](05-move-ordering.md) | ✅ |
+| 6 | [Classical evaluation and Texel tuning](06-classical-eval-texel.md) | ✅ |
+| 7 | [NNUE: architecture, incremental updates, quantisation, training, king buckets](07-nnue.md) | ✅ |
+| 8 | [Testing like engine developers do: perft, bench, SPRT, SPSA; time management; Lazy SMP](08-testing-time-smp.md) | ✅ |
 
 A recurring theme: most of the strength of a modern engine does not come from one clever
 idea, but from dozens of small, *measured* improvements. The history of this very repository
