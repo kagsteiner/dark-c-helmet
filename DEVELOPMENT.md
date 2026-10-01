@@ -157,6 +157,7 @@ SPRT [0, 5] Elo at 8+0.08, each against the build before it (`tools/sprt_queue.s
 | Correction history (pawn-structure eval correction) | +10.5 ± 5.7 (4,312 games) |
 | Staged move picker (hash move before generation, lazy SEE, quiets generated on demand) | +45.3 ± 12.6 (1,018 games); +39% nodes/s |
 | SPSA-tuned search constants (`src/tune.h`, 16,000 pairs at 5+0.05, `tools/spsa/spsa.py`) | +20.5 ± 8.3 (2,092 games) |
+| Accumulator cache ("Finny table") for king-bucket refreshes, net v10 | +39.1 ± 11.4 (1,062 games); +22% nodes/s, same bench |
 
 ## UCI extensions
 
