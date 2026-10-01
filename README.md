@@ -105,6 +105,12 @@ Extra commands on the console: `bench [depth]`, `perft <depth>`, `d` (show the b
 
 ## Tutorial
 
+As I was both amazed by Claude's ability to create such a good chess engine and a bit
+shocked that I often didn't grasp the concepts it talked about I asked it to write a
+tutorial explaining how the engine works. It's completely written by the AI, and I am
+barely able to understand e.g. the intricacies of bitboards. Therefore: read with care,
+there might be wrong info in it.
+
 [docs/tutorial](docs/tutorial/README.md) explains the engine topic by topic, for programmers
 who know how to code but haven't seen the inside of a modern chess engine, with the real code
 and measurements from this engine:
