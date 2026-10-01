@@ -11,7 +11,7 @@ points out the pitfalls that cost real engines real Elo.
 |---|---|---|
 | 1 | [Bitboards: representing the board](01-bitboards.md) | ✅ |
 | 2 | [Move generation, legality, make/unmake, Zobrist hashing, perft](02-move-generation.md) | ✅ |
-| 3 | Search basics: alpha-beta, PVS, iterative deepening, transposition table, quiescence | planned |
+| 3 | [Search basics: alpha-beta, PVS, iterative deepening, transposition table, quiescence](03-search-basics.md) | ✅ |
 | 4 | Search, part 2: pruning, reductions and extensions (null move, LMR, singular extensions, …) | planned |
 | 5 | Move ordering and history heuristics | planned |
 | 6 | Classical evaluation and Texel tuning | planned |
