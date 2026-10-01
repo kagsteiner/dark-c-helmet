@@ -321,6 +321,11 @@ static void make_current(Position* pos, int p) {
 // read, so they arrive from L2 while the search does other work (TT probe, draw checks).
 void nnue_prefetch(const Position* pos) {
 #if defined(__GNUC__) || defined(__clang__)
+#if defined(__aarch64__)
+    enum { LINE = 128 };  // Apple silicon cache lines
+#else
+    enum { LINE = 64 };   // x86
+#endif
     if (!g_use_nnue) return;
     const DirtyPieces* d = &pos->st->dirty;
     for (int p = 0; p < 2; ++p) {
@@ -328,11 +333,11 @@ void nnue_prefetch(const Position* pos) {
         for (int i = 0; i < d->count; ++i) {
             if (d->to[i] != NO_SQ) {
                 const char* row = (const char*)ft_weights[feature(p, kv, d->piece[i], d->to[i])];
-                for (int b = 0; b < (int)sizeof(ft_weights[0]); b += 128) __builtin_prefetch(row + b);
+                for (int b = 0; b < (int)sizeof(ft_weights[0]); b += LINE) __builtin_prefetch(row + b);
             }
             if (d->from[i] != NO_SQ) {
                 const char* row = (const char*)ft_weights[feature(p, kv, d->piece[i], d->from[i])];
-                for (int b = 0; b < (int)sizeof(ft_weights[0]); b += 128) __builtin_prefetch(row + b);
+                for (int b = 0; b < (int)sizeof(ft_weights[0]); b += LINE) __builtin_prefetch(row + b);
             }
         }
     }
