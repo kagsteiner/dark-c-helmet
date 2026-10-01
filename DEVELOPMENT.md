@@ -138,7 +138,10 @@ Nets so far:
 | `nets/net_v5.nnue` | 273M positions (v4 + 173M from v4-engine self-play), 512 hidden, 8 output buckets | +58 ± 14 Elo vs net_v4 |
 | `nets/net_v5_kb8.nnue` | same data, 8 king buckets with mirroring | +33 ± 11 vs net_v4: overfits (train 0.0072 vs validation 0.0088) and 15% slower; needs much more data |
 | `nets/net_v6.nnue` | 344M positions (v4 + v5 + 71M from v5-engine self-play), 512 hidden, 8 output buckets | +10.7 ± 6.0 Elo vs net_v5 (4,594 games) |
-| `nets/net_v7.nnue` (default) | 483M positions (v4–v6 + 139M from build-56 self-play), 512 hidden, 8 output buckets | +23.3 ± 9.1 Elo vs net_v6 (1,928 games) |
+| `nets/net_v7.nnue` | 483M positions (v4–v6 + 139M from build-56 self-play), 512 hidden, 8 output buckets | +23.3 ± 9.1 Elo vs net_v6 (1,928 games) |
+| `nets/net_v8.nnue` | 663M positions (+180M from SPSA-tuned build 59) | +10.6 ± 5.8 Elo vs net_v7 (4,432 games) |
+| `nets/net_v9.nnue` | 834M positions (+170M from build 62) | +9.7 ± 5.5 vs net_v8; a variant with output buckets by piece-count range × queens on/off (`OUT_SCHEME=1`) scored +14.6 ± 7.0 vs net_v8, not compared head-to-head |
+| `nets/net_v10.nnue` (default) | 998M positions (+164M from build 65), **7 factorized king buckets** (ranks 3–8 one bucket) | +33.7 ± 10.8 vs net_v9; same data: kb4 +33.4 ± 11.1, kb8 +23.3 ± 9.0; kb7 + queens output buckets −7.5 ± 5.8 vs kb7. ~18% fewer nodes/s (no accumulator cache yet) |
 
 ## Search changes and their measured value
 
