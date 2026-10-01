@@ -160,7 +160,15 @@ redundant, and they push moves to the front that the history ranks lower.
 Whether they cost *strength* is a different question, because fixed-depth node counts aren't
 Elo (pruning depends on the move order, too). A 600-game test answers it:
 
-<!-- KILLER-RESULT -->
+| | Elo vs full engine (600 games) |
+|---|---|
+| without killers and countermoves | −9.9 ± 13.7 |
+
+So despite the smaller tree, removing them probably costs a few Elo, but the result isn't
+significant: the 95 % interval runs from −24 to +4. Killers and countermoves remain, but
+they're clearly no longer the big win they were in the 1980s. Most of their job has moved to
+the continuation history. And it's a perfect example for pitfall 5 below: the node count
+said "remove them", the games say "keep them, probably".
 
 ## 5.6 History tables
 

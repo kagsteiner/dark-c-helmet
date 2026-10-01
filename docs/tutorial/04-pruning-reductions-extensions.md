@@ -32,7 +32,21 @@ that technique switched off (a single `if (0 && …)`) played 600 games against 
 engine, build 69, at 8 s + 0.08 s per game. The middle column shows how the tree size at
 fixed depth (bench 12) changes without the technique.
 
-<!-- ABLATION-TABLE -->
+| technique switched off | Elo vs full engine (600 games) | tree size at bench 12 |
+|---|---|---|
+| late move reductions (4.8) | **−120 ± 16** | +222 % |
+| reverse futility pruning (4.3) | **−71 ± 16** | +78 % |
+| late move pruning (4.7) | **−63 ± 16** | +89 % |
+| null move pruning (4.5) | **−38 ± 15** | +3 % |
+| singular extensions (4.9) | **−32 ± 16** | −39 % |
+| SEE pruning (4.7) | **−27 ± 15** | +7 % |
+| check extension (4.9) | **−22 ± 16** | −31 % |
+| futility pruning (4.7) | −15 ± 15 | +12 % |
+| razoring (4.4) | +8 ± 15 (no measurable effect) | +0.3 % |
+| internal iterative reduction (4.6) | +9 ± 16 (no measurable effect) | +26 % |
+
+Together, the techniques in this chapter are worth several hundred Elo. LMR alone is worth
+more than many complete engine features: without it, the engine scores only 33 %.
 
 How to read this:
 
@@ -41,8 +55,12 @@ How to read this:
 * **Extensions make the tree *larger*** at the same depth. Without singular and check
   extensions, the bench tree shrinks to 61 % and 69 % of its size. They cost nodes and
   still win Elo, because they put the extra effort exactly where it matters.
-* **Fixed-depth node counts aren't strength.** Only the games decide. The ±values are 95 %
-  confidence intervals, and 600 games can't resolve differences of a few Elo.
+* **Fixed-depth node counts aren't strength.** Null move pruning barely changes the tree at
+  depth 12 (+3 %), yet removing it costs 38 Elo: its reduction grows with depth, so it saves
+  most at the depths real games reach. IIR is the opposite: 26 % more nodes without it, and no
+  measurable loss.
+* The ±values are 95 % confidence intervals. 600 games can't resolve differences of a few Elo:
+  "razoring +8 ± 15" means "somewhere between −7 and +23", so no clear effect either way.
 
 ## 4.2 Preparation: static eval, `improving`, PV nodes
 
@@ -108,8 +126,9 @@ ask the quiescence search whether a capture changes that. If not, the node is ho
 at shallow depth: no quiet move will make up for a rook. Unlike RFP, it checks with
 qsearch first, because a bad static eval can be wrong if a big capture is available.
 
-In this engine razoring brings little (4.1): RFP, futility and late move pruning already
-cover most of these positions. Many strong engines have it anyway, with small margins.
+In this engine razoring has no measurable effect (4.1: +8 ± 15 without it, and only 0.3 %
+more nodes). RFP, futility and late move pruning already cover almost all of these
+positions. Many strong engines have it anyway, with small margins.
 
 ## 4.5 Null move pruning (NMP)
 
@@ -162,8 +181,14 @@ A node without a TT move at depth ≥ 5 has never been searched deeply before. I
 the main line, and move ordering will be poor because the most important ordering source
 is missing. Older engines did a full extra search at reduced depth just to find a good
 first move ("internal iterative deepening"). Modern engines simply reduce the depth by one.
-That's simpler and measurably better. The next time this node comes up, it will have a TT
-move.
+The next time this node comes up, it will have a TT move.
+
+In this engine, though, the ablation (4.1) found **no measurable benefit**: without IIR, the
+engine scored +9 ± 16. It's an instructive case. IIR is standard in strong engines and
+saves 26 % of the nodes here, yet that doesn't show up in games, perhaps because our
+singular extensions and LMR already interact with the missing TT move in other ways. Such a
+result is a candidate for a **simplification test** (chapter 8.3): an SPRT with bounds
+[−5, 0] that checks whether removing the code is "not worse".
 
 ## 4.7 Move-loop pruning: LMP, futility, SEE
 
