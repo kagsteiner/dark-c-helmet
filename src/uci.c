@@ -331,6 +331,9 @@ static void cmd_setoption(char* args) {
     else if (!strcmp(name, "evalfile") && value && *value && strcmp(value, "<embedded>")) {
         if (nnue_load_file(value)) {
             nnue_available = 1;
+            // Accumulators computed with the previous network are stale.
+            for (size_t i = 0; i < sizeof(g_pos.acc) / sizeof(g_pos.acc[0]); ++i)
+                g_pos.acc[i].computed[WHITE] = g_pos.acc[i].computed[BLACK] = 0;
             printf("info string loaded network %s\n", value);
         } else {
             printf("info string could not load network %s\n", value);
