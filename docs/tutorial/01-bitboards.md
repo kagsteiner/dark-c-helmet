@@ -5,11 +5,12 @@
 
 ## 1.1 Why the board representation matters
 
-The old engine in this repository (`engine_c.c`) stored the board as `int squares[64]` and
+The engine this project started from (an earlier single-file engine, still in the Git
+history under the tag `reference-0.2`) stored the board as `int squares[64]` and
 generated moves by walking rays square by square:
 
 ```c
-// engine_c.c — the "mailbox" way: step along a ray until something blocks it
+// the old engine — the "mailbox" way: step along a ray until something blocks it
 int nr = r + dirs[i][0], nf = f + dirs[i][1];
 while (nr >= 0 && nr <= 7 && nf >= 0 && nf <= 7) {
     int target = b->squares[square_of(nr, nf)];

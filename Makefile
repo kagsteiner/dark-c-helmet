@@ -1,4 +1,4 @@
-# Builds the new engine (src/). The old reference engine is engine_c.c.
+# Builds the engine (src/).
 CC ?= cc
 EXE ?= bin/darkhelmet
 CFLAGS ?= -O3 -march=native -flto -Wall -Wextra -Wpedantic -std=c11
@@ -18,10 +18,6 @@ $(EXE): $(SRCS) $(wildcard src/*.h)
 	@mkdir -p $(dir $(EXE))
 	$(CC) $(CFLAGS) $(VERSION_DEF) -o $(EXE) $(SRCS) -lm -lpthread
 
-reference: engine_c.c
-	@mkdir -p bin
-	$(CC) -O3 -o bin/reference engine_c.c
-
 # Texel tuner (hand-crafted eval), see tools/tune/tuner.c
 tuner: tools/tune/tuner.c $(wildcard src/*.c) $(wildcard src/*.h)
 	@mkdir -p bin
@@ -36,4 +32,4 @@ spsa: $(SRCS) $(wildcard src/*.h)
 clean:
 	rm -f $(EXE)
 
-.PHONY: all clean reference tuner spsa
+.PHONY: all clean tuner spsa

@@ -472,7 +472,7 @@ reductions are only safe because PVS re-searches anything that surprises.
 
 ## 3.9 Pitfalls that cost home-grown engines Elo
 
-From experience (including the old engine in this repository):
+From experience (including the engine this project started from):
 
 1. **No or broken quiescence search.** The single largest source of blunders in amateur
    engines. Symptom: the engine "wins" material that it immediately loses back.

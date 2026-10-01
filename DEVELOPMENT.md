@@ -1,7 +1,8 @@
 # Dark C. Helmet 2 — development guide
 
-The new engine lives in `src/`. The old single-file engine (`engine_c.c`, tag `reference-0.2`)
-is kept as a sparring partner; the untouched original is tag `baseline-0.1B`.
+The engine lives in `src/`. It replaced an earlier single-file engine (about 2100 Elo), which
+is no longer in the tree but remains in the Git history: tag `baseline-0.1B` is the original,
+tag `reference-0.2` the bug-fixed version used as the first sparring partner.
 
 ## Building
 
@@ -9,7 +10,6 @@ macOS / Linux:
 
 ```bash
 make                # bin/darkhelmet
-make reference      # bin/reference (old engine)
 make tuner          # bin/tuner (Texel tuner, needs pthreads)
 ```
 
