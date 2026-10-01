@@ -7,6 +7,33 @@ The engine was written with Claude (Anthropic) as a pair programmer, starting fr
 single-file engine of about 2100 Elo. Every change was measured with engine-vs-engine tests
 (SPRT); [DEVELOPMENT.md](DEVELOPMENT.md) records what each step was worth.
 
+## Why this project?
+
+I wanted to try out whether Opus 5.5 can produce a state of the art chess engine from a
+single, simple prompt. First I actually tried to refactor and improve an old chess engine
+that a much older LLM (GPT 5?) had written which had about 2200 ELO. But as that proved
+to be not the best idea we started from scratch. Afterwards I got a bit carried away, and
+trained the NNUE network on about 1 billion positions, bringing the ELO rating from about
+3200 ELO to about 3400 (?). Nearly all creativity and suggestions for how to continuously
+improve the engine came from Claude; I just made a few decisions.
+
+The embarrassing part: I have written a chess engine on my own some years ago which was
+stuck at about 2000 ELO.
+
+Claude has some more suggestions on how to further improve playing strength, but it seems
+we're getting into the area where you need weeks of network training to make significant
+progress, so I'll stop here.
+
+BTW my name on some backgammon or chess servers is darkhelmet (after my favorite scifi
+character :-) ), so this is the dark chess helmet, Dark C. Helmet.
+
+## The big questions
+
+As stockfish is open source, surely in Claude's training data, this could just be a slightly
+eaker clone of stockfish. I haven't checked; from communication with Claude it seems that
+it truly understands the concepts (see also the tutorial it has started) and is just able
+to create such an engine.,. 
+
 ## Strength
 
 Single thread each, 20 s + 0.2 s per game, 400 games against HIARCS 15.4 and 200 against
@@ -90,6 +117,8 @@ and measurements from this engine:
 6. [Classical evaluation and Texel tuning](docs/tutorial/06-classical-eval-texel.md)
 7. [NNUE: architecture, incremental updates, quantisation, training](docs/tutorial/07-nnue.md)
 8. [Testing, SPRT and SPSA; time management; Lazy SMP](docs/tutorial/08-testing-time-smp.md)
+9. [From 2100 to 3400: a retrospective](docs/tutorial/09-retrospective.md)
+10. [What's still missing](docs/tutorial/10-whats-missing.md)
 
 ## Repository layout
 

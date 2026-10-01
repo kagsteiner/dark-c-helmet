@@ -280,6 +280,6 @@ Exercises, if you like:
 
 ---
 
-This is the last chapter. The [README](README.md) lists them all, and
-[DEVELOPMENT.md](../../DEVELOPMENT.md) has the full measured history of the engine: every
-change, every net, and what it was worth.
+**Next:** Chapter 9 — From 2100 to 3400: a retrospective of how this engine was built, which
+steps brought how much, and what didn't work. [DEVELOPMENT.md](../../DEVELOPMENT.md) has the full
+measured history: every change, every net, and what it was worth.

@@ -17,6 +17,8 @@ points out the pitfalls that cost real engines real Elo.
 | 6 | [Classical evaluation and Texel tuning](06-classical-eval-texel.md) | ✅ |
 | 7 | [NNUE: architecture, incremental updates, quantisation, training, king buckets](07-nnue.md) | ✅ |
 | 8 | [Testing like engine developers do: perft, bench, SPRT, SPSA; time management; Lazy SMP](08-testing-time-smp.md) | ✅ |
+| 9 | [From 2100 to 3400: a retrospective](09-retrospective.md) | ✅ |
+| 10 | [What's still missing: tablebases, pondering, bigger networks, …](10-whats-missing.md) | ✅ |
 
 A recurring theme: most of the strength of a modern engine does not come from one clever
 idea, but from dozens of small, *measured* improvements. The history of this very repository
