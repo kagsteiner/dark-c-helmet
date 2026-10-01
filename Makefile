@@ -24,6 +24,18 @@ tuner: tools/tune/tuner.c $(wildcard src/*.c) $(wildcard src/*.h)
 	$(CC) -O3 -march=native -std=c11 -DTUNE -Isrc -o bin/tuner tools/tune/tuner.c \
 		src/bitboard.c src/position.c src/movegen.c src/eval.c -lm -lpthread
 
+# Profile-guided build (clang): an instrumented binary runs `bench 14`, the recorded profile
+# guides inlining and branch layout of the final bin/darkhelmet. Same moves, ~3% faster.
+PROFDATA ?= $(shell xcrun -f llvm-profdata 2>/dev/null || command -v llvm-profdata)
+PGO_DIR = bin/pgo
+pgo: $(SRCS) $(wildcard src/*.h)
+	@mkdir -p $(PGO_DIR) $(dir $(EXE))
+	@rm -f $(PGO_DIR)/*.profraw $(PGO_DIR)/darkhelmet.profdata
+	$(CC) $(CFLAGS) $(VERSION_DEF) -fprofile-instr-generate -o $(PGO_DIR)/darkhelmet-gen $(SRCS) -lm -lpthread
+	LLVM_PROFILE_FILE=$(PGO_DIR)/run-%p.profraw $(PGO_DIR)/darkhelmet-gen bench 14 > /dev/null
+	$(PROFDATA) merge -o $(PGO_DIR)/darkhelmet.profdata $(PGO_DIR)/*.profraw
+	$(CC) $(CFLAGS) $(VERSION_DEF) -fprofile-instr-use=$(PGO_DIR)/darkhelmet.profdata -o $(EXE) $(SRCS) -lm -lpthread
+
 # Engine with the search constants of src/tune.h exposed as UCI options (for tools/spsa)
 spsa: $(SRCS) $(wildcard src/*.h)
 	@mkdir -p bin
@@ -32,4 +44,4 @@ spsa: $(SRCS) $(wildcard src/*.h)
 clean:
 	rm -f $(EXE)
 
-.PHONY: all clean tuner spsa
+.PHONY: all clean tuner spsa pgo

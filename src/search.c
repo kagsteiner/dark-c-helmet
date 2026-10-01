@@ -7,6 +7,7 @@
 
 #include "eval.h"
 #include "movegen.h"
+#include "nnue.h"
 #include "tt.h"
 #include "tune.h"
 #include "util.h"
@@ -473,6 +474,7 @@ static int qsearch(SearchThread* t, int alpha, int beta, int ply) {
         ss->piece = moved_piece(pos, m);
         ss->cont = &t->cont_history[ss->piece][move_to(m)];
         pos_make_move(pos, m);
+        nnue_prefetch(pos);
         int score = -qsearch(t, -beta, -alpha, ply + 1);
         pos_unmake_move(pos, m);
         if (t->stop) return 0;
@@ -608,7 +610,9 @@ static int search(SearchThread* t, int alpha, int beta, int depth, int ply) {
                 }
                 if (depth <= 8 && !see_ge(pos, m, -see_quiet * depth)) continue;
             } else {
-                if (depth <= 8 && !see_ge(pos, m, -see_noisy * depth)) continue;
+                // Captures from the good-capture stage already passed SEE >= 0, which implies
+                // this (negative) threshold.
+                if (depth <= 8 && mp.stage != STAGE_GOOD_NOISY && !see_ge(pos, m, -see_noisy * depth)) continue;
             }
         }
 
@@ -635,6 +639,7 @@ static int search(SearchThread* t, int alpha, int beta, int depth, int ply) {
         long long nodes_before = t->nodes;
         pos_make_move(pos, m);
         tt_prefetch(pos->st->key);
+        nnue_prefetch(pos);
         int gives_check = in_check(pos);
         int new_depth = depth - 1 + extension;
         int score;

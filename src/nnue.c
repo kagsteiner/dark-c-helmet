@@ -40,9 +40,9 @@ typedef __m256i vi16;
 
 int g_use_nnue = 0;
 
-static int16_t ft_weights[MAX_KING_BUCKETS * INPUTS][NNUE_HIDDEN];
-static int16_t ft_bias[NNUE_HIDDEN];
-static int16_t out_weights[OUT_BUCKETS][2 * NNUE_HIDDEN];
+static _Alignas(64) int16_t ft_weights[MAX_KING_BUCKETS * INPUTS][NNUE_HIDDEN];
+static _Alignas(64) int16_t ft_bias[NNUE_HIDDEN];
+static _Alignas(64) int16_t out_weights[OUT_BUCKETS][2 * NNUE_HIDDEN];
 static int32_t out_bias[OUT_BUCKETS];
 static int king_buckets = 1;
 static int net_id = 0;      // incremented on every load, invalidates position caches
@@ -315,6 +315,30 @@ static void make_current(Position* pos, int p) {
     }
     KingView kv = king_view(p, king_square(pos, p));  // constant along the replayed path
     for (int m = k + 1; m <= idx; ++m) update(&pos->acc[m], &pos->acc[m - 1], &pos->states[m].dirty, p, kv);
+}
+
+// Called right after a move is made: request the weight rows its accumulator update will
+// read, so they arrive from L2 while the search does other work (TT probe, draw checks).
+void nnue_prefetch(const Position* pos) {
+#if defined(__GNUC__) || defined(__clang__)
+    if (!g_use_nnue) return;
+    const DirtyPieces* d = &pos->st->dirty;
+    for (int p = 0; p < 2; ++p) {
+        KingView kv = king_view(p, king_square(pos, p));
+        for (int i = 0; i < d->count; ++i) {
+            if (d->to[i] != NO_SQ) {
+                const char* row = (const char*)ft_weights[feature(p, kv, d->piece[i], d->to[i])];
+                for (int b = 0; b < (int)sizeof(ft_weights[0]); b += 128) __builtin_prefetch(row + b);
+            }
+            if (d->from[i] != NO_SQ) {
+                const char* row = (const char*)ft_weights[feature(p, kv, d->piece[i], d->from[i])];
+                for (int b = 0; b < (int)sizeof(ft_weights[0]); b += 128) __builtin_prefetch(row + b);
+            }
+        }
+    }
+#else
+    (void)pos;
+#endif
 }
 
 // Output weights are limited to |w| <= 127 by the trainer, so c * w fits in int16 and the

@@ -19,7 +19,7 @@ typedef struct {
 // NNUE first-layer output for both perspectives, one per state. Each perspective is brought
 // up to date separately (with king buckets, a king move refreshes only its own side).
 typedef struct {
-    int16_t values[2][NNUE_HIDDEN];
+    _Alignas(64) int16_t values[2][NNUE_HIDDEN];
     int computed[2];
 } Accumulator;
 
@@ -28,7 +28,7 @@ typedef struct {
 // pieces. A refresh then only applies the difference to the current pieces.
 #define NNUE_CACHE_VIEWS 16  // max king buckets (8) x 2 mirror halves
 typedef struct {
-    int16_t values[NNUE_HIDDEN];
+    _Alignas(64) int16_t values[NNUE_HIDDEN];
     Bitboard pieces[12];
 } AccumulatorCacheEntry;
 

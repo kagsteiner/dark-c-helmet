@@ -11,6 +11,7 @@ macOS / Linux:
 ```bash
 make                # bin/darkhelmet
 make tuner          # bin/tuner (Texel tuner, needs pthreads)
+make pgo            # bin/darkhelmet with profile-guided optimisation (clang), ~3% faster
 ```
 
 Windows (Developer PowerShell for VS 2022):
@@ -158,6 +159,7 @@ SPRT [0, 5] Elo at 8+0.08, each against the build before it (`tools/sprt_queue.s
 | Staged move picker (hash move before generation, lazy SEE, quiets generated on demand) | +45.3 ± 12.6 (1,018 games); +39% nodes/s |
 | SPSA-tuned search constants (`src/tune.h`, 16,000 pairs at 5+0.05, `tools/spsa/spsa.py`) | +20.5 ± 8.3 (2,092 games) |
 | Accumulator cache ("Finny table") for king-bucket refreshes, net v10 | +39.1 ± 11.4 (1,062 games); +22% nodes/s, same bench |
+| Speed: prefetch of NNUE weight rows after make-move, 64-byte alignment, no repeated SEE for good captures, `make pgo` | +5–6% nodes/s, same bench (not SPRT-tested: identical search, only faster) |
 
 ## UCI extensions
 

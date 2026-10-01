@@ -11,5 +11,6 @@ extern int g_use_nnue;
 int nnue_init(void);                          // load the embedded network; 0 if none
 int nnue_load_file(const char* path);         // 1 on success
 int nnue_evaluate(Position* pos);             // side to move's view, centipawns
+void nnue_prefetch(const Position* pos);      // after a move: start loading the weight rows it needs
 
 #endif
