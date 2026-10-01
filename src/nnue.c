@@ -45,6 +45,7 @@ static int16_t ft_bias[NNUE_HIDDEN];
 static int16_t out_weights[OUT_BUCKETS][2 * NNUE_HIDDEN];
 static int32_t out_bias[OUT_BUCKETS];
 static int king_buckets = 1;
+static int net_id = 0;      // incremented on every load, invalidates position caches
 static int out_scheme = 0;  // output buckets: 0 = by piece count, 1 = piece-count range x queens on/off
 
 // King bucket layouts by king square (after flipping to the perspective's view and mirroring
@@ -127,6 +128,7 @@ static int load_memory(const unsigned char* data, size_t size) {
     data += sizeof(out_weights);
     memcpy(out_bias, data, sizeof(out_bias));
     king_buckets = kb;
+    net_id++;
     king_bucket_layout = kb == 4 ? KING_BUCKET_LAYOUT_4 : kb == 7 ? KING_BUCKET_LAYOUT_7 : KING_BUCKET_LAYOUT_8;
     out_scheme = scheme;
     return 1;
@@ -180,6 +182,7 @@ static inline int feature(int perspective, KingView kv, int piece, int sq) {
     return kv.offset + (color == perspective ? 0 : 384) + type * 64 + (sq ^ kv.flip);
 }
 
+#ifdef NNUE_VERIFY  // full rebuild, used to check the incremental accumulators
 static void refresh(const Position* pos, Accumulator* acc, int p) {
     KingView kv = king_view(p, king_square(pos, p));
     int16_t* v = acc->values[p];
@@ -194,6 +197,49 @@ static void refresh(const Position* pos, Accumulator* acc, int p) {
         for (int h = 0; h < NNUE_HIDDEN; ++h) v[h] += w[h];
 #endif
     }
+    acc->computed[p] = 1;
+}
+#endif
+
+// Refresh through the accumulator cache: start from the accumulator last computed with the
+// same king view and apply only the pieces that differ. int16 addition wraps, so the order
+// of additions does not matter and the result equals refresh() exactly.
+static void refresh_cached(Position* pos, Accumulator* acc, int p) {
+    if (pos->acc_cache_net != net_id) {  // empty board: the first refresh adds every piece
+        for (int c = 0; c < 2; ++c)
+            for (int i = 0; i < NNUE_CACHE_VIEWS; ++i) {
+                memcpy(pos->acc_cache[c][i].values, ft_bias, sizeof(ft_bias));
+                memset(pos->acc_cache[c][i].pieces, 0, sizeof(pos->acc_cache[c][i].pieces));
+            }
+        pos->acc_cache_net = net_id;
+    }
+    KingView kv = king_view(p, king_square(pos, p));
+    AccumulatorCacheEntry* e = &pos->acc_cache[p][(kv.offset / INPUTS) * 2 + ((kv.flip & 7) != 0)];
+    int16_t* v = e->values;
+    for (int pc = 0; pc < 12; ++pc) {
+        Bitboard now = pos->pieces[pc], before = e->pieces[pc];
+        Bitboard added = now & ~before, removed = before & ~now;
+        while (added) {
+            int sq = pop_lsb(&added);
+            const int16_t* w = ft_weights[feature(p, kv, pc, sq)];
+#ifdef VLANES
+            for (int h = 0; h < NNUE_HIDDEN; h += VLANES) VSTORE(v + h, VADD(VLOAD(v + h), VLOAD(w + h)));
+#else
+            for (int h = 0; h < NNUE_HIDDEN; ++h) v[h] += w[h];
+#endif
+        }
+        while (removed) {
+            int sq = pop_lsb(&removed);
+            const int16_t* w = ft_weights[feature(p, kv, pc, sq)];
+#ifdef VLANES
+            for (int h = 0; h < NNUE_HIDDEN; h += VLANES) VSTORE(v + h, VSUB(VLOAD(v + h), VLOAD(w + h)));
+#else
+            for (int h = 0; h < NNUE_HIDDEN; ++h) v[h] -= w[h];
+#endif
+        }
+        e->pieces[pc] = now;
+    }
+    memcpy(acc->values[p], v, sizeof(acc->values[p]));
     acc->computed[p] = 1;
 }
 
@@ -262,7 +308,7 @@ static void make_current(Position* pos, int p) {
     int k = idx;
     while (!pos->acc[k].computed[p]) {
         if (k == 0 || king_view_changed(&pos->states[k], p)) {
-            refresh(pos, &pos->acc[idx], p);
+            refresh_cached(pos, &pos->acc[idx], p);
             return;
         }
         k--;

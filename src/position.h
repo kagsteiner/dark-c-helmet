@@ -23,6 +23,15 @@ typedef struct {
     int computed[2];
 } Accumulator;
 
+// Accumulator cache ("Finny table"): for each perspective and king view (bucket x mirror),
+// the accumulator of the last position refreshed with that view plus that position's
+// pieces. A refresh then only applies the difference to the current pieces.
+#define NNUE_CACHE_VIEWS 16  // max king buckets (8) x 2 mirror halves
+typedef struct {
+    int16_t values[NNUE_HIDDEN];
+    Bitboard pieces[12];
+} AccumulatorCacheEntry;
+
 // Per-ply state. make_move pushes a copy and modifies it; unmake pops it.
 typedef struct {
     uint64_t key;
@@ -52,6 +61,8 @@ typedef struct {
     State states[MAX_GAME_PLY + MAX_PLY + 8];
     State* st;
     Accumulator acc[MAX_GAME_PLY + MAX_PLY + 8];  // acc[i] belongs to states[i]
+    AccumulatorCacheEntry acc_cache[2][NNUE_CACHE_VIEWS];
+    int acc_cache_net;   // network the cache was built for (see nnue.c); 0 = never built
 } Position;
 
 extern uint64_t ZOBRIST_PIECE[12][64];
