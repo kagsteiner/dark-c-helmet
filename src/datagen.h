@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 
-void run_datagen(int games, long long nodes, uint64_t seed, const char* out_path);
+// frc_percent: share of games (0-100) that start from a random Chess960 starting position.
+void run_datagen(int games, long long nodes, uint64_t seed, const char* out_path, int frc_percent);
 
 #endif

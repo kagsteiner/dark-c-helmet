@@ -420,9 +420,9 @@ int main(int argc, char** argv) {
         tt_free();
         return 0;
     }
-    // datagen <games> <nodes per move> <seed> <output file>
+    // datagen <games> <nodes per move> <seed> <output file> [percent of Chess960 starts]
     if (argc > 5 && !strcmp(argv[1], "datagen")) {
-        run_datagen(atoi(argv[2]), atoll(argv[3]), (uint64_t)atoll(argv[4]), argv[5]);
+        run_datagen(atoi(argv[2]), atoll(argv[3]), (uint64_t)atoll(argv[4]), argv[5], argc > 6 ? atoi(argv[6]) : 0);
         tt_free();
         return 0;
     }

@@ -8,6 +8,7 @@
 #   PROCS [17]            datagen processes
 #   GAMES [500000]        games per datagen process (normally the deadline ends the run)
 #   NODES [5000]          nodes per move in self-play
+#   FRC_PERCENT [0]       share of games starting from a random Chess960 position
 #   DATAGEN_HOURS [5]     hard deadline for data generation
 #   EPOCHS [20]           training epochs
 #   SPRT_MINUTES [90]     time limit for the SPRT stage
@@ -25,6 +26,7 @@ OLD_DATA=("$@")
 PROCS="${PROCS:-17}"
 GAMES="${GAMES:-500000}"
 NODES="${NODES:-5000}"
+FRC_PERCENT="${FRC_PERCENT:-0}"
 DATAGEN_HOURS="${DATAGEN_HOURS:-5}"
 EPOCHS="${EPOCHS:-20}"
 SPRT_MINUTES="${SPRT_MINUTES:-90}"
@@ -60,7 +62,7 @@ cp bin/darkhelmet "bin/datagen-$ROUND"
 cp bin/darkhelmet "bin/base-$ROUND"
 pids=()
 for i in $(seq 1 "$PROCS"); do
-  "./bin/datagen-$ROUND" datagen "$GAMES" "$NODES" $((RANDOM * 100 + i)) "$OUT/selfplay_$i.txt" 2>"$OUT/datagen_$i.log" &
+  "./bin/datagen-$ROUND" datagen "$GAMES" "$NODES" $((RANDOM * 100 + i)) "$OUT/selfplay_$i.txt" "$FRC_PERCENT" 2>"$OUT/datagen_$i.log" &
   pids+=($!)
 done
 wait_until $(( $(date +%s) + $(awk "BEGIN { printf \"%d\", $DATAGEN_HOURS * 3600 }") )) "${pids[@]}"

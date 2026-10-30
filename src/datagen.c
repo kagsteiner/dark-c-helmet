@@ -28,8 +28,42 @@ static uint64_t rng(uint64_t* s) {
     return z ^ (z >> 31);
 }
 
-static int random_opening(Position* pos, uint64_t* seed) {
-    pos_set_fen(pos, START_FEN);
+// Chess960 starting position number n (0-959, Scharnagl numbering; 518 is the standard one)
+// as a FEN with Shredder-FEN castling rights.
+static void frc_start_fen(int n, char* out, size_t size) {
+    static const int knights[10][2] = {{0, 1}, {0, 2}, {0, 3}, {0, 4}, {1, 2}, {1, 3}, {1, 4}, {2, 3}, {2, 4}, {3, 4}};
+    char r[9] = {0};
+    r[2 * (n % 4) + 1] = 'B';
+    n /= 4;
+    r[2 * (n % 4)] = 'B';
+    n /= 4;
+    int free_sq[8], nf = 0;
+    for (int i = 0; i < 8; ++i) if (!r[i]) free_sq[nf++] = i;
+    r[free_sq[n % 6]] = 'Q';
+    n /= 6;
+    nf = 0;
+    for (int i = 0; i < 8; ++i) if (!r[i]) free_sq[nf++] = i;
+    r[free_sq[knights[n][0]]] = r[free_sq[knights[n][1]]] = 'N';
+    nf = 0;
+    for (int i = 0; i < 8; ++i) if (!r[i]) free_sq[nf++] = i;
+    r[free_sq[0]] = 'R';
+    r[free_sq[1]] = 'K';
+    r[free_sq[2]] = 'R';
+    char black[9];
+    for (int i = 0; i < 8; ++i) black[i] = (char)(r[i] - 'A' + 'a');
+    black[8] = '\0';
+    snprintf(out, size, "%s/pppppppp/8/8/8/8/PPPPPPPP/%s w %c%c%c%c - 0 1", black, r, 'A' + free_sq[2],
+             'A' + free_sq[0], 'a' + free_sq[2], 'a' + free_sq[0]);
+}
+
+static int random_opening(Position* pos, uint64_t* seed, int frc_percent) {
+    if (frc_percent > 0 && (int)(rng(seed) % 100) < frc_percent) {
+        char fen[100];
+        frc_start_fen((int)(rng(seed) % 960), fen, sizeof(fen));
+        pos_set_fen(pos, fen);
+    } else {
+        pos_set_fen(pos, START_FEN);
+    }
     int plies = RANDOM_PLIES + (int)(rng(seed) % 2);  // vary the side to move
     for (int i = 0; i < plies; ++i) {
         MoveList list;
@@ -42,7 +76,7 @@ static int random_opening(Position* pos, uint64_t* seed) {
     return list.count > 0;
 }
 
-void run_datagen(int games, long long nodes, uint64_t seed, const char* out_path) {
+void run_datagen(int games, long long nodes, uint64_t seed, const char* out_path, int frc_percent) {
     static Position pos;
     static Record records[MAX_RECORDS];
     FILE* out = fopen(out_path, "a");
@@ -62,7 +96,7 @@ void run_datagen(int games, long long nodes, uint64_t seed, const char* out_path
     int results[3] = {0, 0, 0};
 
     for (int g = 0; g < games; ++g) {
-        if (!random_opening(&pos, &seed)) { g--; continue; }
+        if (!random_opening(&pos, &seed, frc_percent)) { g--; continue; }
         tt_clear();
         search_clear();
 
