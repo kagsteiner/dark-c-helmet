@@ -52,7 +52,7 @@ void perft_divide(Position* pos, int depth) {
         uint64_t cnt = depth > 1 ? perft_rec(pos, depth - 1, verify) : 1;
         pos_unmake_move(pos, m);
         char buf[6];
-        move_to_str(m, buf);
+        move_to_str(pos, m, buf);
         printf("%s: %llu\n", buf, (unsigned long long)cnt);
         total += cnt;
     }

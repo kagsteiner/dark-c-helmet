@@ -11,6 +11,7 @@
 #   ELO0=0 ELO1=5    SPRT hypotheses (use ELO0=-5 ELO1=0 for "no regression" tests)
 #   HASH=16          hash size (MB) for both engines
 #   NEW_THREADS=1 BASE_THREADS=1   search threads per engine
+#   VARIANT=fischerandom          Chess960 (use with BOOK=tools/books/frc960.epd)
 #   FASTCHESS=...    path to the fastchess binary
 set -euo pipefail
 
@@ -38,6 +39,9 @@ ARGS=(
   -ratinginterval 50
   -pgnout "file=$OUT/$STAMP.pgn"
 )
+if [[ -n "${VARIANT:-}" ]]; then
+  ARGS=(-variant "$VARIANT" "${ARGS[@]}")
+fi
 if [[ "${SPRT:-0}" == "1" ]]; then
   ARGS+=(-sprt "elo0=${ELO0:-0}" "elo1=${ELO1:-5}" alpha=0.05 beta=0.05)
 fi

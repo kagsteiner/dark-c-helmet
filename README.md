@@ -48,7 +48,8 @@ Shredder 14, on an Apple M5 Max:
 
 **Board and move generation:** bitboards with magic bitboards (generated at start-up),
 16-bit moves, legality via pins and checkers, make/unmake with a state stack, Zobrist
-hashing, static exchange evaluation. Verified with perft.
+hashing, static exchange evaluation. Verified with perft. Supports Chess960 (Fischer Random),
+verified on all 960 reference positions.
 
 **Search:** principal variation search with iterative deepening and aspiration windows;
 transposition table (5 entries per 64-byte bucket); quiescence search with SEE and delta
@@ -99,6 +100,7 @@ Any UCI chess GUI works (Arena, Cute Chess, Banksia, HIARCS Chess Explorer, …)
 | `Clear Hash` | | empties the transposition table |
 | `UseNNUE` | true | false = hand-crafted evaluation |
 | `EvalFile` | `<embedded>` | load another network file from `nets/` |
+| `UCI_Chess960` | false | Chess960 castling notation (set automatically by GUIs for 960 games) |
 
 Extra commands on the console: `bench [depth]`, `perft <depth>`, `d` (show the board),
 `eval`.
@@ -137,6 +139,7 @@ and measurements from this engine:
 | `tools/tune/` | Texel tuner for the hand-crafted evaluation |
 | `tools/match.sh` | engine-vs-engine matches and SPRT with [fastchess](https://github.com/Disservin/fastchess) |
 | `tools/books/random8.epd` | 4,000 balanced openings for testing |
+| `tools/books/frc960.epd` | all 960 Chess960 starting positions |
 | `docs/tutorial/` | the tutorial |
 | [DEVELOPMENT.md](DEVELOPMENT.md) | how to build, test, tune and train, and the measured history of every change |
 

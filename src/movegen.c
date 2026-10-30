@@ -61,25 +61,28 @@ static void gen_pawn_moves(const Position* pos, MoveList* list, int type) {
     }
 }
 
+// Castling for standard chess and Chess960. The king ends on g1/c1 (g8/c8), the rook on f1/d1
+// (f8/d8). Required: no check, the squares between king/rook and their targets empty (apart
+// from the two pieces themselves), no attacked square on the king's way, and the king's
+// target not attacked in the position after castling (in Chess960 the castling rook can
+// shield the target before the move, or after it from its new square).
 static void gen_castling(const Position* pos, MoveList* list) {
     int us = pos->side, them = us ^ 1;
-    int rights = pos->st->castling;
     if (in_check(pos)) return;
-    Bitboard occ = pos->occupied;
-    if (us == WHITE) {
-        if ((rights & WHITE_OO) && !(occ & (BB(F1) | BB(G1))) &&
-            !square_attacked(pos, F1, them, occ) && !square_attacked(pos, G1, them, occ))
-            add(list, E1, G1, FLAG_KING_CASTLE);
-        if ((rights & WHITE_OOO) && !(occ & (BB(B1) | BB(C1) | BB(D1))) &&
-            !square_attacked(pos, D1, them, occ) && !square_attacked(pos, C1, them, occ))
-            add(list, E1, C1, FLAG_QUEEN_CASTLE);
-    } else {
-        if ((rights & BLACK_OO) && !(occ & (BB(F8) | BB(G8))) &&
-            !square_attacked(pos, F8, them, occ) && !square_attacked(pos, G8, them, occ))
-            add(list, E8, G8, FLAG_KING_CASTLE);
-        if ((rights & BLACK_OOO) && !(occ & (BB(B8) | BB(C8) | BB(D8))) &&
-            !square_attacked(pos, D8, them, occ) && !square_attacked(pos, C8, them, occ))
-            add(list, E8, C8, FLAG_QUEEN_CASTLE);
+    int ksq = king_square(pos, us);
+    for (int queenside = 0; queenside <= 1; ++queenside) {
+        int idx = castle_index(us, queenside);
+        if (!(pos->st->castling & (1 << idx))) continue;
+        if (pos->occupied & pos->castle_empty[idx]) continue;
+        Bitboard transit = pos->castle_transit[idx];
+        int attacked = 0;
+        while (transit && !attacked) attacked = square_attacked(pos, pop_lsb(&transit), them, pos->occupied);
+        if (attacked) continue;
+        int king_to = relative_square(us, queenside ? C1 : G1);
+        int rook_to = relative_square(us, queenside ? D1 : F1);
+        Bitboard after = (pos->occupied ^ BB(ksq) ^ BB(pos->castle_rook[idx])) | BB(king_to) | BB(rook_to);
+        if (square_attacked(pos, king_to, them, after)) continue;
+        add(list, ksq, king_to, queenside ? FLAG_QUEEN_CASTLE : FLAG_KING_CASTLE);
     }
 }
 

@@ -14,8 +14,7 @@ uint64_t ZOBRIST_SIDE;
 const int SEE_VALUE[6] = {100, 320, 330, 500, 950, 0};
 const int PHASE_WEIGHT[6] = {0, 1, 1, 2, 4, 0};
 
-// Castling rights that survive a move touching the given square.
-static int CASTLE_MASK[64];
+int g_chess960 = 0;
 
 static uint64_t splitmix64(uint64_t* x) {
     uint64_t z = (*x += 0x9E3779B97F4A7C15ULL);
@@ -31,14 +30,45 @@ void position_init(void) {
     for (int i = 0; i < 16; ++i) ZOBRIST_CASTLING[i] = splitmix64(&seed);
     for (int i = 0; i < 8; ++i) ZOBRIST_EP[i] = splitmix64(&seed);
     ZOBRIST_SIDE = splitmix64(&seed);
+}
 
-    for (int sq = 0; sq < 64; ++sq) CASTLE_MASK[sq] = 15;
-    CASTLE_MASK[A1] &= ~WHITE_OOO;
-    CASTLE_MASK[H1] &= ~WHITE_OO;
-    CASTLE_MASK[E1] &= ~(WHITE_OO | WHITE_OOO);
-    CASTLE_MASK[A8] &= ~BLACK_OOO;
-    CASTLE_MASK[H8] &= ~BLACK_OO;
-    CASTLE_MASK[E8] &= ~(BLACK_OO | BLACK_OOO);
+// Grants a castling right with the rook on rook_sq (standard chess or Chess960) and
+// precomputes what the move generator and make-move need for it.
+static void add_castling_right(Position* pos, int color, int rook_sq) {
+    int ksq = king_square(pos, color);
+    int queenside = file_of(rook_sq) < file_of(ksq);
+    int idx = castle_index(color, queenside);
+    int king_to = relative_square(color, queenside ? C1 : G1);
+    int rook_to = relative_square(color, queenside ? D1 : F1);
+    pos->st->castling |= 1 << idx;
+    pos->castle_rook[idx] = rook_sq;
+    pos->castle_empty[idx] = (BETWEEN_BB[ksq][king_to] | BB(king_to) | BETWEEN_BB[rook_sq][rook_to] | BB(rook_to)) &
+                             ~BB(ksq) & ~BB(rook_sq);
+    pos->castle_transit[idx] = BETWEEN_BB[ksq][king_to];
+    pos->castle_mask[ksq] &= (uint8_t)~(3 << (color * 2));
+    pos->castle_mask[rook_sq] &= (uint8_t)~(1 << idx);
+}
+
+// One castling character of a FEN: KQkq (X-FEN: the outermost rook on that side) or a file
+// letter A-H / a-h (Shredder-FEN, also X-FEN when the outermost rook is not meant).
+static void parse_castling_char(Position* pos, char c) {
+    int color = isupper((unsigned char)c) ? WHITE : BLACK;
+    int ksq = king_square(pos, color);
+    if (rank_of(ksq) != (color == WHITE ? 0 : 7)) return;
+    int rook = make_piece(color, ROOK);
+    int lc = tolower((unsigned char)c);
+    int rook_sq = NO_SQ;
+    if (lc == 'k') {
+        for (int f = 7; f > file_of(ksq) && rook_sq == NO_SQ; --f)
+            if (pos->board[make_square(rank_of(ksq), f)] == rook) rook_sq = make_square(rank_of(ksq), f);
+    } else if (lc == 'q') {
+        for (int f = 0; f < file_of(ksq) && rook_sq == NO_SQ; ++f)
+            if (pos->board[make_square(rank_of(ksq), f)] == rook) rook_sq = make_square(rank_of(ksq), f);
+    } else if (lc >= 'a' && lc <= 'h') {
+        int sq = make_square(rank_of(ksq), lc - 'a');
+        if (pos->board[sq] == rook) rook_sq = sq;
+    }
+    if (rook_sq != NO_SQ) add_castling_right(pos, color, rook_sq);
 }
 
 // ---------------------------------------------------------------------------
@@ -148,17 +178,14 @@ int pos_set_fen(Position* pos, const char* fen) {
         }
     }
     if (popcount(pos->pieces[W_KING]) != 1 || popcount(pos->pieces[B_KING]) != 1) return 0;
+    for (int i = 0; i < 4; ++i) pos->castle_rook[i] = NO_SQ;
+    memset(pos->castle_mask, 15, sizeof(pos->castle_mask));
 
     pos->side = (fields[1][0] == 'b') ? BLACK : WHITE;
     pos->start_side = pos->side;
     st->castling = 0;
     if (n > 2) {
-        for (const char* c = fields[2]; *c; ++c) {
-            if (*c == 'K' && pos->board[E1] == W_KING && pos->board[H1] == W_ROOK) st->castling |= WHITE_OO;
-            if (*c == 'Q' && pos->board[E1] == W_KING && pos->board[A1] == W_ROOK) st->castling |= WHITE_OOO;
-            if (*c == 'k' && pos->board[E8] == B_KING && pos->board[H8] == B_ROOK) st->castling |= BLACK_OO;
-            if (*c == 'q' && pos->board[E8] == B_KING && pos->board[A8] == B_ROOK) st->castling |= BLACK_OOO;
-        }
+        for (const char* c = fields[2]; *c && *c != '-'; ++c) parse_castling_char(pos, *c);
     }
     st->ep_sq = NO_SQ;
     if (n > 3 && fields[3][0] != '-' && strlen(fields[3]) >= 2) {
@@ -204,12 +231,19 @@ void pos_to_fen(const Position* pos, char* out, size_t size) {
         if (r) board[k++] = '/';
     }
     board[k] = '\0';
+    // KQkq when the castling rook is the outermost one on its side (always so in standard
+    // chess), otherwise the rook's file letter (Shredder-FEN / X-FEN).
     char castle[5];
     int c = 0;
-    if (pos->st->castling & WHITE_OO) castle[c++] = 'K';
-    if (pos->st->castling & WHITE_OOO) castle[c++] = 'Q';
-    if (pos->st->castling & BLACK_OO) castle[c++] = 'k';
-    if (pos->st->castling & BLACK_OOO) castle[c++] = 'q';
+    for (int idx = 0; idx < 4; ++idx) {
+        if (!(pos->st->castling & (1 << idx))) continue;
+        int color = idx / 2, queenside = idx & 1, rsq = pos->castle_rook[idx];
+        int outermost = 1;
+        for (int f = queenside ? 0 : 7; f != file_of(rsq); f += queenside ? 1 : -1)
+            if (pos->board[make_square(rank_of(rsq), f)] == make_piece(color, ROOK)) outermost = 0;
+        char ch = outermost ? (queenside ? 'q' : 'k') : (char)('a' + file_of(rsq));
+        castle[c++] = color == WHITE ? (char)toupper((unsigned char)ch) : ch;
+    }
     if (!c) castle[c++] = '-';
     castle[c] = '\0';
     char ep[3] = "-";
@@ -266,11 +300,15 @@ void pos_make_move(Position* pos, Move m) {
     }
 
     if (flags == FLAG_KING_CASTLE || flags == FLAG_QUEEN_CASTLE) {
-        int rook_from = (flags == FLAG_KING_CASTLE) ? to + 1 : to - 2;
-        int rook_to = (flags == FLAG_KING_CASTLE) ? to - 1 : to + 1;
+        // Lift both pieces before placing them: in Chess960 the squares can overlap.
+        int queenside = flags == FLAG_QUEEN_CASTLE;
+        int rook_from = pos->castle_rook[castle_index(us, queenside)];
+        int rook_to = relative_square(us, queenside ? D1 : F1);
         int rook = pos->board[rook_from];
-        move_piece(pos, from, to);
-        move_piece(pos, rook_from, rook_to);
+        remove_piece(pos, from);
+        remove_piece(pos, rook_from);
+        put_piece(pos, pc, to);
+        put_piece(pos, rook, rook_to);
         state_remove(st, pc, from);
         state_add(st, pc, to);
         state_remove(st, rook, rook_from);
@@ -312,9 +350,9 @@ void pos_make_move(Position* pos, Move m) {
         }
     }
 
-    if (st->castling && (CASTLE_MASK[from] & CASTLE_MASK[to]) != 15) {
+    if (st->castling && (pos->castle_mask[from] & pos->castle_mask[to]) != 15) {
         st->key ^= ZOBRIST_CASTLING[st->castling];
-        st->castling &= CASTLE_MASK[from] & CASTLE_MASK[to];
+        st->castling &= pos->castle_mask[from] & pos->castle_mask[to];
         st->key ^= ZOBRIST_CASTLING[st->castling];
     }
 
@@ -332,10 +370,14 @@ void pos_unmake_move(Position* pos, Move m) {
     State* st = pos->st;
 
     if (flags == FLAG_KING_CASTLE || flags == FLAG_QUEEN_CASTLE) {
-        int rook_from = (flags == FLAG_KING_CASTLE) ? to + 1 : to - 2;
-        int rook_to = (flags == FLAG_KING_CASTLE) ? to - 1 : to + 1;
-        move_piece(pos, to, from);
-        move_piece(pos, rook_to, rook_from);
+        int queenside = flags == FLAG_QUEEN_CASTLE;
+        int rook_from = pos->castle_rook[castle_index(us, queenside)];
+        int rook_to = relative_square(us, queenside ? D1 : F1);
+        int king = pos->board[to], rook = pos->board[rook_to];
+        remove_piece(pos, to);
+        remove_piece(pos, rook_to);
+        put_piece(pos, king, from);
+        put_piece(pos, rook, rook_from);
     } else {
         if (flags & FLAG_PROMO) {
             remove_piece(pos, to);
@@ -416,10 +458,10 @@ int pos_is_pseudo_legal(const Position* pos, Move m) {
     int from = move_from(m), to = move_to(m), flags = move_flags(m);
     int pc = pos->board[from];
     if (pc == NO_PIECE || piece_color(pc) != us) return 0;
-    int target = pos->board[to];
-    if (target != NO_PIECE && piece_color(target) == us) return 0;
     int type = piece_type(pc);
 
+    // Castling first: in Chess960 the king's target square may hold the castling rook or the
+    // king itself.
     if (flags == FLAG_KING_CASTLE || flags == FLAG_QUEEN_CASTLE) {
         if (type != KING) return 0;
         MoveList list;
@@ -429,6 +471,8 @@ int pos_is_pseudo_legal(const Position* pos, Move m) {
             if (list.moves[i].move == m) return 1;
         return 0;
     }
+    int target = pos->board[to];
+    if (target != NO_PIECE && piece_color(target) == us) return 0;
     if (flags == FLAG_EP)
         return type == PAWN && to == pos->st->ep_sq && (PAWN_ATTACKS[us][from] & BB(to));
     if (flags == 6 || flags == 7) return 0;                        // unused flag combinations
@@ -542,12 +586,15 @@ int see_ge(const Position* pos, Move m, int threshold) {
 // Move strings
 // ---------------------------------------------------------------------------
 
-void move_to_str(Move m, char out[6]) {
+void move_to_str(const Position* pos, Move m, char out[6]) {
     if (m == MOVE_NONE) {
         strcpy(out, "0000");
         return;
     }
     int from = move_from(m), to = move_to(m);
+    // Chess960 notation: castling is written as the king capturing its own rook.
+    if (g_chess960 && move_is_castle(m))
+        to = pos->castle_rook[castle_index(rank_of(from) == 0 ? WHITE : BLACK, move_flags(m) == FLAG_QUEEN_CASTLE)];
     out[0] = (char)('a' + file_of(from));
     out[1] = (char)('1' + rank_of(from));
     out[2] = (char)('a' + file_of(to));
@@ -564,7 +611,7 @@ Move pos_parse_move(Position* pos, const char* str) {
     generate_legal(pos, &list);
     for (int i = 0; i < list.count; ++i) {
         char buf[6];
-        move_to_str(list.moves[i].move, buf);
+        move_to_str(pos, list.moves[i].move, buf);
         if (strcmp(buf, str) == 0) return list.moves[i].move;
     }
     return MOVE_NONE;

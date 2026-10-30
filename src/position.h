@@ -63,7 +63,22 @@ typedef struct {
     Accumulator acc[MAX_GAME_PLY + MAX_PLY + 8];  // acc[i] belongs to states[i]
     AccumulatorCacheEntry acc_cache[2][NNUE_CACHE_VIEWS];
     int acc_cache_net;   // network the cache was built for (see nnue.c); 0 = never built
+
+    // Castling, set up from the FEN so that Chess960 starting positions work too. Indexed by
+    // castle_index(): 0 = white O-O, 1 = white O-O-O, 2 = black O-O, 3 = black O-O-O. The king
+    // always ends on g1/c1 (g8/c8) and the rook on f1/d1 (f8/d8), as in standard chess.
+    int castle_rook[4];          // rook's starting square, NO_SQ if the right never existed
+    Bitboard castle_empty[4];    // squares that must be empty (not counting king and that rook)
+    Bitboard castle_transit[4];  // squares the king crosses before its target (must not be attacked)
+    uint8_t castle_mask[64];     // castling rights that survive a move from or to each square
 } Position;
+
+// Castling-right bit -> index into the castle_* arrays (WHITE_OO=1 -> 0, ..., BLACK_OOO=8 -> 3).
+static inline int castle_index(int color, int queenside) { return color * 2 + queenside; }
+
+// Chess960 mode (UCI_Chess960): only changes how castling moves are written ("king takes own
+// rook", e.g. e1h1) in UCI input and output. Positions and rules are the same in both modes.
+extern int g_chess960;
 
 extern uint64_t ZOBRIST_PIECE[12][64];
 extern uint64_t ZOBRIST_CASTLING[16];
@@ -97,7 +112,7 @@ int pos_is_draw(const Position* pos, int ply_from_root);
 int see_ge(const Position* pos, Move m, int threshold);
 
 Move pos_parse_move(Position* pos, const char* str);  // UCI string -> legal move, or MOVE_NONE
-void move_to_str(Move m, char out[6]);
+void move_to_str(const Position* pos, Move m, char out[6]);  // pos: for the Chess960 castling notation
 
 static inline Bitboard pieces_of(const Position* pos, int color, int type) {
     return pos->pieces[make_piece(color, type)];

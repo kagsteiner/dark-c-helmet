@@ -728,11 +728,11 @@ static void print_info(SearchThread* t, int depth, int score, Move best) {
     char buf[6];
     if (t->pv_len[0] > 0 && t->pv[0][0] == best) {
         for (int i = 0; i < t->pv_len[0]; ++i) {
-            move_to_str(t->pv[0][i], buf);
+            move_to_str(&t->pos, t->pv[0][i], buf);
             printf(" %s", buf);
         }
     } else {
-        move_to_str(best, buf);
+        move_to_str(&t->pos, best, buf);
         printf(" %s", buf);
     }
     printf("\n");

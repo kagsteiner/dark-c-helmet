@@ -48,7 +48,11 @@ previous version. Nothing is merged on intuition.
    python3 tools/perft_suite.py bin/darkhelmet
    ```
    This checks node counts on six standard positions and verifies the incremental
-   hash/evaluation state against a from-scratch recomputation.
+   hash/evaluation state against a from-scratch recomputation. For castling changes, also run
+   the 960 Chess960 reference positions (download the file once, see the script's header):
+   ```bash
+   python3 tools/perft960.py bin/darkhelmet chess960.perft 6   # all 960 positions, depth 6
+   ```
 
 2. **Bench** — `bin/darkhelmet bench` prints a node count over 18 fixed positions.
    A change that should not alter the search (refactoring, speed-ups) must keep this
@@ -160,6 +164,19 @@ SPRT [0, 5] Elo at 8+0.08, each against the build before it (`tools/sprt_queue.s
 | SPSA-tuned search constants (`src/tune.h`, 16,000 pairs at 5+0.05, `tools/spsa/spsa.py`) | +20.5 ± 8.3 (2,092 games) |
 | Accumulator cache ("Finny table") for king-bucket refreshes, net v10 | +39.1 ± 11.4 (1,062 games); +22% nodes/s, same bench |
 | Speed: prefetch of NNUE weight rows after make-move, 64-byte alignment, no repeated SEE for good captures, `make pgo` | +5–6% nodes/s, same bench (not SPRT-tested: identical search, only faster) |
+
+## Chess960
+
+`setoption name UCI_Chess960 value true` switches castling moves to the Chess960 notation
+(king takes own rook, e.g. `e1h1`); positions and rules are handled the same way in both
+modes. FENs may use `KQkq` (X-FEN: the outermost rook) or Shredder-FEN file letters (`HAha`).
+Internally a castling move is still "king to g1/c1"; the position stores each castling rook's
+square (`castle_rook`), the squares that must be empty and the king's path. Standard chess is
+bit-identical to before (bench unchanged).
+
+Verified with perft on all 960 reference positions to depth 6, NNUE_VERIFY searches and
+300 self-play games. Matches: `tools/books/frc960.epd` holds all 960 starting positions
+(`tools/books/make_frc960.py`); `VARIANT=fischerandom BOOK=tools/books/frc960.epd tools/match.sh …`.
 
 ## UCI extensions
 

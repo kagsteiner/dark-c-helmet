@@ -183,7 +183,7 @@ static void run_bench(int depth) {
         long long t0 = now_ms();
         SearchResult r = search_run(&bench_pos, &lim, 1, NULL);
         char buf[6];
-        move_to_str(r.best_move, buf);
+        move_to_str(&bench_pos, r.best_move, buf);
         printf("position %2d  bestmove %-6s score %6d  nodes %10lld  time %6lld ms\n", i + 1, buf, r.score,
                r.nodes, now_ms() - t0);
         total += r.nodes;
@@ -306,7 +306,7 @@ static void cmd_go(char* args) {
         }
     }
     char buf[6];
-    move_to_str(r.best_move, buf);
+    move_to_str(&g_pos, r.best_move, buf);
     printf("bestmove %s\n", buf);
     fflush(stdout);
 }
@@ -340,6 +340,7 @@ static void cmd_setoption(char* args) {
         }
     }
     else if (!strcmp(name, "threads") && value) search_set_threads(atoi(value));
+    else if (!strcmp(name, "uci_chess960") && value) g_chess960 = !strcmp(value, "true");
 #ifdef SPSA
     else if (value) set_tune_option(name, value);
 #endif
@@ -364,6 +365,7 @@ static void uci_loop(void) {
             printf("option name Clear Hash type button\n");
             printf("option name UseNNUE type check default %s\n", g_use_nnue ? "true" : "false");
             printf("option name EvalFile type string default <embedded>\n");
+            printf("option name UCI_Chess960 type check default false\n");
 #ifdef SPSA
             print_tune_options();
 #endif
