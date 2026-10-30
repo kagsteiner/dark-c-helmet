@@ -178,6 +178,11 @@ Verified with perft on all 960 reference positions to depth 6, NNUE_VERIFY searc
 300 self-play games. Matches: `tools/books/frc960.epd` holds all 960 starting positions
 (`tools/books/make_frc960.py`); `VARIANT=fischerandom BOOK=tools/books/frc960.epd tools/match.sh …`.
 
+Against HIARCS 15.4 in Chess960 (build 81, 400 games, 20+0.2, 1 thread each, all 960 starting
+positions): **+176 ± 35** (+252 =83 −65), compared with +250 ± 32 in standard chess. The
+network has never seen Chess960 openings; a data round with Chess960 starts would be the
+next step.
+
 ## UCI extensions
 
 | Command | Purpose |
