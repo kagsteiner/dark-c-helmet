@@ -95,6 +95,15 @@ a.btn-secondary {
   font-weight: var(--weight-strong);
 }
 
+.btn-secondary.danger {
+  color: var(--danger);
+}
+
+.btn-primary.danger {
+  background: var(--danger);
+  color: #fff;
+}
+
 .btn-icon {
   width: var(--touch);
   height: var(--touch);

@@ -1,25 +1,32 @@
-// A small key-value store in IndexedDB (data lives on this device only).
+// IndexedDB (data lives on this device only): a key-value store for settings and the saved
+// game, and the opening book's own store.
 
 const DB_NAME = "dark-c-helmet";
-const STORE = "kv";
+const KV = "kv";
+export const BOOK_STORE = "book";
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
-function db(): Promise<IDBDatabase> {
+export function db(): Promise<IDBDatabase> {
   dbPromise ??= new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = () => req.result.createObjectStore(STORE);
+    const req = indexedDB.open(DB_NAME, 2);
+    req.onupgradeneeded = (e) => {
+      const d = req.result;
+      if (e.oldVersion < 1) d.createObjectStore(KV);
+      if (e.oldVersion < 2) d.createObjectStore(BOOK_STORE, { keyPath: "id" }).createIndex("key", "key");
+    };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
   return dbPromise;
 }
 
-function run<T>(mode: IDBTransactionMode, op: (store: IDBObjectStore) => IDBRequest): Promise<T> {
+/** Runs one request in a transaction on `store` and resolves with its result. */
+export function request<T>(store: string, mode: IDBTransactionMode, op: (s: IDBObjectStore) => IDBRequest): Promise<T> {
   return db().then(
     (d) =>
       new Promise<T>((resolve, reject) => {
-        const req = op(d.transaction(STORE, mode).objectStore(STORE));
+        const req = op(d.transaction(store, mode).objectStore(store));
         req.onsuccess = () => resolve(req.result as T);
         req.onerror = () => reject(req.error);
       }),
@@ -28,7 +35,7 @@ function run<T>(mode: IDBTransactionMode, op: (store: IDBObjectStore) => IDBRequ
 
 export async function load<T>(key: string): Promise<T | undefined> {
   try {
-    return await run<T | undefined>("readonly", (s) => s.get(key));
+    return await request<T | undefined>(KV, "readonly", (s) => s.get(key));
   } catch {
     return undefined; // storage unavailable (e.g. private mode): start fresh
   }
@@ -36,7 +43,7 @@ export async function load<T>(key: string): Promise<T | undefined> {
 
 export async function save(key: string, value: unknown): Promise<void> {
   try {
-    await run("readwrite", (s) => s.put(value, key));
+    await request(KV, "readwrite", (s) => s.put(value, key));
   } catch {
     // not persisted; the app keeps working
   }

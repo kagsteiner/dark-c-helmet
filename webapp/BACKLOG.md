@@ -82,11 +82,15 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done.
 
 ## M5 — Opening book
 
-- [ ] Position key (Shredder-FEN fields, e.p. only if capturable); IndexedDB store
-- [ ] Node budget from time budget (measured nodes/s per device)
-- [ ] Lookup with random choice within 10 cp; record and update after search
-- [ ] Record from endless analysis
-- [ ] Book screen: statistics, export to file, merge from file
+- [x] Position key (FEN fields 1-4; the engine writes e.p. only if capturable); IndexedDB
+      store with an index on the key; castling stored as king takes rook in both variants
+- [x] Node budget from time budget: the engine's own time formula × measured nodes/s of
+      this device (moving average, remembered)
+- [x] Lookup: entries from 85% of the budget on, random choice within 10 cp; record and
+      update (deeper search wins) after every engine search, hint and evaluation
+- [x] Record from endless analysis and the game review
+- [x] Book screen: statistics, export to file, merge from file (one transaction), clear
+      with confirmation
 
 ## M6 — MVP polish and release
 

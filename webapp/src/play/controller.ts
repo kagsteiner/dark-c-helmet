@@ -1,5 +1,6 @@
 // A game against the engine: whose turn it is, engine moves, clocks, undo, hint, evaluation,
 // the star, resignation and saving. Lives as long as the app; the Play screen renders it.
+import { bookMove, record } from "../book/book.ts";
 import { Game, START_FEN } from "../chess/game.ts";
 import type { GameState, Rules } from "../chess/rules.ts";
 import { san } from "../chess/san.ts";
@@ -32,6 +33,7 @@ const SAVE_KEY = "current-game";
 const HELP_TIME_MS = 2000; // search time for hint and evaluation
 const RESIGN_CP = -1000; // the engine resigns at -10 pawns or worse ...
 const RESIGN_MOVES = 4; // ... on this many of its moves in a row
+const BOOK_DELAY_MS = 300; // a book move is played after this pause, so both moves can be seen
 
 export const DEFAULT_SETUP: GameSetup = {
   startFen: START_FEN,
@@ -69,6 +71,8 @@ export class PlayController {
   evaluation: string | null = null;
   helping: "hint" | "evaluation" | null = null;
   premove: [number, number] | null = null;
+  /** The engine's last move came from the opening book. */
+  bookMove = false;
   engine: Engine | null = null;
   private rules: Rules;
   private lowScores = 0;
@@ -212,6 +216,7 @@ export class PlayController {
     this.token++; // a hint or evaluation still running is no longer wanted
     this.helping = null;
     this.clearHelp();
+    this.bookMove = false;
     this.clocks?.moveMade(this.setup.human);
     this.checkEnd();
     this.persist();
@@ -229,23 +234,50 @@ export class PlayController {
     if (!engine) return; // starts when the engine has loaded (attachEngine)
     const token = ++this.token;
     this.thinking = true;
+    this.bookMove = false;
     this.emit();
-    const result = await engine.search(this.position(), this.limits());
+    // The book's move is used if it was searched at least as deeply as this search would be.
+    const fromBook = engine.nps ? await bookMove(this.game, (engine.nps * this.budgetMs()) / 1000) : null;
     if (token !== this.token) return;
+    let uci: string | null;
+    let info: SearchInfo | null = null;
+    if (fromBook) {
+      await new Promise((r) => setTimeout(r, BOOK_DELAY_MS));
+      if (token !== this.token) return;
+      uci = fromBook;
+    } else {
+      const result = await engine.search(this.position(), this.limits());
+      if (token !== this.token) return;
+      record(this.game, result, engine, "game");
+      uci = result.bestmove;
+      info = result.info;
+    }
     this.thinking = false;
-    if (!result.bestmove || !this.game.play(result.bestmove)) {
+    if (!uci || !this.game.play(uci)) {
       this.emit();
       return;
     }
+    this.bookMove = !!fromBook;
     this.clocks?.moveMade(this.engineSide);
-    const info = result.info;
-    const lost = info && ("mate" in info.score ? info.score.mate < 0 : info.score.cp <= RESIGN_CP);
-    this.lowScores = lost ? this.lowScores + 1 : 0;
+    if (info) {
+      const lost = "mate" in info.score ? info.score.mate < 0 : info.score.cp <= RESIGN_CP;
+      this.lowScores = lost ? this.lowScores + 1 : 0;
+    }
     this.checkEnd();
     if (!this.result && this.lowScores >= RESIGN_MOVES) this.finish("The engine resigns. You win.");
     this.persist();
     this.emit();
     this.playPremove();
+  }
+
+  /** The time the engine will plan for this move (its own formula, see init_time in search.c). */
+  private budgetMs(): number {
+    const tc = this.setup.tc;
+    if (tc.kind === "move" || !this.clocks) return tc.kind === "move" ? tc.seconds * 1000 : 1000;
+    const c = this.clocks;
+    const avail = Math.max(1, c.remaining(this.engineSide));
+    const mtg = c.movesToGo(this.engineSide);
+    return (mtg ? avail / (mtg + 1) : avail / 25) + (c.increment * 3) / 4;
   }
 
   private playPremove(): void {
@@ -335,6 +367,7 @@ export class PlayController {
     this.emit();
     const result = await engine.search(this.position(), { movetime: HELP_TIME_MS });
     if (token !== this.token) return;
+    record(this.game, result, engine, "game");
     this.helping = null;
     if (kind === "hint" && result.bestmove) {
       const legal = this.game.legalMoves();

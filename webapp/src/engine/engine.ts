@@ -1,7 +1,10 @@
 // UCI client on top of an EngineTransport: one search at a time, "info" parsing, stop.
 // The single-threaded WebAssembly build cannot see "stop" during a search; there, stopping
 // restarts the engine (losing the hash table, which is acceptable for the fallback).
+import { load, save } from "../storage.ts";
 import { WasmEngineTransport, threadsAvailable, type EngineTransport, type ProgressHandler } from "./transport.ts";
+
+const NPS_KEY = "engine-nps";
 
 export interface SearchInfo {
   depth: number;
@@ -79,6 +82,9 @@ interface Running {
 export class Engine {
   name = "";
   net = "";
+  /** Nodes per second on this device with the current settings (moving average of searches
+   *  of at least a second; remembered between visits). Turns a time budget into nodes. */
+  nps = 0;
   private transport: EngineTransport;
   private options: EngineOptions;
   private onProgress?: ProgressHandler;
@@ -95,6 +101,8 @@ export class Engine {
     const transport = await WasmEngineTransport.create(threadsAvailable(), onProgress);
     const engine = new Engine(transport, options, onProgress);
     await engine.handshake();
+    const saved = await load<{ threads: number; nps: number }>(NPS_KEY);
+    if (saved && saved.threads === options.threads) engine.nps = saved.nps;
     return engine;
   }
 
@@ -133,6 +141,10 @@ export class Engine {
       const r = this.running;
       this.running = null;
       const move = line.split(/\s+/)[1];
+      if (r.info && r.info.time >= 1000 && r.info.nps > 0) {
+        this.nps = this.nps ? Math.round(this.nps * 0.7 + r.info.nps * 0.3) : r.info.nps;
+        save(NPS_KEY, { threads: this.options.threads, nps: this.nps });
+      }
       r.resolve({ bestmove: move && move !== "0000" ? move : null, info: r.info });
     }
     const i = this.waiters.findIndex((w) => line.startsWith(w.prefix));

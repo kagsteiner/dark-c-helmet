@@ -1,6 +1,7 @@
 // The Analysis screen: step through a game or a position, try moves, let the engine analyse
 // without end, or review the whole game (evaluation graph, marks for weak moves).
 import { markMoves, MARK_SYMBOL, whiteCp, type Mark } from "../analysis/review.ts";
+import { record } from "../book/book.ts";
 import { placementFromFen } from "../chess/fen.ts";
 import { Game, type PlayedMove } from "../chess/game.ts";
 import type { Rules } from "../chess/rules.ts";
@@ -167,6 +168,7 @@ export function analysisScreen(rules: Rules, controller: PlayController): Screen
         if (!engine || !analyzing) return;
         const t = ++token;
         lastInfo = null;
+        const searched = gameAt(cursor); // the position of this search, for the book
         engine
           .search(
             { startFen: line!.startFen, moves: line!.moves.slice(0, cursor), chess960: line!.chess960 },
@@ -177,7 +179,8 @@ export function analysisScreen(rules: Rules, controller: PlayController): Screen
               renderEngineAndArrow();
             },
           )
-          .then(() => {
+          .then((result) => {
+            record(searched, result, engine, "analysis");
             if (t === token && analyzing) {
               // The search ended by itself (mate or stalemate on the board).
               analyzing = false;
@@ -354,6 +357,7 @@ export function analysisScreen(rules: Rules, controller: PlayController): Screen
               { movetime: reviewSeconds * 1000 },
             );
             if (t !== token) return;
+            record(g, r, engine, "analysis");
             evals[i] = r.info ? whiteCp(r.info.score, whiteToMove) : null;
           }
           review.marks = markMoves(evals.slice(0, i + 1).map((e) => e ?? 0), whiteToMoveAt(0));

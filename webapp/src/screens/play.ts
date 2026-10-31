@@ -93,7 +93,9 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
               : c.thinking
                 ? "The engine is thinking…"
                 : humanTurn
-                  ? "Your move."
+                  ? c.bookMove
+                    ? "Your move. The engine played a move from its book."
+                    : "Your move."
                   : "");
         $(".play-help").textContent = c.hint ? `Hint: ${c.hint.san}` : c.evaluation ? `Evaluation: ${c.evaluation}` : "";
 
