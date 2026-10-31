@@ -15,6 +15,8 @@ interface Choices {
   minutes: number;
   incMinutes: number;
   incSeconds: number;
+  /** Chess960 with a clock: extra seconds for the player's first move. */
+  extraSeconds: number;
 }
 
 const DEFAULTS: Choices = {
@@ -27,6 +29,7 @@ const DEFAULTS: Choices = {
   minutes: 5,
   incMinutes: 10,
   incSeconds: 5,
+  extraSeconds: 30,
 };
 
 const PREFS_KEY = "new-game-choices";
@@ -97,6 +100,10 @@ export async function chooseNewGame(position?: { startFen: string; chess960: boo
       </div>
       <p class="small muted" data-show="classical">90 minutes for the first 40 moves, then 30 minutes for the rest
         of the game, with 30 seconds added per move from move 1.</p>
+      <label class="field" data-show="extra">
+        <span class="field-label">Extra seconds for your first move</span>
+        <input type="number" name="extraSeconds" min="0" max="600" value="${c.extraSeconds}">
+      </label>
       <div class="sheet-actions">
         <button type="button" class="btn-secondary" value="cancel">Cancel</button>
         <button type="submit" class="btn-primary" value="start">Start game</button>
@@ -121,6 +128,7 @@ export async function chooseNewGame(position?: { startFen: string; chess960: boo
       minutes: n("minutes", 1, 600),
       incMinutes: n("incMinutes", 1, 600),
       incSeconds: n("incSeconds", 0, 600),
+      extraSeconds: n("extraSeconds", 0, 600),
     };
   };
   const update = () => {
@@ -133,6 +141,8 @@ export async function chooseNewGame(position?: { startFen: string; chess960: boo
       game: r.tcKind === "game",
       increment: r.tcKind === "increment",
       classical: r.tcKind === "classical",
+      // Chess960 with a clock: time to look at the starting position.
+      extra: (position ? position.chess960 : r.variant === "chess960") && r.tcKind !== "move",
     };
     for (const el of form.querySelectorAll<HTMLElement>("[data-show]")) el.hidden = !visible[el.dataset.show!];
   };
@@ -155,10 +165,11 @@ export async function chooseNewGame(position?: { startFen: string; chess960: boo
               : { kind: "classical" };
       const human = r.color === "random" ? (Math.random() < 0.5 ? "w" : "b") : r.color;
       if (position) {
-        result = { ...position, human, tc };
+        result = { ...position, human, tc, firstMoveExtra: position.chess960 && tc.kind !== "move" ? r.extraSeconds : 0 };
       } else if (r.variant === "chess960") {
         const n = r.start960 === "random" ? randomChess960() : r.number960;
-        result = { startFen: chess960Fen(n), chess960: true, position960: n, human, tc };
+        const firstMoveExtra = tc.kind !== "move" ? r.extraSeconds : 0;
+        result = { startFen: chess960Fen(n), chess960: true, position960: n, human, tc, firstMoveExtra };
       } else {
         result = { startFen: START_FEN, chess960: false, human, tc };
       }

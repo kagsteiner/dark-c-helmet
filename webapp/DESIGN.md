@@ -122,6 +122,10 @@ button opens them as a list. The bottom of the phone screen belongs to the actio
 - **Game end.** Mate, stalemate, threefold repetition, 50-move rule and insufficient material
   end the game automatically. The engine resigns at −10 pawns or worse held for 4 of its moves.
 - **Time forfeit.** The game continues; the human's clock shows the overrun in red.
+- **Chess960 first move.** With a clock, the player gets extra seconds for their first move
+  (default 30, "Extra seconds for your first move"), whichever colour they play: time to look
+  at the starting position. The extra time runs before the clock and is not added to it;
+  unused seconds are dropped.
 - **Hints.** "Evaluation" (score and depth) and "Hint" (best move shown as an arrow) at any time.
 
 ### The star

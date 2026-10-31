@@ -23,6 +23,9 @@ export interface ClockState {
   remaining: Record<Side, number>;
   /** Moves completed by each side (for the 40-move control). */
   moves: Record<Side, number>;
+  /** Extra time left for a side's first move (ms): used up before its clock runs, not added
+   *  to it (Chess960: time to look at the starting position). */
+  extra?: Record<Side, number>;
 }
 
 /** Clocks for "game" and "classical" time controls. Time is measured with performance.now(). */
@@ -33,21 +36,35 @@ export class Clocks {
   private since = 0;
   private now: () => number;
 
-  constructor(tc: Exclude<TimeControl, { kind: "move" }>, state?: ClockState, now = () => performance.now()) {
+  /** `extra`: extra time for one side's first move (new games only; a saved state has its own). */
+  constructor(
+    tc: Exclude<TimeControl, { kind: "move" }>,
+    state?: ClockState,
+    now = () => performance.now(),
+    extra?: { side: Side; ms: number },
+  ) {
     this.tc = tc;
     this.now = now;
     const start = (tc.kind === "classical" ? CLASSICAL.minutes : tc.minutes) * 60_000;
     this.state = state ?? { remaining: { w: start, b: start }, moves: { w: 0, b: 0 } };
+    if (!state && extra && extra.ms > 0) this.state.extra = { w: 0, b: 0, [extra.side]: extra.ms };
   }
 
   get increment(): number {
     return (this.tc.kind === "classical" ? CLASSICAL.increment : this.tc.increment) * 1000;
   }
 
-  /** Remaining time of a side, including the running period. */
+  /** Remaining time of a side, including the running period (after any first-move extra). */
   remaining(side: Side): number {
     const r = this.state.remaining[side];
-    return side === this.running ? r - (this.now() - this.since) : r;
+    if (side !== this.running) return r;
+    return r - Math.max(0, this.now() - this.since - (this.state.extra?.[side] ?? 0));
+  }
+
+  /** First-move extra time a side still has (ms); 0 when there is none. */
+  extraLeft(side: Side): number {
+    const e = this.state.extra?.[side] ?? 0;
+    return side === this.running ? Math.max(0, e - (this.now() - this.since)) : e;
   }
 
   runningSide(): Side | null {
@@ -62,7 +79,11 @@ export class Clocks {
 
   /** Stops the clock without ending the move (screen left, analysis opened). */
   pause(): void {
-    if (this.running) this.state.remaining[this.running] = this.remaining(this.running);
+    const side = this.running;
+    if (side) {
+      this.state.remaining[side] = this.remaining(side);
+      if (this.state.extra) this.state.extra[side] = this.extraLeft(side);
+    }
     this.running = null;
   }
 
@@ -70,6 +91,7 @@ export class Clocks {
    *  40th move in classical, the extra time; then start the opponent's clock. */
   moveMade(side: Side): void {
     this.pause();
+    if (this.state.extra) this.state.extra[side] = 0; // only for the first move
     this.state.moves[side]++;
     this.state.remaining[side] += this.increment;
     if (this.tc.kind === "classical" && this.state.moves[side] === CLASSICAL.moves) {
@@ -87,7 +109,10 @@ export class Clocks {
 
   snapshot(): ClockState {
     const s = structuredClone(this.state);
-    if (this.running) s.remaining[this.running] = this.remaining(this.running);
+    if (this.running) {
+      s.remaining[this.running] = this.remaining(this.running);
+      if (s.extra) s.extra[this.running] = this.extraLeft(this.running);
+    }
     return s;
   }
 }

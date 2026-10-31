@@ -149,6 +149,15 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
           }
           const ms = c.clocks.remaining(side);
           el.textContent = formatClock(ms);
+          // Extra time for the first move (Chess960) runs before the clock: shown in front of it.
+          const extra = c.clocks.extraLeft(side);
+          if (extra > 0) {
+            const badge = document.createElement("span");
+            badge.className = "clock-extra";
+            badge.title = "Extra time for your first move";
+            badge.textContent = "+" + formatClock(extra);
+            el.prepend(badge);
+          }
           el.className = "clock numeric";
           el.classList.toggle("running", c.clocks.runningSide() === side);
           el.classList.toggle("overstepped", ms < 0);

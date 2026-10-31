@@ -168,6 +168,15 @@
   color: var(--danger);
 }
 
+/* First-move extra time (Chess960), counting down in front of the clock. */
+.clock-extra {
+  font-size: var(--text-body);
+  font-weight: var(--weight-strong);
+  color: var(--accent);
+  margin-right: var(--space-2);
+  vertical-align: middle;
+}
+
 .play-meta {
   margin-bottom: var(--space-1);
 }

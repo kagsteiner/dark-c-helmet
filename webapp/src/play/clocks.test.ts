@@ -58,3 +58,40 @@ test("formatting", () => {
   assert.equal(formatClock(9_870), "9.8");
   assert.equal(formatClock(-5_000), "-0:05");
 });
+
+test("first-move extra time is used up before the clock runs and not carried over", () => {
+  const time = fakeTime();
+  const c = new Clocks({ kind: "game", minutes: 5, increment: 0 }, undefined, time.now, { side: "w", ms: 30_000 });
+  c.start("w");
+  time.advance(20_000);
+  assert.equal(c.remaining("w"), 300_000);
+  assert.equal(c.extraLeft("w"), 10_000);
+  c.pause(); // e.g. the screen was left
+  time.advance(60_000);
+  c.start("w");
+  time.advance(15_000); // 10 s extra left, then 5 s from the clock
+  assert.equal(c.remaining("w"), 295_000);
+  assert.equal(c.extraLeft("w"), 0);
+  c.moveMade("w");
+  assert.equal(c.extraLeft("w"), 0);
+  // Black had none; a saved state keeps the rest
+  assert.equal(c.extraLeft("b"), 0);
+  const d = new Clocks({ kind: "game", minutes: 5, increment: 0 }, c.snapshot(), time.now);
+  assert.equal(d.remaining("w"), 295_000);
+});
+
+test("unused extra time is dropped after the first move", () => {
+  const time = fakeTime();
+  const c = new Clocks({ kind: "game", minutes: 5, increment: 0 }, undefined, time.now, { side: "b", ms: 30_000 });
+  c.start("w");
+  time.advance(3_000);
+  c.moveMade("w"); // black's clock starts
+  time.advance(5_000);
+  c.moveMade("b");
+  assert.equal(c.remaining("b"), 300_000);
+  assert.equal(c.extraLeft("b"), 0);
+  time.advance(5_000);
+  c.moveMade("w");
+  time.advance(4_000);
+  assert.equal(c.remaining("b"), 296_000); // second move: no extra any more
+});

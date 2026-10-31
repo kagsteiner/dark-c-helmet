@@ -16,6 +16,8 @@ export interface GameSetup {
   position960?: number;
   human: Side;
   tc: TimeControl;
+  /** Extra seconds for the player's first move (Chess960 with a clock). */
+  firstMoveExtra?: number;
 }
 
 export type StarLoss = "undo" | "hint" | "evaluation" | "analysis" | "time";
@@ -164,7 +166,8 @@ export class PlayController {
     this.abandonSearch();
     this.setup = setup;
     this.game = new Game(this.rules, setup.startFen, setup.chess960);
-    this.clocks = setup.tc.kind === "move" ? null : new Clocks(setup.tc);
+    const extra = setup.firstMoveExtra ? { side: setup.human, ms: setup.firstMoveExtra * 1000 } : undefined;
+    this.clocks = setup.tc.kind === "move" ? null : new Clocks(setup.tc, undefined, undefined, extra);
     this.star = null;
     this.result = null;
     this.lowScores = 0;
