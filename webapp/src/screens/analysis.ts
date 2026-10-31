@@ -36,7 +36,7 @@ function formatCount(n: number): string {
   return n >= 1e9 ? (n / 1e9).toFixed(1) + "G" : n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? Math.round(n / 1e3) + "k" : String(n);
 }
 
-export function analysisScreen(rules: Rules, controller: PlayController): Screen {
+export function analysisScreen(rules: Rules, controller: PlayController, engineStatus: () => string | null): Screen {
   // Survive switching screens.
   let line: Line | null = null;
   let cursor = 0;
@@ -214,7 +214,7 @@ export function analysisScreen(rules: Rules, controller: PlayController): Screen
         const terminal = gameAt(cursor).state();
         if (!engine) {
           $(".an-score").textContent = "";
-          $(".an-details").textContent = "The engine is loading…";
+          $(".an-details").textContent = engineStatus() ?? "The engine is loading…";
           $(".an-pv").textContent = "";
           return;
         }

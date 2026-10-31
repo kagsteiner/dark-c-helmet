@@ -1,5 +1,6 @@
 import { Rules } from "./chess/rules.ts";
 import { defaultEngineOptions, Engine } from "./engine/engine.ts";
+import { threadsAvailable } from "./engine/transport.ts";
 import { PlayController } from "./play/controller.ts";
 import { analysisScreen } from "./screens/analysis.ts";
 import { bookScreen } from "./screens/book.ts";
@@ -27,7 +28,7 @@ const setStatus = (s: string | null) => {
 startShell({
   play: playScreen(controller, () => engineStatus),
   setup: setupScreen(rules, controller),
-  analysis: analysisScreen(rules, controller),
+  analysis: analysisScreen(rules, controller, () => engineStatus),
   book: bookScreen(),
   settings: settingsScreen(controller),
 });
@@ -38,17 +39,38 @@ controller.humanLoader = (profile) => Engine.startHuman(profile);
 // A newer master opening book on the server: merge it (setting) or ask, once per version.
 checkMasterAtStartup(() => window.dispatchEvent(new Event("book-changed")));
 
-try {
-  const defaults = defaultEngineOptions();
-  const options = { threads: userSettings.threads ?? defaults.threads, hashMb: userSettings.hashMb ?? defaults.hashMb };
-  const engine = await Engine.start(options, (loaded, total) => {
-    setStatus(total ? `Downloading engine… ${Math.round((loaded / total) * 100)}%` : "Downloading engine…");
-  });
+// The threaded engine first; if it does not start (seen on an iPad after hours in the
+// background, until the browser was restarted), the single-threaded one.
+const defaults = defaultEngineOptions();
+const options = { threads: userSettings.threads ?? defaults.threads, hashMb: userSettings.hashMb ?? defaults.hashMb };
+const progress = (loaded: number, total: number) =>
+  setStatus(total ? `Downloading engine… ${Math.round((loaded / total) * 100)}%` : "Downloading engine…");
+
+async function startEngine(threaded: boolean): Promise<Engine> {
+  const engine = await Engine.start(threaded ? options : { ...options, threads: 1 }, progress, threaded);
   setStatus("Preparing engine…");
-  await engine.warmUp();
+  try {
+    await engine.warmUp();
+  } catch (err) {
+    engine.close();
+    throw err;
+  }
+  return engine;
+}
+
+try {
+  let engine: Engine;
+  try {
+    engine = await startEngine(threadsAvailable());
+  } catch (err) {
+    if (!threadsAvailable()) throw err;
+    console.warn("threaded engine failed, trying the single-threaded one:", err);
+    setStatus("Starting the engine again…");
+    engine = await startEngine(false);
+  }
   setStatus(null);
   controller.attachEngine(engine);
 } catch (err) {
   console.error(err);
-  setStatus("The engine could not be started in this browser.");
+  setStatus(`The engine could not be started (${err instanceof Error ? err.message : err}). Closing and reopening the browser may help.`);
 }

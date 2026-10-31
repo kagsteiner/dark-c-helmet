@@ -20,6 +20,8 @@ type WorkerMessage =
   | { type: "ready" }
   | { type: "error"; message: string };
 
+const STALL_MS = 20_000;
+
 /** Download progress of the engine: bytes loaded and total (0 if unknown). */
 export type ProgressHandler = (loaded: number, total: number) => void;
 
@@ -37,22 +39,37 @@ export class WasmEngineTransport implements EngineTransport {
     });
   }
 
-  /** `module`: another engine in public/engine/ (e.g. "dh-human", always single-threaded). */
+  /** `module`: another engine in public/engine/ (e.g. "dh-human", always single-threaded).
+   *  Fails if the worker reports an error, cannot be loaded, or goes quiet for STALL_MS (the
+   *  download reports progress all the time; starting the engine afterwards takes a second). */
   static create(threaded = threadsAvailable(), onProgress?: ProgressHandler, module?: string): Promise<WasmEngineTransport> {
     const worker = new Worker(new URL("./engine-worker.ts", import.meta.url), { type: "module" });
     return new Promise((resolve, reject) => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const fail = (message: string) => {
+        clearTimeout(timer);
+        worker.terminate();
+        reject(new Error(message));
+      };
+      const watch = () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => fail(`engine start stalled (${module ?? (threaded ? "threaded" : "single-threaded")})`), STALL_MS);
+      };
       const onMessage = (e: MessageEvent<WorkerMessage>) => {
         if (e.data.type === "progress") {
+          watch();
           onProgress?.(e.data.loaded, e.data.total);
         } else if (e.data.type === "ready") {
+          clearTimeout(timer);
           worker.removeEventListener("message", onMessage);
           resolve(new WasmEngineTransport(worker, threaded));
         } else if (e.data.type === "error") {
-          worker.terminate();
-          reject(new Error(e.data.message));
+          fail(e.data.message);
         }
       };
       worker.addEventListener("message", onMessage);
+      worker.addEventListener("error", (e) => fail(`engine worker failed: ${e.message || "could not be loaded"}`));
+      watch();
       worker.postMessage({ type: "init", threaded, module, base: new URL(import.meta.env.BASE_URL, location.href).href });
     });
   }

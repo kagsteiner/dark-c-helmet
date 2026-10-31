@@ -5,6 +5,14 @@ import { load, save } from "../storage.ts";
 import { WasmEngineTransport, threadsAvailable, type EngineTransport, type ProgressHandler } from "./transport.ts";
 
 const NPS_KEY = "engine-nps";
+const HANDSHAKE_MS = 10_000;
+const WARMUP_MS = 15_000; // a 1.5 s search
+
+function withTimeout<T>(p: Promise<T>, ms: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => (timer = setTimeout(() => reject(new Error(message)), ms)));
+  return Promise.race([p, timeout]).finally(() => clearTimeout(timer));
+}
 
 export interface SearchInfo {
   depth: number;
@@ -105,10 +113,17 @@ export class Engine {
     this.module = module;
   }
 
-  static async start(options = defaultEngineOptions(), onProgress?: ProgressHandler): Promise<Engine> {
-    const transport = await WasmEngineTransport.create(threadsAvailable(), onProgress);
+  /** `threaded`: false forces the single-threaded build (the fallback when the threaded one
+   *  does not start). Fails if the engine does not answer within a few seconds. */
+  static async start(options = defaultEngineOptions(), onProgress?: ProgressHandler, threaded = threadsAvailable()): Promise<Engine> {
+    const transport = await WasmEngineTransport.create(threaded, onProgress);
     const engine = new Engine(transport, options, onProgress);
-    await engine.handshake();
+    try {
+      await withTimeout(engine.handshake(), HANDSHAKE_MS, "the engine did not answer");
+    } catch (err) {
+      engine.close();
+      throw err;
+    }
     const saved = await load<{ threads: number; nps: number }>(NPS_KEY);
     if (saved && saved.threads === options.threads) engine.nps = saved.nps;
     return engine;
@@ -119,7 +134,12 @@ export class Engine {
   static async startHuman(profile: string): Promise<Engine> {
     const transport = await WasmEngineTransport.create(false, undefined, "dh-human");
     const engine = new Engine(transport, { threads: 1, hashMb: 1 }, undefined, "dh-human");
-    await engine.handshake();
+    try {
+      await withTimeout(engine.handshake(), HANDSHAKE_MS, "the engine did not answer");
+    } catch (err) {
+      engine.close();
+      throw err;
+    }
     engine.transport.send(`setoption name Profile value ${profile}`);
     engine.transport.send(`setoption name Seed value ${Math.floor(Math.random() * 2 ** 31)}`);
     return engine;
@@ -237,6 +257,12 @@ export class Engine {
     r.resolve({ bestmove: null, info: r.info, nodes: r.info?.nodes ?? 0, time: r.info?.time ?? 0 });
   }
 
+  close(): void {
+    this.running = null;
+    this.waiters = [];
+    this.transport.close();
+  }
+
   newGame(): void {
     if (!this.running) this.transport.send("ucinewgame");
   }
@@ -245,7 +271,7 @@ export class Engine {
    *  It runs slower than later searches, so it does not count for the speed estimate. */
   async warmUp(): Promise<void> {
     const start = { startFen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", moves: [], chess960: false };
-    await this.search(start, { movetime: 1500 }, undefined, false);
+    await withTimeout(this.search(start, { movetime: 1500 }, undefined, false), WARMUP_MS, "the engine did not finish its first search");
     this.newGame();
   }
 }
