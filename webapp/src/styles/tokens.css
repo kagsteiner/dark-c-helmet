@@ -48,6 +48,7 @@
   --legal-dot: rgba(20, 20, 20, 0.22);
   --premove: rgba(110, 70, 170, 0.42);
   --arrow: rgba(47, 98, 198, 0.8);
+  --star: #f2b705;
 }
 
 @media (min-width: 768px) {

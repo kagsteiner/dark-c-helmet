@@ -98,7 +98,7 @@
 
 @media (min-width: 768px) and (min-aspect-ratio: 1/1) {
   .play {
-    --panel: clamp(260px, 28vw, 360px);
+    --panel: clamp(300px, 30vw, 360px);
     --board: min(calc(100dvh - var(--topbar) - 2 * var(--space-6)), calc(100vw - var(--panel) - 3 * var(--space-6)));
     grid-template-columns: var(--board) var(--panel);
     grid-template-rows: auto 1fr auto auto;
@@ -145,4 +145,66 @@
     padding: 0;
     border-top: 0;
   }
+}
+
+/* Clocks: running one in full colour, waiting one muted, red once overstepped. */
+.clock {
+  font-size: var(--text-clock);
+  font-weight: var(--weight-strong);
+  color: var(--muted);
+  line-height: 1.2;
+}
+
+.clock.small {
+  font-size: var(--text-small);
+  font-weight: var(--weight-regular);
+}
+
+.clock.running {
+  color: var(--text);
+}
+
+.clock.overstepped {
+  color: var(--danger);
+}
+
+.play-meta {
+  margin-bottom: var(--space-1);
+}
+
+.play-help {
+  color: var(--accent);
+  font-weight: var(--weight-strong);
+}
+
+.play-help:empty,
+.play-status:empty {
+  display: none;
+}
+
+.play-actions {
+  position: relative;
+}
+
+.star .star-shape {
+  fill: var(--star);
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--star) 70%, transparent));
+}
+
+.star:not(.lit) {
+  color: var(--muted);
+}
+
+.star-tip {
+  position: absolute;
+  bottom: calc(100% + var(--space-2));
+  left: var(--space-2);
+  right: var(--space-2);
+  max-width: 320px;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  z-index: 5;
 }

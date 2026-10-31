@@ -14,7 +14,14 @@ export function threadsAvailable(): boolean {
   return typeof SharedArrayBuffer !== "undefined" && globalThis.crossOriginIsolated === true;
 }
 
-type WorkerMessage = { type: "line"; line: string } | { type: "ready" } | { type: "error"; message: string };
+type WorkerMessage =
+  | { type: "line"; line: string }
+  | { type: "progress"; loaded: number; total: number }
+  | { type: "ready" }
+  | { type: "error"; message: string };
+
+/** Download progress of the engine: bytes loaded and total (0 if unknown). */
+export type ProgressHandler = (loaded: number, total: number) => void;
 
 /** The WebAssembly engine, running in a Web Worker. */
 export class WasmEngineTransport implements EngineTransport {
@@ -30,11 +37,13 @@ export class WasmEngineTransport implements EngineTransport {
     });
   }
 
-  static create(threaded = threadsAvailable()): Promise<WasmEngineTransport> {
+  static create(threaded = threadsAvailable(), onProgress?: ProgressHandler): Promise<WasmEngineTransport> {
     const worker = new Worker(new URL("./engine-worker.ts", import.meta.url), { type: "module" });
     return new Promise((resolve, reject) => {
       const onMessage = (e: MessageEvent<WorkerMessage>) => {
-        if (e.data.type === "ready") {
+        if (e.data.type === "progress") {
+          onProgress?.(e.data.loaded, e.data.total);
+        } else if (e.data.type === "ready") {
           worker.removeEventListener("message", onMessage);
           resolve(new WasmEngineTransport(worker, threaded));
         } else if (e.data.type === "error") {

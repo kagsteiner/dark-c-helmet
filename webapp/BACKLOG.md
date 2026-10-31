@@ -41,15 +41,20 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done.
 
 ## M2 — Playing a game
 
-- [ ] Engine layer over `EngineTransport` (Web Worker); `info` parsing; download progress
-- [ ] New-game sheet: variant, Chess960 start (random / number), colour, time control
-- [ ] Clocks for all four time controls incl. FIDE classical; overrun shown in red
-- [ ] Game flow: engine moves, game-end detection, engine resignation
-- [ ] Premove
-- [ ] Undo
-- [ ] Evaluation and hint
-- [ ] The star
-- [ ] Current game survives a page reload (IndexedDB)
+- [x] Engine layer over `EngineTransport` (`engine/engine.ts`): one search at a time, `info`
+      parsing, stop (single-threaded build: restart); download progress; 1.5 s warm-up
+- [x] New-game sheet: variant, Chess960 start (random / number), colour, time control;
+      last choices remembered
+- [x] Clocks for all four time controls incl. FIDE classical (`play/clocks.ts`, tests);
+      overstepping shown in red, the game goes on
+- [x] Game flow (`play/controller.ts`): engine moves, game-end detection, engine resigns at
+      -10 or worse on 4 moves in a row
+- [x] Premove (one; any click cancels it; promotes to a queen)
+- [x] Undo: back to the player's turn, at least one of their moves taken back
+- [x] Evaluation and hint (2 s search; hint as an arrow)
+- [x] The star
+- [x] Current game survives a page reload (IndexedDB); clocks do not run while the app is
+      closed or another screen is shown
 
 ## M3 — Setup
 

@@ -4,17 +4,38 @@
 //   - castling: king onto its own rook, or onto its target square when that is not also an
 //     ordinary king move (in Chess960 a king can sometimes step there normally)
 //   - promotion: a picker on the board
+//   - premove (while the opponent thinks): select a piece, then a square it might reach; any
+//     other click cancels it. It is checked and played once the opponent has moved.
 import type { PieceCode, Placement } from "../chess/fen.ts";
 import { isWhite } from "../chess/fen.ts";
 import type { LegalMove } from "../chess/rules.ts";
+import { premoveTargets } from "../play/premove.ts";
 import type { Board, BoardInput, Highlights } from "./board.ts";
+
+/** Does clicking `sq` mean move `m`? Castling via the rook square only when `viaRook`. */
+export function reaches(legal: LegalMove[], m: LegalMove, sq: number, viaRook: boolean): boolean {
+  if (!m.castle) return m.to === sq;
+  if (viaRook && m.rook === sq) return true;
+  // The king's target square, unless the king is already there or can also step there normally.
+  return m.to === sq && m.to !== m.from && !legal.some((n) => n.from === m.from && !n.castle && n.to === sq);
+}
+
+/** The legal moves meant by moving the piece on `from` to `sq` (several for a promotion). */
+export function movesBetween(legal: LegalMove[], from: number, sq: number): LegalMove[] {
+  return legal.filter((m) => m.from === from && reaches(legal, m, sq, true));
+}
 
 export interface MoveInputOptions {
   /** Called with the chosen move in UCI notation. */
   onMove(uci: string): void;
   /** Target-only clicks (setting). */
   targetOnly(): boolean;
+  /** A premove was set (from, to) or cleared (null). */
+  onPremove?(premove: [number, number] | null): void;
 }
+
+/** "move": the player is to move. "premove": the opponent is, the player may premove. */
+export type InputMode = "move" | "premove" | "off";
 
 export class MoveInput implements BoardInput {
   private board: Board;
@@ -22,7 +43,8 @@ export class MoveInput implements BoardInput {
   private placement: Placement = new Array(64).fill(null);
   private legal: LegalMove[] = [];
   private whiteToMove = true;
-  private enabled = false;
+  private mode: InputMode = "off";
+  private premove: [number, number] | null = null;
   private base: Highlights = {};
   private selected: number | null = null;
   private wasSelected = false; // the pressed piece was already selected before this press
@@ -35,22 +57,32 @@ export class MoveInput implements BoardInput {
 
   /** New position. `base` holds the highlights that do not come from input (last move, check). */
   setPosition(placement: Placement, legal: LegalMove[], whiteToMove: boolean, base: Highlights): void {
+    // A re-render of the same position keeps the selection.
+    if (placement.join() !== this.placement.join() || whiteToMove !== this.whiteToMove) this.selected = null;
     this.placement = placement;
     this.legal = legal;
     this.whiteToMove = whiteToMove;
     this.base = base;
+    this.render();
+  }
+
+  /** In "premove" mode, `whiteToMove` of setPosition is the opponent; the player has the other colour. */
+  setMode(mode: InputMode): void {
+    if (mode === this.mode) return;
+    this.mode = mode;
+    if (mode !== "premove") this.premove = null;
     this.selected = null;
     this.render();
   }
 
-  /** Whether the player may move now. */
-  setEnabled(enabled: boolean): void {
-    this.enabled = enabled;
-    if (!enabled) this.deselect();
+  clearPremove(): void {
+    this.premove = null;
+    this.render();
   }
 
   pointerDown(sq: number): boolean {
-    if (!this.enabled) return false;
+    if (this.mode === "premove") return this.premoveDown(sq);
+    if (this.mode !== "move") return false;
     if (this.selected !== null) {
       const moves = this.movesTo(this.selected, sq);
       if (moves.length) {
@@ -79,9 +111,37 @@ export class MoveInput implements BoardInput {
   }
 
   drop(from: number, to: number | null): void {
-    if (!this.enabled || to === null) return;
+    if (to === null) return;
+    if (this.mode === "premove") {
+      if (premoveTargets(this.placement, from).includes(to)) this.setPremove([from, to]);
+      return;
+    }
+    if (this.mode !== "move") return;
     const moves = this.movesTo(from, to);
     if (moves.length) this.execute(moves);
+  }
+
+  private premoveDown(sq: number): boolean {
+    if (this.premove) this.setPremove(null); // any click cancels a premove
+    if (this.selected !== null && premoveTargets(this.placement, this.selected).includes(sq)) {
+      this.setPremove([this.selected, sq]);
+      return false;
+    }
+    const piece = this.placement[sq];
+    if (piece !== null && isWhite(piece) !== this.whiteToMove) {
+      this.wasSelected = this.selected === sq;
+      this.select(sq);
+      return true;
+    }
+    this.deselect();
+    return false;
+  }
+
+  private setPremove(premove: [number, number] | null): void {
+    this.premove = premove;
+    this.selected = null;
+    this.options.onPremove?.(premove);
+    this.render();
   }
 
   // --- helpers ---------------------------------------------------------------------------
@@ -90,16 +150,12 @@ export class MoveInput implements BoardInput {
     return piece !== null && isWhite(piece) === this.whiteToMove;
   }
 
-  /** Does clicking `sq` mean move `m`? Castling via the rook square only when `viaRook`. */
   private reaches(m: LegalMove, sq: number, viaRook: boolean): boolean {
-    if (!m.castle) return m.to === sq;
-    if (viaRook && m.rook === sq) return true;
-    // The king's target square, unless the king is already there or can also step there normally.
-    return m.to === sq && m.to !== m.from && !this.legal.some((n) => n.from === m.from && !n.castle && n.to === sq);
+    return reaches(this.legal, m, sq, viaRook);
   }
 
   private movesTo(from: number, sq: number): LegalMove[] {
-    return this.legal.filter((m) => m.from === from && this.reaches(m, sq, true));
+    return movesBetween(this.legal, from, sq);
   }
 
   private execute(moves: LegalMove[]): void {
@@ -128,7 +184,11 @@ export class MoveInput implements BoardInput {
 
   private render(): void {
     const h: Highlights = { ...this.base };
-    if (this.selected !== null) {
+    if (this.premove) h.premove = this.premove;
+    if (this.selected !== null && this.mode === "premove") {
+      h.selected = this.selected;
+      h.targets = premoveTargets(this.placement, this.selected);
+    } else if (this.selected !== null) {
       const from = this.selected;
       const targets = new Set<number>();
       for (const m of this.legal) {
