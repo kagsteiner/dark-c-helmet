@@ -26,8 +26,11 @@ export interface GameSetup {
 }
 
 /** Name shown for the opponent of a game. */
+/** The strength the human-like profiles actually play at (calibration, human/README.md). */
+const HUMAN_RATING: Record<string, string> = { "1300": "1200" };
+
 export function opponentName(setup: GameSetup): string {
-  return setup.humanProfile ? `Human-like ${setup.humanProfile}` : "Dark C. Helmet";
+  return setup.humanProfile ? `${HUMAN_RATING[setup.humanProfile] ?? setup.humanProfile} Elo player` : "Dark C. Helmet";
 }
 
 export type StarLoss = "undo" | "hint" | "evaluation" | "analysis" | "time";
@@ -322,7 +325,8 @@ export class PlayController {
       this.lowScores = lost ? this.lowScores + 1 : 0;
     }
     this.checkEnd();
-    if (!this.result && this.lowScores >= RESIGN_MOVES) this.finish("The engine resigns. You win.");
+    // Players of that level play on to the end; the human-like player never resigns.
+    if (!this.result && !humanLike && this.lowScores >= RESIGN_MOVES) this.finish("The engine resigns. You win.");
     this.persist();
     this.emit();
     this.playPremove();
