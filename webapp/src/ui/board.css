@@ -43,17 +43,9 @@
   transition: none;
 }
 
+/* Size and lift of a dragged piece: set in board.ts as one transform with the position. */
 .piece.dragging {
   z-index: 2;
-  scale: 1.15;
-}
-
-@media (pointer: coarse) {
-  /* Keep the piece visible above the finger. */
-  .piece.dragging {
-    scale: 1.6;
-    translate: 0 -30%;
-  }
 }
 
 .mark.last-move {

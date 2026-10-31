@@ -169,6 +169,7 @@ export class PlayController {
     this.result = null;
     this.lowScores = 0;
     this.premove = null;
+    this.bookMove = false;
     this.clearHelp();
     this.engine?.newGame();
     this.persist();
@@ -340,6 +341,7 @@ export class PlayController {
     this.result = null;
     this.lowScores = 0;
     this.premove = null;
+    this.bookMove = false;
     this.clearHelp();
     this.loseStar("undo");
     if (this.active) this.clocks?.start(this.setup.human);

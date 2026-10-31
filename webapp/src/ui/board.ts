@@ -309,7 +309,14 @@ export class Board {
     el.classList.add("dragging");
     const r = this.el.getBoundingClientRect();
     const size = r.width / 8;
-    el.style.transform = `translate(${e.clientX - r.left - size / 2}px, ${e.clientY - r.top - size / 2}px)`;
+    // Centred on the pointer and a little larger; on touch screens larger still and lifted
+    // above the finger. One transform: the scale applies around the piece's own centre, so it
+    // does not shift the position (a separate `scale` property would scale the offset too).
+    const touch = e.pointerType === "touch";
+    const lift = touch ? size * 0.5 : 0;
+    const x = e.clientX - r.left - size / 2;
+    const y = e.clientY - r.top - size / 2 - lift;
+    el.style.transform = `translate(${x}px, ${y}px) scale(${touch ? 1.6 : 1.15})`;
   }
 
   private onPointerUp(e: PointerEvent): void {
