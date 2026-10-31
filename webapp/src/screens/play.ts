@@ -80,7 +80,9 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
         $(".play-bottom .player-name").textContent = human === "w" ? "You (White)" : "You (Black)";
         const tc = describeTimeControl(c.setup.tc);
         $(".play-meta").textContent =
-          (c.setup.chess960 ? `Chess960 no. ${c.setup.position960 ?? "?"} · ` : "") + tc;
+          (c.setup.chess960 ? `Chess960 no. ${c.setup.position960 ?? "?"} · ` : "") +
+          tc +
+          (c.setup.strongestOpenings ? " · strongest openings" : "");
         renderMoves();
         renderClocks();
 

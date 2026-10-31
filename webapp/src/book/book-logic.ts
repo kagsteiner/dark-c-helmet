@@ -27,7 +27,9 @@ export interface BookEntry {
 }
 
 export const BOOK_MAX_MOVE = 20; // positions up to move 20
-export const BOOK_SPREAD_CP = 10; // moves this close to the best are chosen at random
+export const BOOK_SPREAD_CP = 10; // moves this close to the best are chosen at random ...
+export const BOOK_SPREAD_OPENING_CP = 30; // ... and this close up to move 5, for varied openings
+export const BOOK_SPREAD_OPENING_MOVES = 5;
 // A search with the same time does not reach exactly the same node count (speed varies by a
 // few percent), so entries count from 85% of the planned nodes on.
 export const BOOK_NODE_TOLERANCE = 0.85;
@@ -71,12 +73,20 @@ export function moveNumber(fen: string): number {
   return Number(fen.split(" ")[5] ?? 1);
 }
 
-/** Book move for a search of `budget` nodes, or null. `random` in [0, 1). */
-export function chooseBookMove(entries: BookEntry[], budget: number, random = Math.random()): BookEntry | null {
+/** Book move for a search of `budget` nodes at move `move`, or null. `random` in [0, 1).
+ *  `strongest`: only the best-scored moves (a random one if several share the best score). */
+export function chooseBookMove(
+  entries: BookEntry[],
+  budget: number,
+  move = 1,
+  random = Math.random(),
+  strongest = false,
+): BookEntry | null {
   const deep = entries.filter((e) => e.nodes >= budget * BOOK_NODE_TOLERANCE);
   if (!deep.length) return null;
   const best = Math.max(...deep.map((e) => e.score));
-  const near = deep.filter((e) => e.score >= best - BOOK_SPREAD_CP);
+  const spread = strongest ? 0 : move <= BOOK_SPREAD_OPENING_MOVES ? BOOK_SPREAD_OPENING_CP : BOOK_SPREAD_CP;
+  const near = deep.filter((e) => e.score >= best - spread);
   return near[Math.floor(random * near.length)];
 }
 

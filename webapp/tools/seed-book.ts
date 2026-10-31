@@ -2,9 +2,11 @@
 // web app with "Merge from file" on the Book screen.
 //
 // The opening tree is expanded level by level from the start position(s). Every position gets
-// a deep search (its best move becomes the book entry). Where the tree should branch, every
+// a deep search (its best move becomes a book entry). Where the tree should branch, every
 // legal move gets a short probe search, and the best alternatives within a margin are
-// explored as well, so that the book also covers moves a human might play.
+// explored as well, so that the book also covers moves a human might play. Moves of the
+// common openings in tools/openings.txt are always explored. Every explored move is a book
+// move too: the deep search of the position after it gives its score (negated).
 //
 // Each engine process searches single-threaded with a fixed node count, so a book entry means
 // the same in the browser (where the node budget is compared) as here.
@@ -27,6 +29,8 @@
 //   --hash MB            hash per engine process (default 64)
 //   --engine PATH        native engine (default ../bin/darkhelmet)
 //   --hours H            stop by itself after H hours (like Ctrl-C once), e.g. 1.5
+//   --include FILE       opening lines always explored (standard only; default
+//                        tools/openings.txt, "none" for none)
 // Ctrl-C once: finish the running searches, save, stop. Twice: save and stop at once.
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
@@ -39,12 +43,14 @@ import {
   bookMoveName,
   bookScore,
   isBookEntry,
+  shouldStore,
   moveNumber,
   type BookEntry,
 } from "../src/book/book-logic.ts";
 import { chess960Fen } from "../src/chess/chess960.ts";
 import { Game, START_FEN } from "../src/chess/game.ts";
 import { Rules } from "../src/chess/rules.ts";
+import { san } from "../src/chess/san.ts";
 
 // --- options --------------------------------------------------------------------------------
 
@@ -77,6 +83,7 @@ const opts = {
   hash: num("hash", 64),
   engine: args.get("engine") ?? fileURLToPath(new URL("../../bin/darkhelmet", import.meta.url)),
   hours: num("hours", 0),
+  include: args.get("include") ?? fileURLToPath(new URL("openings.txt", import.meta.url)),
 };
 const stateFile = out + ".state.json";
 
@@ -210,6 +217,16 @@ function save(): void {
 interface Task {
   root: string;
   path: string[];
+  /** The position before the last move of `path`, and that move as the book writes it. */
+  parent?: { key: string; move: string };
+}
+
+interface DeepResult {
+  nodes: number;
+  depth: number;
+  score: number;
+  net: string;
+  build: string;
 }
 
 let stopping = false;
@@ -229,33 +246,83 @@ function gameAt(task: Task): Game {
   return g;
 }
 
-/** Moves to explore from a position: the best one, plus alternatives where the tree branches. */
-async function expand(engine: UciEngine, task: Task, game: Game): Promise<string[]> {
+// Opening lines that are always explored: path (UCI moves, space separated) -> next moves.
+const includes = new Map<string, Set<string>>();
+
+function loadIncludes(): void {
+  if (opts.variant !== "standard" || opts.include === "none") return;
+  if (!existsSync(opts.include)) throw new Error(`opening list ${opts.include} not found`);
+  let lines = 0;
+  for (const raw of readFileSync(opts.include, "utf8").split("\n")) {
+    const line = raw.replace(/#.*/, "").trim();
+    if (!line) continue;
+    const g = new Game(rules, START_FEN, true);
+    const path: string[] = [];
+    for (const token of line.split(/\s+/)) {
+      const want = token.replace(/^\d+\.+/, "").replace(/[+#!?]+$/, "");
+      if (!want) continue;
+      const legal = g.legalMoves();
+      const m = legal.find((x) => san(x, legal).replace(/[+#]$/, "") === want);
+      if (!m) {
+        console.warn(`${opts.include}: "${want}" is not a legal move in "${line}" - rest of the line ignored`);
+        break;
+      }
+      (includes.get(path.join(" ")) ?? includes.set(path.join(" "), new Set()).get(path.join(" "))!).add(m.uci);
+      path.push(m.uci);
+      g.play(m.uci);
+    }
+    lines++;
+  }
+  console.log(`${lines} opening lines from ${opts.include}`);
+}
+
+/** The deep search result of a position, if it has been searched. */
+function deepResultOf(key: string, game: Game): DeepResult | null {
+  const best = tree.get(key)?.[0];
+  const move = best && game.legalMoves().find((m) => m.uci === best);
+  const e = move && entries.get(key + " " + bookMoveName(move));
+  return e ? { nodes: e.nodes, depth: e.depth, score: e.score, net: e.net, build: e.build } : null;
+}
+
+/** Book entry for the move that led to a position, from that position's deep search. */
+function addParentEntry(parent: Task["parent"], result: DeepResult | null): void {
+  if (!parent || !result) return;
+  const e: BookEntry = {
+    id: parent.key + " " + parent.move,
+    key: parent.key,
+    move: parent.move,
+    nodes: result.nodes,
+    depth: result.depth,
+    score: -result.score,
+    net: result.net,
+    build: result.build,
+    source: "seed",
+    date: Date.now(),
+  };
+  if (shouldStore(entries.get(e.id), e)) addEntry(e);
+}
+
+/** Moves to explore from a position: the best one, alternatives where the tree branches, and
+ *  the moves of the opening list. Also returns the position's deep search result. */
+async function expand(engine: UciEngine, task: Task, game: Game): Promise<{ explore: string[]; result: DeepResult | null }> {
   const fen = game.fen();
   const key = bookKey(fen);
+  const legal = game.legalMoves();
+  const listed = [...(includes.get(task.path.join(" ")) ?? [])];
   const known = tree.get(key);
   if (known && (seedNodes.get(key) ?? 0) >= opts.nodes) {
     stats.reused++;
-    return known;
+    const explore = [...new Set([...known, ...listed])];
+    tree.set(key, explore);
+    return { explore, result: deepResultOf(key, game) };
   }
   const t0 = Date.now();
-  const legal = game.legalMoves();
   const deep = await engine.search(task.root, task.path, opts.nodes);
   const best = legal.find((m) => m.uci === deep.bestmove);
-  if (!best) return [];
+  if (!best) return { explore: [], result: null };
   const name = bookMoveName(best);
-  addEntry({
-    id: key + " " + name,
-    key,
-    move: name,
-    nodes: deep.nodes,
-    depth: deep.depth,
-    score: deep.score,
-    net: engine.net,
-    build: engine.name,
-    source: "seed",
-    date: Date.now(),
-  });
+  const result: DeepResult = { nodes: deep.nodes, depth: deep.depth, score: deep.score, net: engine.net, build: engine.name };
+  addEntry({ id: key + " " + name, key, move: name, ...result, source: "seed", date: Date.now() });
   const width = opts.widths[task.path.length] ?? 1;
   const explore = [best.uci];
   if (width > 1 && legal.length > 1) {
@@ -272,10 +339,11 @@ async function expand(engine: UciEngine, task: Task, game: Game): Promise<string
       if (p.uci !== best.uci && p.score >= top - opts.margin) explore.push(p.uci);
     }
   }
+  for (const m of listed) if (!explore.includes(m)) explore.push(m);
   tree.set(key, explore);
   stats.searched++;
   stats.searchMs += Date.now() - t0;
-  return explore;
+  return { explore, result };
 }
 
 async function worker(engine: UciEngine): Promise<void> {
@@ -290,12 +358,22 @@ async function worker(engine: UciEngine): Promise<void> {
     try {
       const game = gameAt(task);
       if (game.state() === "ongoing" && moveNumber(game.fen()) <= opts.maxMove) {
-        for (const m of await expand(engine, task, game)) {
+        const { explore, result } = await expand(engine, task, game);
+        addParentEntry(task.parent, result);
+        const parentKey = bookKey(game.fen());
+        for (const m of explore) {
+          const move = game.legalMoves().find((x) => x.uci === m);
+          if (!move) continue;
+          const parent = { key: parentKey, move: bookMoveName(move) };
           const child = gameAt({ root: task.root, path: [...task.path, m] });
           const key = bookKey(child.fen());
-          if (seen.has(key)) continue; // transposition: already queued or done
+          if (seen.has(key)) {
+            // Transposition: already queued or done; if done, its result serves this move too.
+            addParentEntry(parent, deepResultOf(key, child));
+            continue;
+          }
           seen.add(key);
-          queue.push({ root: task.root, path: [...task.path, m] });
+          queue.push({ root: task.root, path: [...task.path, m], parent });
         }
       }
     } finally {
@@ -335,6 +413,7 @@ function estimate(): number {
 // --- main -------------------------------------------------------------------------------------
 
 load();
+loadIncludes();
 const startRoots = roots();
 for (const root of startRoots) {
   const key = bookKey(root);

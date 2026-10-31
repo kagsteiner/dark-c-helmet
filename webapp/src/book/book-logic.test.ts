@@ -35,10 +35,17 @@ test("book move needs at least the planned nodes", () => {
   assert.equal(chooseBookMove(entries, 10_000_000), null);
 });
 
-test("random choice among moves within 10 cp of the best", () => {
-  const entries = [entry("e2e4", 9e6, 30), entry("d2d4", 9e6, 22), entry("b2b3", 9e6, 5)];
-  assert.equal(chooseBookMove(entries, 1e6, 0)?.move, "e2e4");
-  assert.equal(chooseBookMove(entries, 1e6, 0.99)?.move, "d2d4");
+test("random choice among moves within 10 cp of the best, 30 cp up to move 5", () => {
+  const entries = [entry("e2e4", 9e6, 30), entry("d2d4", 9e6, 22), entry("b2b3", 9e6, 5), entry("g2g4", 9e6, -50)];
+  assert.equal(chooseBookMove(entries, 1e6, 10, 0)?.move, "e2e4");
+  assert.equal(chooseBookMove(entries, 1e6, 10, 0.99)?.move, "d2d4");
+  // in the opening b2b3 (25 cp below the best) is a candidate too, g2g4 (80 below) is not
+  assert.deepEqual(
+    [0, 0.4, 0.99].map((r) => chooseBookMove(entries, 1e6, 3, r)?.move),
+    ["e2e4", "d2d4", "b2b3"],
+  );
+  // "Strongest": always the best-scored move
+  assert.deepEqual([0, 0.5, 0.99].map((r) => chooseBookMove(entries, 1e6, 3, r, true)?.move), ["e2e4", "e2e4", "e2e4"]);
 });
 
 test("an entry is replaced only by a deeper search", () => {

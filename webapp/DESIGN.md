@@ -178,8 +178,10 @@ games that began at a standard or Chess960 start position.
 1. The engine's time manager decides the time for this move. With the device's measured
    nodes per second this becomes a node budget.
 2. Candidates: entries for the position with `nodes` ≥ 85% of the budget (a search of the
-   same time does not reach exactly the same node count). If there are any, pick at random
-   among those whose score is within 10 cp of the best candidate, and play it at once.
+   same time does not reach exactly the same node count). If there are any, the engine
+   plays one at once: chosen at random among the moves within 0.3 pawns of the best up to
+   move 5 (varied openings), within 0.1 pawns later. The new-game sheet's "Engine's
+   openings: Strongest" (standard chess only) makes it always play the best-scored move.
 3. Otherwise search. Then: if this move already has an entry with fewer nodes, replace it;
    otherwise add a new entry.
 

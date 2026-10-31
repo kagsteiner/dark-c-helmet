@@ -30,10 +30,12 @@ export async function lookup(key: string): Promise<BookEntry[]> {
   }
 }
 
-/** A book move for the game's position worth at least `nodes`, as a UCI move of the game. */
-export async function bookMove(game: Game, nodes: number): Promise<string | null> {
+/** A book move for the game's position worth at least `nodes`, as a UCI move of the game.
+ *  `strongest`: the best-scored move rather than a random one among the near-best. */
+export async function bookMove(game: Game, nodes: number, strongest = false): Promise<string | null> {
   if (!inBookRange(game)) return null;
-  const entry = chooseBookMove(await lookup(bookKey(game.fen())), nodes);
+  const fen = game.fen();
+  const entry = chooseBookMove(await lookup(bookKey(fen)), nodes, moveNumber(fen), Math.random(), strongest);
   if (!entry) return null;
   return game.legalMoves().find((m) => bookMoveName(m) === entry.move)?.uci ?? null;
 }

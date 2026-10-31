@@ -10,6 +10,8 @@ interface Choices {
   start960: "random" | "number";
   number960: number;
   color: "w" | "random" | "b";
+  /** Standard chess: the engine's book moves varied, or always the strongest. */
+  openings: "varied" | "strongest";
   tcKind: "move" | "game" | "increment" | "classical";
   seconds: number;
   minutes: number;
@@ -24,6 +26,7 @@ const DEFAULTS: Choices = {
   start960: "random",
   number960: 518,
   color: "w",
+  openings: "varied",
   tcKind: "increment",
   seconds: 10,
   minutes: 5,
@@ -70,6 +73,10 @@ export async function chooseNewGame(position?: { startFen: string; chess960: boo
       <div class="field">
         <span class="field-label">You play</span>
         ${segmented("color", [["w", "White"], ["random", "Random"], ["b", "Black"]], c.color)}
+      </div>
+      <div class="field" data-show="openings">
+        <span class="field-label">Engine's openings</span>
+        ${segmented("openings", [["varied", "Varied"], ["strongest", "Strongest"]], c.openings)}
       </div>
       <label class="field">
         <span class="field-label">Time control</span>
@@ -123,6 +130,7 @@ export async function chooseNewGame(position?: { startFen: string; chess960: boo
       start960: d.get("start960") as Choices["start960"],
       number960: n("number960", 0, 959),
       color: d.get("color") as Choices["color"],
+      openings: (d.get("openings") ?? "varied") as Choices["openings"],
       tcKind: d.get("tcKind") as Choices["tcKind"],
       seconds: n("seconds", 1, 3600),
       minutes: n("minutes", 1, 600),
@@ -135,6 +143,8 @@ export async function chooseNewGame(position?: { startFen: string; chess960: boo
     const r = read();
     const visible: Record<string, boolean> = {
       variant: !position,
+      // The book's choice matters in standard chess; Chess960 games are out of book at once.
+      openings: !position && r.variant === "standard",
       chess960: !position && r.variant === "chess960",
       number960: r.start960 === "number",
       move: r.tcKind === "move",
@@ -171,7 +181,7 @@ export async function chooseNewGame(position?: { startFen: string; chess960: boo
         const firstMoveExtra = tc.kind !== "move" ? r.extraSeconds : 0;
         result = { startFen: chess960Fen(n), chess960: true, position960: n, human, tc, firstMoveExtra };
       } else {
-        result = { startFen: START_FEN, chess960: false, human, tc };
+        result = { startFen: START_FEN, chess960: false, human, tc, strongestOpenings: r.openings === "strongest" };
       }
     });
     dialog.addEventListener("close", () => {

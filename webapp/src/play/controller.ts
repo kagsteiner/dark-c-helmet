@@ -18,6 +18,8 @@ export interface GameSetup {
   tc: TimeControl;
   /** Extra seconds for the player's first move (Chess960 with a clock). */
   firstMoveExtra?: number;
+  /** The engine always plays the strongest book move instead of varying (standard chess). */
+  strongestOpenings?: boolean;
 }
 
 export type StarLoss = "undo" | "hint" | "evaluation" | "analysis" | "time";
@@ -241,7 +243,7 @@ export class PlayController {
     this.bookMove = false;
     this.emit();
     // The book's move is used if it was searched at least as deeply as this search would be.
-    const fromBook = engine.nps ? await bookMove(this.game, (engine.nps * this.budgetMs()) / 1000) : null;
+    const fromBook = engine.nps ? await bookMove(this.game, (engine.nps * this.budgetMs()) / 1000, this.setup.strongestOpenings) : null;
     if (token !== this.token) return;
     let uci: string | null;
     let info: SearchInfo | null = null;
