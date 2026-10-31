@@ -185,6 +185,10 @@ network (v10) had never seen Chess960 openings. Net v11 was trained with 50% Che
 (`FRC_PERCENT=50 tools/nnue/pipeline.sh`, or `datagen … <frc_percent>`): +144 Elo vs v10 in
 Chess960 and +16 in standard chess, so one network serves both variants.
 
+Build 83 (net v11) against HIARCS 15.4, 400 games each, 20+0.2, 1 thread: standard chess
+**+298 ± 34** (+297 =84 −19), Chess960 **+361 ± 43** (+323 =65 −12)
+(`tools/games/hiarcs-v11/run.sh`).
+
 ## UCI extensions
 
 | Command | Purpose |

@@ -43,7 +43,8 @@ Against outside engines (single thread each, 20 s + 0.2 s):
 | 39 (net v4) | +116 ± 26 | |
 | 57 (net v7) | +220 ± 29 | |
 | 62 (SPSA, net v8) | +192 ± 29 | −141 ± 30 |
-| **69 (net v10, cache)** | **+250 ± 32** | **−87 ± 28** |
+| 69 (net v10, cache) | +250 ± 32 | −87 ± 28 |
+| **83 (net v11, Chess960 data)** | **+298 ± 34** | |
 
 ## 9.2 Where the Elo came from
 

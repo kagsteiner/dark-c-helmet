@@ -36,13 +36,15 @@ to create such an engine.,.
 
 ## Strength
 
-Single thread each, 20 s + 0.2 s per game, 400 games against HIARCS 15.4 and 200 against
-Shredder 14, on an Apple M5 Max:
+Single thread each, 20 s + 0.2 s per game, on an Apple M5 Max:
 
-| opponent | result | Elo difference |
-|---|---|---|
-| HIARCS 15.4 | +282 =83 −35 | **+250 ± 32** |
-| Shredder 14 | +34 =83 −83 | **−87 ± 28** |
+| opponent | build | games | result | Elo difference |
+|---|---|---|---|---|
+| HIARCS 15.4 | 83 (net v11) | 400 | +297 =84 −19 | **+298 ± 34** |
+| HIARCS 15.4, Chess960 | 83 (net v11) | 400 | +323 =65 −12 | **+361 ± 43** |
+| Shredder 14 | 69 (net v10) | 200 | +34 =83 −83 | **−87 ± 28** |
+
+Shredder 14 doesn't support Chess960.
 
 ## Features
 
