@@ -99,7 +99,9 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done.
 - [x] Consistency pass over all screens (headings, spelling, phone and desktop, light and
       dark)
 - [x] Deploy script (`deploy/deploy.sh`) and nginx configuration (`deploy/nginx.conf`)
-- [ ] Deploy to the VPS; test on iPhone and Android (speed, memory, touch input)
+- [x] Deployed: https://srv706843.hstgr.cloud/chess/ (static files in `~/nodejs/chess`, one
+      `location /chess/` block in the nginx site; threads work)
+- [ ] Test on iPhone and Android (speed, memory, touch input)
 
 ## After the MVP
 
