@@ -186,8 +186,8 @@ network (v10) had never seen Chess960 openings. Net v11 was trained with 50% Che
 Chess960 and +16 in standard chess, so one network serves both variants.
 
 Build 83 (net v11) against HIARCS 15.4, 400 games each, 20+0.2, 1 thread: standard chess
-**+298 ± 34** (+297 =84 −19), Chess960 **+361 ± 43** (+323 =65 −12)
-(`tools/games/hiarcs-v11/run.sh`).
+**+298 ± 34** (+297 =84 −19), Chess960 **+361 ± 43** (+323 =65 −12),
+both matches in parallel at concurrency 8 each, openings `random8.epd` / `frc960.epd`.
 
 ## UCI extensions
 
