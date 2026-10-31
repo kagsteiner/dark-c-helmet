@@ -101,7 +101,7 @@
     --panel: clamp(300px, 30vw, 360px);
     --board: min(calc(100dvh - var(--topbar) - 2 * var(--space-6)), calc(100vw - var(--panel) - 3 * var(--space-6)));
     grid-template-columns: var(--board) var(--panel);
-    grid-template-rows: auto 1fr auto auto;
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
     grid-template-areas:
       "board top"
       "board moves"
@@ -120,7 +120,9 @@
     padding: 0;
   }
 
+  /* The moves never make the panel taller than the board: they scroll inside their row. */
   .play-moves {
+    contain: size;
     padding: var(--space-2) 0;
     overflow-y: auto;
     border-top: 1px solid var(--hairline);
