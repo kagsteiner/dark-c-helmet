@@ -6,9 +6,11 @@
     "engine": "sh engine/build.sh",
     "dev": "vite --host",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview --host"
+    "preview": "vite preview --host",
+    "test": "node --test \"src/**/*.test.ts\""
   },
   "devDependencies": {
+    "@types/node": "^24.19.2",
     "typescript": "^7.0.2",
     "vite": "^8.3.5"
   }

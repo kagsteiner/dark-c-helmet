@@ -33,14 +33,28 @@ type RawMove = Omit<LegalMove, "capture" | "castle" | "check" | "mate"> & {
 };
 
 export class Rules {
-  private constructor(private m: RulesModule) {}
+  private m: RulesModule;
 
-  static async load(): Promise<Rules> {
-    const dir = new URL("engine/", new URL(import.meta.env.BASE_URL, location.href)).href;
+  private constructor(m: RulesModule) {
+    this.m = m;
+  }
+
+  /** Loads the module from the app's engine/ folder. Node tests pass the folder (file URL) and the
+   *  .wasm bytes, since Node cannot fetch file URLs. */
+  static async load(
+    dir = new URL("engine/", new URL(import.meta.env.BASE_URL, location.href)).href,
+    wasmBinary?: Uint8Array,
+  ): Promise<Rules> {
     const factory = (await import(/* @vite-ignore */ dir + "dh-rules.js")).default as (options: {
       locateFile: (path: string) => string;
+      instantiateWasm?: (imports: WebAssembly.Imports, receive: (instance: WebAssembly.Instance) => void) => void;
     }) => Promise<RulesModule>;
-    const m = await factory({ locateFile: (path) => dir + path });
+    const m = await factory({
+      locateFile: (path) => dir + path,
+      instantiateWasm: wasmBinary
+        ? (imports, receive) => receive(new WebAssembly.Instance(new WebAssembly.Module(wasmBinary as BufferSource), imports))
+        : undefined,
+    });
     m.ccall("rules_init", null, [], []);
     return new Rules(m);
   }

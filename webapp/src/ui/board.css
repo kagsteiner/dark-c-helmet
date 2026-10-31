@@ -1,0 +1,130 @@
+.board {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  /* a1 (bottom left) dark, as on a real board */
+  background: repeating-conic-gradient(var(--square-dark) 0 25%, var(--square-light) 0 50%) 0 0 / 25% 25%;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  container-type: inline-size;
+}
+
+.board > * {
+  position: absolute;
+  inset: 0;
+}
+
+.board-pieces,
+.board-highlights,
+.board-arrows,
+.board-coords {
+  pointer-events: none;
+}
+
+.piece,
+.mark,
+.promotion-choice {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 12.5%;
+  height: 12.5%;
+}
+
+.piece {
+  background-size: 100%;
+  transition: transform var(--motion) ease-out;
+  will-change: transform;
+}
+
+.piece.instant,
+.piece.dragging {
+  transition: none;
+}
+
+.piece.dragging {
+  z-index: 2;
+  scale: 1.15;
+}
+
+@media (pointer: coarse) {
+  /* Keep the piece visible above the finger. */
+  .piece.dragging {
+    scale: 1.6;
+    translate: 0 -30%;
+  }
+}
+
+.mark.last-move {
+  background: var(--last-move);
+}
+
+.mark.selected {
+  background: var(--selected);
+}
+
+.mark.premove {
+  background: var(--premove);
+}
+
+.mark.check {
+  background: var(--check);
+}
+
+.mark.target::after {
+  content: "";
+  position: absolute;
+  inset: 37%;
+  border-radius: 50%;
+  background: var(--legal-dot);
+}
+
+.mark.target-capture {
+  background: radial-gradient(transparent 0 66%, var(--legal-dot) 67%);
+}
+
+.coord {
+  position: absolute;
+  font-size: max(9px, 2.6cqi);
+  font-weight: var(--weight-strong);
+  line-height: 1;
+}
+
+.coord.on-light {
+  color: var(--coord-on-light);
+}
+
+.coord.on-dark {
+  color: var(--coord-on-dark);
+}
+
+.coord-file {
+  bottom: 0.6cqi;
+  translate: calc(-100% - 0.8cqi) 0;
+}
+
+.coord-rank {
+  left: 0.6cqi;
+  margin-top: 0.5cqi;
+}
+
+.board-arrows .arrow {
+  stroke: var(--arrow);
+  stroke-width: 0.16;
+  stroke-linecap: round;
+}
+
+.board-overlay {
+  z-index: 3;
+  background: var(--scrim);
+}
+
+.promotion-choice {
+  background-color: var(--surface);
+  background-size: 84%;
+  background-position: center;
+  background-repeat: no-repeat;
+  border-radius: 50%;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}

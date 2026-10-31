@@ -20,8 +20,10 @@ type WorkerMessage = { type: "line"; line: string } | { type: "ready" } | { type
 export class WasmEngineTransport implements EngineTransport {
   readonly canStop: boolean;
   private handlers: ((line: string) => void)[] = [];
+  private worker: Worker;
 
-  private constructor(private worker: Worker, threaded: boolean) {
+  private constructor(worker: Worker, threaded: boolean) {
+    this.worker = worker;
     this.canStop = threaded;
     worker.addEventListener("message", (e: MessageEvent<WorkerMessage>) => {
       if (e.data.type === "line") for (const h of this.handlers) h(e.data.line);

@@ -99,7 +99,8 @@ The work plan is in `BACKLOG.md`.
 | Book | statistics, export, merge from file |
 | Settings | threads, hash, move input, theme |
 
-Navigation: one top-level menu (phone: bottom bar; tablet/desktop: left rail or top bar).
+Navigation: a top bar. From 768 px wide it shows the screens as links; on phones a menu
+button opens them as a list. The bottom of the phone screen belongs to the action bar.
 
 ### Play
 

@@ -24,15 +24,20 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done.
 ## M1 — App skeleton and board
 
 - [x] `webapp/` project: Vite, TypeScript, `npm run dev` with COOP/COEP headers
-- [ ] `tokens.css` and base styles per the UI conventions; light/dark
-- [ ] TypeScript wrapper for the rules module: game = start position + move list, replayed
-      in the module
-- [ ] SAN from the legal-move list (disambiguation, check/mate signs, Chess960 castling
-      `O-O` / `O-O-O`); tests
-- [ ] Board component: cburnett pieces, coordinates, flip, last move, selection, legal-move
-      dots, arrows
-- [ ] Move input: click-click, drag, target-only click, promotion picker, Chess960 castling
-- [ ] Responsive layout shell: phone / tablet / laptop, navigation
+- [x] `tokens.css` and base styles per the UI conventions; light/dark
+- [x] TypeScript wrapper for the rules module (`chess/game.ts`): game = start position + move
+      list, replayed in the module when another game used it
+- [x] SAN from the legal-move list (disambiguation, check/mate signs, Chess960 castling
+      `O-O` / `O-O-O`); `npm test`
+- [x] Chess960 start positions by number (`chess/chess960.ts`), all 960 checked against
+      `tools/books/frc960.epd`
+- [x] Board component: cburnett pieces, coordinates, flip, last move, selection, legal-move
+      dots, check, sliding pieces; arrows implemented (first used by the hint in M2)
+- [x] Move input: click-click, drag, target-only click, promotion picker, Chess960 castling
+      (king onto rook, or onto its target square when that is not an ordinary king move)
+- [x] Responsive layout shell: top bar with links (wide) or menu (phone); Play screen in
+      phone, tablet and landscape layouts. For now both sides are moved by hand;
+      `#/play?fen=…&chess960=1` starts from a position
 
 ## M2 — Playing a game
 

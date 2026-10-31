@@ -1,0 +1,113 @@
+/* Elements used on every screen: text styles, the three button kinds, toggles. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--text-body);
+  line-height: var(--line);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+.title {
+  font-size: var(--text-title);
+  font-weight: var(--weight-strong);
+}
+
+.small {
+  font-size: var(--text-small);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.numeric {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Buttons: primary (filled, at most one per view), secondary (accent text), icon (44 x 44). */
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.btn-primary {
+  min-height: var(--touch);
+  padding: 0 var(--space-6);
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: var(--weight-strong);
+}
+
+.btn-secondary {
+  min-height: var(--touch);
+  padding: 0 var(--space-2);
+  color: var(--accent);
+  font-weight: var(--weight-strong);
+}
+
+.btn-icon {
+  width: var(--touch);
+  height: var(--touch);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius);
+  color: var(--text);
+}
+
+.btn-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+@media (hover: hover) {
+  .btn-icon:hover:not(:disabled),
+  .btn-secondary:hover:not(:disabled) {
+    background: var(--hairline);
+  }
+}
+
+.hairline {
+  border: 0;
+  border-top: 1px solid var(--hairline);
+  margin: 0;
+}

@@ -1,0 +1,91 @@
+/* All colours, sizes and spacing of the app. Screens use these variables only
+   (see "UI conventions" in DESIGN.md). */
+
+:root {
+  color-scheme: light dark;
+
+  /* Type: one family, four sizes, two weights */
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --text-small: 13px;
+  --text-body: 15px;
+  --text-title: 20px;
+  --text-clock: 28px;
+  --weight-regular: 400;
+  --weight-strong: 600;
+  --line: 1.4;
+
+  /* Spacing: multiples of 4 */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  --touch: 44px;     /* minimum touch target */
+  --radius: 6px;     /* buttons, sheets */
+  --motion: 150ms;   /* piece slide; nothing else animates */
+
+  /* Colours: light theme */
+  --bg: #fafaf8;
+  --surface: #ffffff;       /* sheets and dialogs */
+  --text: #1d1d1f;
+  --muted: #6b6b70;
+  --hairline: rgba(0, 0, 0, 0.1);
+  --accent: #2f62c6;
+  --accent-text: #ffffff;   /* text on accent */
+  --danger: #c62f2f;
+  --scrim: rgba(0, 0, 0, 0.35);
+
+  /* Board */
+  --square-light: #eedcb9;
+  --square-dark: #b88b62;
+  --coord-on-light: #b88b62;
+  --coord-on-dark: #eedcb9;
+  --last-move: rgba(240, 200, 40, 0.42);
+  --selected: rgba(47, 98, 198, 0.42);
+  --check: radial-gradient(circle, rgba(220, 30, 30, 0.85) 0%, rgba(220, 30, 30, 0.45) 45%, rgba(220, 30, 30, 0) 75%);
+  --legal-dot: rgba(20, 20, 20, 0.22);
+  --premove: rgba(110, 70, 170, 0.42);
+  --arrow: rgba(47, 98, 198, 0.8);
+}
+
+@media (min-width: 768px) {
+  :root {
+    --text-clock: 32px;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #18191b;
+    --surface: #24262a;
+    --text: #ececec;
+    --muted: #9a9ca2;
+    --hairline: rgba(255, 255, 255, 0.12);
+    --accent: #6d9cf2;
+    --accent-text: #0e1a33;
+    --danger: #ef6b6b;
+    --scrim: rgba(0, 0, 0, 0.55);
+    --square-light: #d9c3a0;
+    --square-dark: #9c7553;
+    --coord-on-light: #9c7553;
+    --coord-on-dark: #d9c3a0;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #18191b;
+  --surface: #24262a;
+  --text: #ececec;
+  --muted: #9a9ca2;
+  --hairline: rgba(255, 255, 255, 0.12);
+  --accent: #6d9cf2;
+  --accent-text: #0e1a33;
+  --danger: #ef6b6b;
+  --scrim: rgba(0, 0, 0, 0.55);
+  --square-light: #d9c3a0;
+  --square-dark: #9c7553;
+  --coord-on-light: #9c7553;
+  --coord-on-dark: #d9c3a0;
+}

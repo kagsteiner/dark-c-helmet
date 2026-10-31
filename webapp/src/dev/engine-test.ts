@@ -1,7 +1,7 @@
 // Manual checks for M0: the WebAssembly engine and the rules module in the browser.
-import { Rules } from "../chess/rules";
-import { threadsAvailable, WasmEngineTransport, type EngineTransport } from "../engine/transport";
-import { PERFT_CASES } from "./perft-cases";
+import { Rules } from "../chess/rules.ts";
+import { threadsAvailable, WasmEngineTransport, type EngineTransport } from "../engine/transport.ts";
+import { PERFT_CASES } from "./perft-cases.ts";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const logEl = $<HTMLPreElement>("log");

@@ -5,10 +5,13 @@
     "moduleResolution": "bundler",
     "lib": ["ES2022", "DOM", "DOM.Iterable", "WebWorker"],
     "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "skipLibCheck": true,
-    "types": ["vite/client"]
+    "types": ["vite/client", "node"]
   },
   "include": ["src"]
 }
