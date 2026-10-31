@@ -76,3 +76,19 @@ More replies, more blindness/optimism, more candidates or deeper lines did not g
 (budget 0, material 60), so the search stopped after its first candidate. Fixed with named
 fields; the corrected profile 1300 measures 146 cp avg loss, 18.9% blunders, 41.6% move match
 (real 1300 players in the same run: 144 cp, 20.4%) - now a close match.
+
+## Results, 1600 band
+
+### net_h1600_v1 (2026-10-31)
+
+Trained 2 epochs on 369M positions (Lichess 2024-01, 1500-1700, 5.6M games); validation on
+2017-01: policy move match 43.1%. `calibrate.py --profile 1600`, 2000 positions, seed 1:
+
+| Moves of | move match | avg loss | blunders (>= 200 cp) |
+|---|---|---|---|
+| real 1600 players | - | 110 cp | 14.7% |
+| line search, profile 1600 | 44.0% | 118 cp | 15.8% |
+| plain policy move | 44.8% | 160 cp | 21.6% |
+
+Blind=25 Replies=2 (115 cp, 42.7%) and Blind=8 Budget=200 LineDepth=5 (116 cp, 41.8%) were
+within noise but less human; the profile is kept as it is.

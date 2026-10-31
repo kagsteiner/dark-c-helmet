@@ -27,7 +27,7 @@ export interface GameSetup {
 
 /** Name shown for the opponent of a game. */
 /** The strength the human-like profiles actually play at (calibration, human/README.md). */
-const HUMAN_RATING: Record<string, string> = { "1300": "1300" };
+const HUMAN_RATING: Record<string, string> = { "1300": "1300", "1600": "1600" };
 
 export function opponentName(setup: GameSetup): string {
   return setup.humanProfile ? `${HUMAN_RATING[setup.humanProfile] ?? setup.humanProfile} Elo player` : "Dark C. Helmet";
