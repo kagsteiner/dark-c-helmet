@@ -146,7 +146,8 @@ Nets so far:
 | `nets/net_v7.nnue` | 483M positions (v4–v6 + 139M from build-56 self-play), 512 hidden, 8 output buckets | +23.3 ± 9.1 Elo vs net_v6 (1,928 games) |
 | `nets/net_v8.nnue` | 663M positions (+180M from SPSA-tuned build 59) | +10.6 ± 5.8 Elo vs net_v7 (4,432 games) |
 | `nets/net_v9.nnue` | 834M positions (+170M from build 62) | +9.7 ± 5.5 vs net_v8; a variant with output buckets by piece-count range × queens on/off (`OUT_SCHEME=1`) scored +14.6 ± 7.0 vs net_v8, not compared head-to-head |
-| `nets/net_v10.nnue` (default) | 998M positions (+164M from build 65), **7 factorized king buckets** (ranks 3–8 one bucket) | +33.7 ± 10.8 vs net_v9; same data: kb4 +33.4 ± 11.1, kb8 +23.3 ± 9.0; kb7 + queens output buckets −7.5 ± 5.8 vs kb7. ~18% fewer nodes/s (no accumulator cache yet) |
+| `nets/net_v10.nnue` | 998M positions (+164M from build 65), **7 factorized king buckets** (ranks 3–8 one bucket) | +33.7 ± 10.8 vs net_v9; same data: kb4 +33.4 ± 11.1, kb8 +23.3 ± 9.0; kb7 + queens output buckets −7.5 ± 5.8 vs kb7. ~18% fewer nodes/s (no accumulator cache yet) |
+| `nets/net_v11.nnue` (default) | 1,189M positions (+191M from build 82, **half of the games from random Chess960 starting positions**), kb7 as v10 | standard chess +16.2 ± 6.0 vs net_v10 (3,794 games, non-regression SPRT [−3, 0] passed); Chess960 +143.7 ± 24.3 (470 games). One shared net for both variants |
 
 ## Search changes and their measured value
 
@@ -179,9 +180,10 @@ Verified with perft on all 960 reference positions to depth 6, NNUE_VERIFY searc
 (`tools/books/make_frc960.py`); `VARIANT=fischerandom BOOK=tools/books/frc960.epd tools/match.sh …`.
 
 Against HIARCS 15.4 in Chess960 (build 81, 400 games, 20+0.2, 1 thread each, all 960 starting
-positions): **+176 ± 35** (+252 =83 −65), compared with +250 ± 32 in standard chess. The
-network has never seen Chess960 openings; a data round with Chess960 starts would be the
-next step.
+positions): **+176 ± 35** (+252 =83 −65), compared with +250 ± 32 in standard chess. That
+network (v10) had never seen Chess960 openings. Net v11 was trained with 50% Chess960 starts
+(`FRC_PERCENT=50 tools/nnue/pipeline.sh`, or `datagen … <frc_percent>`): +144 Elo vs v10 in
+Chess960 and +16 in standard chess, so one network serves both variants.
 
 ## UCI extensions
 

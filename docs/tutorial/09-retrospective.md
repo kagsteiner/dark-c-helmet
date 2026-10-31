@@ -34,6 +34,7 @@ running tests and data generation day and night.
 | | nets v8 (663M), v9 (834M) | +10.6, +9.7 |
 | **8. King buckets** | net v10: 7 factorized king buckets, 998M positions | +33.7 |
 | | accumulator cache (Finny table) | +39.1 |
+| **9. Chess960** (October) | Chess960 support; net v11 with 50% Chess960 games, 1.19B positions | +16.2 (Chess960: +144) |
 
 Against outside engines (single thread each, 20 s + 0.2 s):
 

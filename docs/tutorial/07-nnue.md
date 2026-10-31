@@ -293,6 +293,7 @@ A GPU would be much faster. For our network size, the CPU was enough.
 | v8 | 663 M | more data (SPSA-tuned engine) | +10.6 |
 | v9 | 834 M | more data | +9.7 |
 | **v10** | **998 M** | **7 factorized king buckets** | **+33.7** |
+| v11 | 1,189 M | more data, half of it from Chess960 starting positions | +16.2 (Chess960: +144) |
 
 Two lessons are visible:
 
@@ -332,7 +333,7 @@ Then compare networks (`EvalFile`) in the same position:
 ```
 setoption name EvalFile value nets/net_v4.nnue
 eval
-setoption name EvalFile value nets/net_v10.nnue
+setoption name EvalFile value nets/net_v11.nnue
 eval
 ```
 

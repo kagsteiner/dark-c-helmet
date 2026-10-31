@@ -85,7 +85,7 @@ cmake -S . -B build
 cmake --build build --config Release --target darkhelmet
 ```
 
-The network is embedded in the binary (`src/nnue_net.c`, generated from `nets/net_v10.nnue`);
+The network is embedded in the binary (`src/nnue_net.c`, generated from `nets/net_v11.nnue`);
 no extra files are needed at run time.
 
 ## Usage
@@ -133,7 +133,7 @@ and measurements from this engine:
 | path | contents |
 |---|---|
 | `src/` | the engine |
-| `nets/` | all trained networks, v2 to v10 (v10 is embedded) |
+| `nets/` | all trained networks, v2 to v11 (v11 is embedded) |
 | `tools/nnue/` | self-play data pipeline and the NNUE trainer (plain C, CPU) |
 | `tools/spsa/` | SPSA tuner for search parameters |
 | `tools/tune/` | Texel tuner for the hand-crafted evaluation |
@@ -143,7 +143,7 @@ and measurements from this engine:
 | `docs/tutorial/` | the tutorial |
 | [DEVELOPMENT.md](DEVELOPMENT.md) | how to build, test, tune and train, and the measured history of every change |
 
-The training data itself (about 1 billion positions, ~100 GB) is not part of the repository;
+The training data itself (about 1.2 billion positions, ~120 GB) is not part of the repository;
 `tools/nnue/pipeline.sh` generates new data of the same kind with the engine.
 
 ## Credits

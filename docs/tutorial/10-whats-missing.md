@@ -19,7 +19,7 @@ not measurements in this engine.
 | better training data | evaluation | +10 to +40 | weeks of compute |
 | bigger network | evaluation | uncertain; needs more data first | days + compute |
 | pondering | usability / strength in real games | 0 in testing; real gain in games against people and GUIs | a day |
-| MultiPV, `searchmoves`, Chess960 | usability (analysis) | 0 | hours to a day |
+| MultiPV, `searchmoves` | usability (analysis) | 0 | hours to a day |
 | NUMA, large pages | speed on big machines | 0 to +5 on a laptop | a day |
 
 ## 10.2 Cleanup and tuning (cheap)
@@ -98,9 +98,10 @@ The network's quality is limited by its data. Ideas that strong engines use:
 * **Filtering.** Remove positions that don't teach anything: positions where the side to move
   is in check (already done), positions whose score is far from the game result, positions
   very early in the game (all similar to each other).
-* **Diverse openings.** Our games start with 8 random moves. More variety, for example random
-  positions from Chess960 starting arrays, gives the network more different structures to
-  learn from.
+* **Diverse openings.** Our games start with 8 random moves. More variety gives the network
+  more different structures to learn from. This has since been tried: net v11 was trained with
+  half of the new games starting from random Chess960 arrays, and it gained +16 Elo in standard
+  chess (and +144 in Chess960) over v10.
 * **Rescoring.** Re-evaluate old positions with the current, stronger engine instead of keeping
   the scores from the weaker engine that generated them.
 
@@ -149,9 +150,9 @@ These bring no Elo, but make the engine more useful in a GUI for analysis:
   searching the root N times, each time excluding the moves already found (the same
   exclusion mechanism as singular extensions, chapter 4.9).
 * **`searchmoves`:** restrict the search to given root moves.
-* **Chess960 (Fischer Random):** castling rules for arbitrary starting positions. Mostly a
-  move-generation and FEN/UCI notation issue (king captures own rook to castle). Also useful
-  for training data (10.5).
+* **Chess960 (Fischer Random):** done since this chapter was written (see DEVELOPMENT.md):
+  castling rules for arbitrary starting positions, mostly a move-generation and FEN/UCI
+  notation issue (king captures own rook to castle), and useful for training data (10.5).
 * **WDL output:** `info ... wdl 450 400 150`, the expected win/draw/loss probabilities,
   derived from the score with a fitted model.
 
