@@ -129,6 +129,21 @@
   stroke-width: 1;
 }
 
+.eval-graph .tick {
+  stroke: var(--hairline);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  opacity: 0.6;
+}
+
+.eval-graph .tick-label {
+  fill: var(--text);
+  opacity: 0.55;
+  font-size: 9px;
+  text-anchor: end;
+  dominant-baseline: middle;
+}
+
 .eval-graph .area {
   fill: color-mix(in srgb, var(--accent) 14%, transparent);
 }

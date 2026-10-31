@@ -52,7 +52,7 @@ self.onmessage = async (e: MessageEvent) => {
   if (msg.type === "init") {
     threaded = msg.threaded;
     const dir = new URL("engine/", msg.base).href;
-    const name = threaded ? "dh-engine" : "dh-engine-st";
+    const name = msg.module ?? (threaded ? "dh-engine" : "dh-engine-st");
     try {
       const [factoryModule, bytes] = await Promise.all([
         import(/* @vite-ignore */ dir + name + ".js"),

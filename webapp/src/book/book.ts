@@ -32,12 +32,15 @@ export async function lookup(key: string): Promise<BookEntry[]> {
 
 /** A book move for the game's position worth at least `nodes`, as a UCI move of the game.
  *  `strongest`: the best-scored move rather than a random one among the near-best. */
-export async function bookMove(game: Game, nodes: number, strongest = false): Promise<string | null> {
-  if (!inBookRange(game)) return null;
+/** The book's move for this search budget; `shallow`: the book knows the position, but none
+ *  of its moves was searched as deeply as this search would be. */
+export async function bookMove(game: Game, nodes: number, strongest = false): Promise<{ uci: string | null; shallow: boolean }> {
+  if (!inBookRange(game)) return { uci: null, shallow: false };
   const fen = game.fen();
-  const entry = chooseBookMove(await lookup(bookKey(fen)), nodes, moveNumber(fen), Math.random(), strongest);
-  if (!entry) return null;
-  return game.legalMoves().find((m) => bookMoveName(m) === entry.move)?.uci ?? null;
+  const entries = await lookup(bookKey(fen));
+  const entry = chooseBookMove(entries, nodes, moveNumber(fen), Math.random(), strongest);
+  if (!entry) return { uci: null, shallow: entries.length > 0 };
+  return { uci: game.legalMoves().find((m) => bookMoveName(m) === entry.move)?.uci ?? null, shallow: false };
 }
 
 async function put(entry: BookEntry): Promise<"added" | "updated" | "kept"> {

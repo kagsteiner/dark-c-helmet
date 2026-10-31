@@ -13,6 +13,8 @@ export interface GraphData {
 }
 
 const HEIGHT = 96;
+const GUTTER = 24; // room for the pawn scale on the left
+const SCALE = [5, 2, 0, -2, -5]; // pawns, White's view; the axis is winning chances, so the steps narrow
 
 export class EvalGraph {
   readonly el: HTMLElement;
@@ -48,7 +50,7 @@ export class EvalGraph {
 
   private x(i: number): number {
     const n = Math.max(1, this.data.evals.length - 1);
-    return 4 + (i / n) * (this.width() - 8);
+    return GUTTER + (i / n) * (this.width() - GUTTER - 4);
   }
 
   private y(cp: number): number {
@@ -59,7 +61,7 @@ export class EvalGraph {
     const n = this.data.evals.length - 1;
     if (n < 1) return null;
     const r = this.el.getBoundingClientRect();
-    const i = Math.round(((clientX - r.left - 4) / (r.width - 8)) * n);
+    const i = Math.round(((clientX - r.left - GUTTER) / (r.width - GUTTER - 4)) * n);
     return Math.max(0, Math.min(n, i));
   }
 
@@ -91,8 +93,14 @@ export class EvalGraph {
         return m && p ? `<circle class="dot ${m}" cx="${p[0]}" cy="${p[1]}" r="4"/>` : "";
       })
       .join("");
+    const scale = SCALE.map((p) => {
+      const y = this.y(p * 100);
+      return `<line class="tick" x1="${GUTTER}" x2="${w}" y1="${y}" y2="${y}"/>` +
+        `<text class="tick-label" x="${GUTTER - 4}" y="${y}">${p > 0 ? "+" : ""}${p}</text>`;
+    }).join("");
     this.svg.innerHTML = `
-      <line class="mid" x1="0" x2="${w}" y1="${mid}" y2="${mid}"/>
+      ${scale}
+      <line class="mid" x1="${GUTTER}" x2="${w}" y1="${mid}" y2="${mid}"/>
       <path class="area" d="${area}"/>
       <path class="line" d="${line}"/>
       <line class="cursor" x1="${this.x(cursor)}" x2="${this.x(cursor)}" y1="0" y2="${HEIGHT}"/>

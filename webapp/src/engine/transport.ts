@@ -37,7 +37,8 @@ export class WasmEngineTransport implements EngineTransport {
     });
   }
 
-  static create(threaded = threadsAvailable(), onProgress?: ProgressHandler): Promise<WasmEngineTransport> {
+  /** `module`: another engine in public/engine/ (e.g. "dh-human", always single-threaded). */
+  static create(threaded = threadsAvailable(), onProgress?: ProgressHandler, module?: string): Promise<WasmEngineTransport> {
     const worker = new Worker(new URL("./engine-worker.ts", import.meta.url), { type: "module" });
     return new Promise((resolve, reject) => {
       const onMessage = (e: MessageEvent<WorkerMessage>) => {
@@ -52,7 +53,7 @@ export class WasmEngineTransport implements EngineTransport {
         }
       };
       worker.addEventListener("message", onMessage);
-      worker.postMessage({ type: "init", threaded, base: new URL(import.meta.env.BASE_URL, location.href).href });
+      worker.postMessage({ type: "init", threaded, module, base: new URL(import.meta.env.BASE_URL, location.href).href });
     });
   }
 

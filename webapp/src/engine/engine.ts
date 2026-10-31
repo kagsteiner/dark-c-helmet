@@ -94,13 +94,15 @@ export class Engine {
   private transport: EngineTransport;
   private options: EngineOptions;
   private onProgress?: ProgressHandler;
+  private module?: string;
   private running: Running | null = null;
   private waiters: { prefix: string; resolve: (line: string) => void }[] = [];
 
-  private constructor(transport: EngineTransport, options: EngineOptions, onProgress?: ProgressHandler) {
+  private constructor(transport: EngineTransport, options: EngineOptions, onProgress?: ProgressHandler, module?: string) {
     this.transport = transport;
     this.options = options;
     this.onProgress = onProgress;
+    this.module = module;
   }
 
   static async start(options = defaultEngineOptions(), onProgress?: ProgressHandler): Promise<Engine> {
@@ -109,6 +111,17 @@ export class Engine {
     await engine.handshake();
     const saved = await load<{ threads: number; nps: number }>(NPS_KEY);
     if (saved && saved.threads === options.threads) engine.nps = saved.nps;
+    return engine;
+  }
+
+  /** The human-like opponent (human/ in the project, public/engine/dh-human.*): single-threaded,
+   *  answers "go" at once, with the given profile ("1300"). */
+  static async startHuman(profile: string): Promise<Engine> {
+    const transport = await WasmEngineTransport.create(false, undefined, "dh-human");
+    const engine = new Engine(transport, { threads: 1, hashMb: 1 }, undefined, "dh-human");
+    await engine.handshake();
+    engine.transport.send(`setoption name Profile value ${profile}`);
+    engine.transport.send(`setoption name Seed value ${Math.floor(Math.random() * 2 ** 31)}`);
     return engine;
   }
 
@@ -218,7 +231,7 @@ export class Engine {
     // Single-threaded: restart the engine.
     this.running = null;
     this.transport.close();
-    this.transport = await WasmEngineTransport.create(false, this.onProgress);
+    this.transport = await WasmEngineTransport.create(false, this.onProgress, this.module);
     this.waiters = [];
     await this.handshake();
     r.resolve({ bestmove: null, info: r.info, nodes: r.info?.nodes ?? 0, time: r.info?.time ?? 0 });

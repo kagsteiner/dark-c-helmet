@@ -1,7 +1,7 @@
 // The Play screen: renders the PlayController's game and passes the player's input to it.
 import { placementFromFen } from "../chess/fen.ts";
 import { describeTimeControl, formatClock, type Side } from "../play/clocks.ts";
-import type { PlayController, StarLoss } from "../play/controller.ts";
+import { opponentName, type PlayController, type StarLoss } from "../play/controller.ts";
 import { chooseNewGame } from "../play/new-game.ts";
 import { Board } from "../ui/board.ts";
 import { icons } from "../ui/icons.ts";
@@ -76,7 +76,7 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
         board.setArrows(c.hint ? [{ from: c.hint.from, to: c.hint.to }] : []);
 
         const human = c.setup.human;
-        $(".play-top .player-name").textContent = "Dark C. Helmet";
+        $(".play-top .player-name").textContent = opponentName(c.setup);
         $(".play-bottom .player-name").textContent = human === "w" ? "You (White)" : "You (Black)";
         const tc = describeTimeControl(c.setup.tc);
         $(".play-meta").textContent =
@@ -98,7 +98,9 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
                 : humanTurn
                   ? c.bookMove
                     ? "Your move. The engine played a move from its book."
-                    : "Your move."
+                    : c.bookTooShallow
+                      ? "Your move. The book's analysis here is shallower than this time control, so the engine thought for itself."
+                      : "Your move."
                   : "");
         $(".play-help").textContent = c.hint ? `Hint: ${c.hint.san}` : c.evaluation ? `Evaluation: ${c.evaluation}` : "";
 

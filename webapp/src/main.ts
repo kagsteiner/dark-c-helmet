@@ -32,6 +32,9 @@ startShell({
   settings: settingsScreen(controller),
 });
 
+// The human-like opponent is downloaded when a game against it starts.
+controller.humanLoader = (profile) => Engine.startHuman(profile);
+
 // A newer master opening book on the server: merge it (setting) or ask, once per version.
 checkMasterAtStartup(() => window.dispatchEvent(new Event("book-changed")));
 

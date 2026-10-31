@@ -20,6 +20,14 @@ export interface GameSetup {
   firstMoveExtra?: number;
   /** The engine always plays the strongest book move instead of varying (standard chess). */
   strongestOpenings?: boolean;
+  /** The opponent: Dark C. Helmet (default) or a human-like player of a rating band ("1300"),
+   *  which plays without the book and uses its whole move time. */
+  humanProfile?: string;
+}
+
+/** Name shown for the opponent of a game. */
+export function opponentName(setup: GameSetup): string {
+  return setup.humanProfile ? `Human-like ${setup.humanProfile}` : "Dark C. Helmet";
 }
 
 export type StarLoss = "undo" | "hint" | "evaluation" | "analysis" | "time";
@@ -77,7 +85,12 @@ export class PlayController {
   premove: [number, number] | null = null;
   /** The engine's last move came from the opening book. */
   bookMove = false;
+  /** The book knew the engine's last position, but too shallowly for this time control. */
+  bookTooShallow = false;
   engine: Engine | null = null;
+  /** Starts the human-like opponent of a profile (set by main.ts; loaded when first needed). */
+  humanLoader: ((profile: string) => Promise<Engine>) | null = null;
+  private human: { profile: string; engine: Promise<Engine> } | null = null;
   private rules: Rules;
   private lowScores = 0;
   private active = false;
@@ -175,6 +188,7 @@ export class PlayController {
     this.lowScores = 0;
     this.premove = null;
     this.bookMove = false;
+    this.bookTooShallow = false;
     this.clearHelp();
     this.engine?.newGame();
     this.persist();
@@ -195,6 +209,16 @@ export class PlayController {
     this.thinking = false;
     this.helping = null;
     this.engine?.stop();
+    this.human?.engine.then((e) => e.stop());
+  }
+
+  /** The engine that plays the opponent's moves in this game. */
+  private opponent(): Promise<Engine> | null {
+    const profile = this.setup.humanProfile;
+    if (!profile) return this.engine ? Promise.resolve(this.engine) : null;
+    if (!this.humanLoader) return null;
+    if (this.human?.profile !== profile) this.human = { profile, engine: this.humanLoader(profile) };
+    return this.human.engine;
   }
 
   private clearHelp(): void {
@@ -223,6 +247,7 @@ export class PlayController {
     this.helping = null;
     this.clearHelp();
     this.bookMove = false;
+    this.bookTooShallow = false;
     this.clocks?.moveMade(this.setup.human);
     this.checkEnd();
     this.persist();
@@ -236,14 +261,32 @@ export class PlayController {
   }
 
   private async engineMove(): Promise<void> {
-    const engine = this.engine;
-    if (!engine) return; // starts when the engine has loaded (attachEngine)
+    const pending = this.opponent();
+    if (!pending) return; // starts when the engine has loaded (attachEngine)
     const token = ++this.token;
     this.thinking = true;
     this.bookMove = false;
+    this.bookTooShallow = false;
     this.emit();
+    const started = performance.now();
+    let engine: Engine;
+    try {
+      engine = await pending;
+    } catch (err) {
+      console.error(err);
+      if (token === this.token) this.thinking = false;
+      this.emit();
+      return;
+    }
+    if (token !== this.token) return;
+    const humanLike = !!this.setup.humanProfile;
     // The book's move is used if it was searched at least as deeply as this search would be.
-    const fromBook = engine.nps ? await bookMove(this.game, (engine.nps * this.budgetMs()) / 1000, this.setup.strongestOpenings) : null;
+    // The human-like player has no book.
+    const book =
+      !humanLike && engine.nps
+        ? await bookMove(this.game, (engine.nps * this.budgetMs()) / 1000, this.setup.strongestOpenings)
+        : null;
+    const fromBook = book?.uci ?? null;
     if (token !== this.token) return;
     let uci: string | null;
     let info: SearchInfo | null = null;
@@ -252,9 +295,17 @@ export class PlayController {
       if (token !== this.token) return;
       uci = fromBook;
     } else {
+      const budget = this.budgetMs(); // before the search: the clock keeps running
       const result = await engine.search(this.position(), this.limits());
       if (token !== this.token) return;
-      record(this.game, result, engine, "game");
+      if (humanLike) {
+        // A person uses the time the move deserves (varied by +-25%, like bin/humanplayer).
+        const wait = budget * (0.75 + Math.random() * 0.5) - (performance.now() - started);
+        if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+        if (token !== this.token) return;
+      } else {
+        record(this.game, result, engine, "game");
+      }
       uci = result.bestmove;
       info = result.info;
     }
@@ -264,6 +315,7 @@ export class PlayController {
       return;
     }
     this.bookMove = !!fromBook;
+    this.bookTooShallow = !fromBook && !!book?.shallow;
     this.clocks?.moveMade(this.engineSide);
     if (info) {
       const lost = "mate" in info.score ? info.score.mate < 0 : info.score.cp <= RESIGN_CP;
@@ -347,6 +399,7 @@ export class PlayController {
     this.lowScores = 0;
     this.premove = null;
     this.bookMove = false;
+    this.bookTooShallow = false;
     this.clearHelp();
     this.loseStar("undo");
     if (this.active) this.clocks?.start(this.setup.human);

@@ -41,7 +41,20 @@ spsa: $(SRCS) $(wildcard src/*.h)
 	@mkdir -p bin
 	$(CC) $(CFLAGS) -DSPSA $(VERSION_DEF) -o bin/darkhelmet-spsa $(SRCS) -lm -lpthread
 
+# Human-like player (human/, see human/README.md). Uses the board code of src/ but none of
+# its search or net, so the main engine is unaffected.
+HUMAN_BOARD = src/bitboard.c src/position.c src/movegen.c src/eval.c human/board_stubs.c
+human-tools: human/convert.c human/train.c human/hnet.h $(HUMAN_BOARD)
+	@mkdir -p bin
+	$(CC) -O3 -march=native -std=c11 -Wall -Wextra -Isrc -o bin/human-convert human/convert.c $(HUMAN_BOARD) -lm
+	$(CC) -O3 -march=native -std=c11 -Wall -Wextra -Isrc -DACCELERATE_NEW_LAPACK -o bin/human-train human/train.c -framework Accelerate -lm -lpthread
+
+human: $(wildcard human/*.c) $(wildcard human/*.h) $(HUMAN_BOARD)
+	@mkdir -p bin
+	$(CC) -O3 -march=native -std=c11 -Wall -Wextra -Isrc $(VERSION_DEF) -o bin/humanplayer \
+		human/hnet.c human/hsearch.c human/huci.c human/hnet_data.c $(HUMAN_BOARD) -lm
+
 clean:
 	rm -f $(EXE)
 
-.PHONY: all clean tuner spsa pgo
+.PHONY: all clean tuner spsa pgo human human-tools

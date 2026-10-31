@@ -1,4 +1,4 @@
-// The new-game sheet: variant, colour, time control. The last choices are remembered.
+// The new-game sheet: opponent, variant, colour, time control. The last choices are remembered.
 import { chess960Fen, randomChess960 } from "../chess/chess960.ts";
 import { START_FEN } from "../chess/game.ts";
 import { load, save } from "../storage.ts";
@@ -6,6 +6,8 @@ import type { TimeControl } from "./clocks.ts";
 import type { GameSetup } from "./controller.ts";
 
 interface Choices {
+  /** "engine" (Dark C. Helmet) or a human-like profile ("human-1300"). */
+  opponent: string;
   variant: "standard" | "chess960";
   start960: "random" | "number";
   number960: number;
@@ -22,6 +24,7 @@ interface Choices {
 }
 
 const DEFAULTS: Choices = {
+  opponent: "engine",
   variant: "standard",
   start960: "random",
   number960: 518,
@@ -56,6 +59,10 @@ export async function chooseNewGame(position?: { startFen: string; chess960: boo
   dialog.innerHTML = `
     <form class="sheet-body" method="dialog">
       <h2 class="title">New game</h2>
+      <div class="field" data-show="opponent">
+        <span class="field-label">Opponent</span>
+        ${segmented("opponent", [["engine", "Dark C. Helmet"], ["human-1300", "Human-like 1300"]], c.opponent)}
+      </div>
       <div class="field" data-show="variant">
         <span class="field-label">Variant</span>
         ${segmented("variant", [["standard", "Standard"], ["chess960", "Chess960"]], c.variant)}
@@ -126,6 +133,7 @@ export async function chooseNewGame(position?: { startFen: string; chess960: boo
       return Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : (DEFAULTS[k] as number);
     };
     return {
+      opponent: (d.get("opponent") ?? "engine") as string,
       variant: d.get("variant") as Choices["variant"],
       start960: d.get("start960") as Choices["start960"],
       number960: n("number960", 0, 959),
@@ -141,18 +149,21 @@ export async function chooseNewGame(position?: { startFen: string; chess960: boo
   };
   const update = () => {
     const r = read();
+    // The human-like player learned from standard games only.
+    const human = r.opponent !== "engine";
     const visible: Record<string, boolean> = {
-      variant: !position,
+      opponent: !position?.chess960,
+      variant: !position && !human,
       // The book's choice matters in standard chess; Chess960 games are out of book at once.
-      openings: !position && r.variant === "standard",
-      chess960: !position && r.variant === "chess960",
+      openings: !position && !human && r.variant === "standard",
+      chess960: !position && !human && r.variant === "chess960",
       number960: r.start960 === "number",
       move: r.tcKind === "move",
       game: r.tcKind === "game",
       increment: r.tcKind === "increment",
       classical: r.tcKind === "classical",
       // Chess960 with a clock: time to look at the starting position.
-      extra: (position ? position.chess960 : r.variant === "chess960") && r.tcKind !== "move",
+      extra: (position ? position.chess960 : !human && r.variant === "chess960") && r.tcKind !== "move",
     };
     for (const el of form.querySelectorAll<HTMLElement>("[data-show]")) el.hidden = !visible[el.dataset.show!];
   };
@@ -174,8 +185,11 @@ export async function chooseNewGame(position?: { startFen: string; chess960: boo
               ? { kind: "game", minutes: r.incMinutes, increment: r.incSeconds }
               : { kind: "classical" };
       const human = r.color === "random" ? (Math.random() < 0.5 ? "w" : "b") : r.color;
+      const humanProfile = r.opponent.startsWith("human-") && !position?.chess960 ? r.opponent.slice(6) : undefined;
       if (position) {
-        result = { ...position, human, tc, firstMoveExtra: position.chess960 && tc.kind !== "move" ? r.extraSeconds : 0 };
+        result = { ...position, human, tc, humanProfile, firstMoveExtra: position.chess960 && tc.kind !== "move" ? r.extraSeconds : 0 };
+      } else if (humanProfile) {
+        result = { startFen: START_FEN, chess960: false, human, tc, humanProfile };
       } else if (r.variant === "chess960") {
         const n = r.start960 === "random" ? randomChess960() : r.number960;
         const firstMoveExtra = tc.kind !== "move" ? r.extraSeconds : 0;

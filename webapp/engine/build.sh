@@ -3,6 +3,7 @@
 #   dh-engine.js/.wasm      search engine, multi-threaded (needs cross-origin isolation)
 #   dh-engine-st.js/.wasm   search engine, single-threaded fallback
 #   dh-rules.js/.wasm       chess rules for the UI (no search, no net)
+#   dh-human.js/.wasm       human-like opponent (human/, single-threaded, own nets)
 # Needs emcc (Emscripten) on PATH. Run from anywhere.
 set -e
 
@@ -42,5 +43,12 @@ emcc $CFLAGS -I"$SRC" "$ROOT/webapp/engine/rules_api.c" "$SRC/bitboard.c" "$SRC/
     "$SRC/movegen.c" "$SRC/eval.c" "$SRC/perft.c" $COMMON \
     -sEXPORTED_FUNCTIONS=_rules_init,_rules_set_fen,_rules_fen,_rules_play,_rules_undo,_rules_state,_rules_in_check,_rules_moves,_rules_perft \
     -sEXPORT_NAME=createRules -o "$OUT/dh-rules.js"
+
+echo "human player"
+HUMAN="$ROOT/human"
+# shellcheck disable=SC2086
+emcc $CFLAGS -I"$SRC" -DENGINE_VERSION="\"$VERSION\"" "$HUMAN/huci.c" "$HUMAN/hsearch.c" "$HUMAN/hnet.c" \
+    "$HUMAN/hnet_data.c" "$HUMAN/board_stubs.c" "$SRC/bitboard.c" "$SRC/position.c" "$SRC/movegen.c" "$SRC/eval.c" \
+    "$ROOT/webapp/engine/wasm_io.c" $COMMON $ENGINE_EXPORTS -sINITIAL_MEMORY=64MB -o "$OUT/dh-human.js"
 
 ls -l "$OUT"
