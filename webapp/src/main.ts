@@ -1,6 +1,7 @@
 import { Rules } from "./chess/rules.ts";
 import { Engine } from "./engine/engine.ts";
 import { PlayController } from "./play/controller.ts";
+import { analysisScreen } from "./screens/analysis.ts";
 import { playScreen } from "./screens/play.ts";
 import { setupScreen } from "./screens/setup.ts";
 import { placeholder, startShell } from "./ui/shell.ts";
@@ -21,7 +22,7 @@ const setStatus = (s: string | null) => {
 startShell({
   play: playScreen(controller, () => engineStatus),
   setup: setupScreen(rules, controller),
-  analysis: placeholder("Analysis", "Analysis comes in milestone M4."),
+  analysis: analysisScreen(rules, controller),
   book: placeholder("Opening book", "The opening book comes in milestone M5."),
   settings: placeholder("Settings", "Settings come in milestone M6."),
 });

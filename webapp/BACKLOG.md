@@ -70,10 +70,15 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done.
 
 ## M4 — Analysis
 
-- [ ] Endless analysis: depth, nodes, score, PV in SAN; start/stop
-- [ ] Move through the game; try moves on the board without touching the game
-- [ ] Opened from a game: clocks stop, star goes out, "Back to game"
-- [ ] Full-game pass: time per move, eval graph, inaccuracy/mistake/blunder marks
+- [x] Endless analysis: score, depth, nodes, speed, PV in SAN, best move as an arrow;
+      start/stop
+- [x] Move through the line (buttons, arrow keys, clicking moves); try moves on the board,
+      which replace the rest of the line without touching the game
+- [x] Opened from a game: clocks stop, star goes out, "Back to game"; from Setup with a
+      position
+- [x] Full-game review: time per position (0.5–10 s), evaluation graph (hover, click to
+      jump), marks ?! ? ?? by the drop in winning chances (lichess thresholds), summary
+      per side
 
 ## M5 — Opening book
 

@@ -136,8 +136,9 @@ opening Analysis, time forfeit. It has no other effect. Clicking it shows one li
 
 - Endless analysis of the current position: depth, nodes, score, PV (in SAN). One line in
   the MVP; MultiPV comes later (needs an engine change).
-- Full-game pass: a fixed time per move; result is an eval graph and marks for inaccuracy /
-  mistake / blunder.
+- Full-game pass: a fixed time per position; result is an eval graph and marks for
+  inaccuracy / mistake / blunder. A move is judged by how much it lowers the mover's winning
+  chances (from the centipawn score, as on lichess): 5 / 10 / 15 percentage points.
 - Opened during a game: both clocks stop, the star goes out, moves tried in analysis do not
   touch the game, "Back to game" resumes exactly where it was.
 - Import PGN (post-MVP), FEN import/export (MVP).

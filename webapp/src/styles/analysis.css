@@ -1,0 +1,202 @@
+/* Analysis screen. Phone / portrait: board, navigation, then the panel (the page scrolls).
+   Landscape from 768 px: board and navigation on the left, panel on the right. */
+
+.analysis {
+  --board: min(100vw, 640px);
+  display: grid;
+  grid-template-columns: var(--board);
+  grid-template-areas: "board" "nav" "panel";
+  justify-content: center;
+  align-content: start;
+}
+
+.an-board {
+  grid-area: board;
+}
+
+.an-nav {
+  grid-area: nav;
+  display: flex;
+  justify-content: center;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.an-panel {
+  grid-area: panel;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+}
+
+.an-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.an-header .back {
+  margin-right: calc(-1 * var(--space-2));
+}
+
+/* Engine output: one of the few boxed elements. */
+.an-engine {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  padding: var(--space-1) var(--space-3) var(--space-2) var(--space-1);
+}
+
+.an-engine-top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.an-score {
+  font-size: var(--text-title);
+  font-weight: var(--weight-strong);
+  min-width: 4ch;
+}
+
+.an-pv {
+  padding-left: var(--space-2);
+  overflow-wrap: anywhere;
+}
+
+.an-pv:empty {
+  display: none;
+}
+
+.an-moves .move {
+  font: inherit;
+  border-radius: 3px;
+  padding: 0 var(--space-1);
+  margin: 0 calc(-1 * var(--space-1));
+  text-align: left;
+}
+
+@media (hover: hover) {
+  .an-moves .move:hover:not(:disabled) {
+    background: var(--hairline);
+  }
+}
+
+.mark-sym {
+  font-weight: var(--weight-strong);
+  margin-left: 1px;
+}
+
+.mark-sym.inaccuracy {
+  color: var(--mark-inaccuracy);
+}
+.mark-sym.mistake {
+  color: var(--mark-mistake);
+}
+.mark-sym.blunder {
+  color: var(--mark-blunder);
+}
+
+.an-review-row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+
+.an-review-row .field {
+  flex: 1;
+}
+
+.an-review-status:empty {
+  display: none;
+}
+
+/* Evaluation graph */
+.eval-graph {
+  position: relative;
+  cursor: pointer;
+}
+
+.eval-graph svg {
+  display: block;
+  width: 100%;
+}
+
+.eval-graph .mid {
+  stroke: var(--hairline);
+  stroke-width: 1;
+}
+
+.eval-graph .area {
+  fill: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.eval-graph .line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.eval-graph .cursor {
+  stroke: var(--text);
+  stroke-width: 1;
+  opacity: 0.5;
+}
+
+.eval-graph .crosshair {
+  stroke: var(--muted);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+.eval-graph .dot {
+  stroke: var(--bg);
+  stroke-width: 2;
+}
+.eval-graph .dot.inaccuracy {
+  fill: var(--mark-inaccuracy);
+}
+.eval-graph .dot.mistake {
+  fill: var(--mark-mistake);
+}
+.eval-graph .dot.blunder {
+  fill: var(--mark-blunder);
+}
+
+.eval-tip {
+  position: absolute;
+  top: calc(-1 * var(--space-6));
+  white-space: nowrap;
+  padding: 2px var(--space-2);
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+}
+
+@media (min-width: 768px) and (min-aspect-ratio: 1/1) {
+  .analysis {
+    --panel: clamp(320px, 32vw, 400px);
+    --board: min(calc(100dvh - var(--topbar) - 2 * var(--space-6) - var(--touch)), calc(100vw - var(--panel) - 3 * var(--space-6)));
+    grid-template-columns: var(--board) var(--panel);
+    grid-template-areas: "board panel" "nav panel";
+    grid-template-rows: auto 1fr;
+    column-gap: var(--space-6);
+    padding: var(--space-6);
+    align-content: center;
+  }
+
+  .an-nav {
+    border-bottom: 0;
+  }
+
+  .an-panel {
+    padding: 0 var(--space-1) 0 0;
+    max-height: calc(var(--board) + var(--touch));
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+}

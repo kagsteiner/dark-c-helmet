@@ -49,6 +49,11 @@
   --premove: rgba(110, 70, 170, 0.42);
   --arrow: rgba(47, 98, 198, 0.8);
   --star: #f2b705;
+
+  /* Move marks in the review (always shown with ?!, ?, ?? as well) */
+  --mark-inaccuracy: #b98900;
+  --mark-mistake: #d26a00;
+  --mark-blunder: #c62f2f;
 }
 
 @media (min-width: 768px) {
@@ -72,6 +77,9 @@
     --square-dark: #9c7553;
     --coord-on-light: #9c7553;
     --coord-on-dark: #d9c3a0;
+    --mark-inaccuracy: #e0b43c;
+    --mark-mistake: #f08a3c;
+    --mark-blunder: #ef6b6b;
   }
 }
 
@@ -89,4 +97,7 @@
   --square-dark: #9c7553;
   --coord-on-light: #9c7553;
   --coord-on-dark: #d9c3a0;
+  --mark-inaccuracy: #e0b43c;
+  --mark-mistake: #f08a3c;
+  --mark-blunder: #ef6b6b;
 }

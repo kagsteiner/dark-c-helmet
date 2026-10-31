@@ -81,6 +81,13 @@ a:focus-visible {
   font-weight: var(--weight-strong);
 }
 
+a.btn-primary,
+a.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
 .btn-secondary {
   min-height: var(--touch);
   padding: 0 var(--space-2);
