@@ -1,14 +1,17 @@
 import { Rules } from "./chess/rules.ts";
-import { Engine } from "./engine/engine.ts";
+import { defaultEngineOptions, Engine } from "./engine/engine.ts";
 import { PlayController } from "./play/controller.ts";
 import { analysisScreen } from "./screens/analysis.ts";
 import { bookScreen } from "./screens/book.ts";
 import { playScreen } from "./screens/play.ts";
+import { settingsScreen } from "./screens/settings.ts";
 import { setupScreen } from "./screens/setup.ts";
-import { placeholder, startShell } from "./ui/shell.ts";
+import { loadSettings } from "./settings.ts";
+import { startShell } from "./ui/shell.ts";
 import "./styles/tokens.css";
 import "./styles/base.css";
 
+const userSettings = await loadSettings();
 const rules = await Rules.load();
 const controller = new PlayController(rules);
 await controller.restore();
@@ -25,11 +28,13 @@ startShell({
   setup: setupScreen(rules, controller),
   analysis: analysisScreen(rules, controller),
   book: bookScreen(),
-  settings: placeholder("Settings", "Settings come in milestone M6."),
+  settings: settingsScreen(controller),
 });
 
 try {
-  const engine = await Engine.start(undefined, (loaded, total) => {
+  const defaults = defaultEngineOptions();
+  const options = { threads: userSettings.threads ?? defaults.threads, hashMb: userSettings.hashMb ?? defaults.hashMb };
+  const engine = await Engine.start(options, (loaded, total) => {
     setStatus(total ? `Downloading engine… ${Math.round((loaded / total) * 100)}%` : "Downloading engine…");
   });
   setStatus("Preparing engine…");

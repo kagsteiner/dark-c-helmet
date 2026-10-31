@@ -94,10 +94,12 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done.
 
 ## M6 — MVP polish and release
 
-- [ ] Settings screen: threads, hash, target-only click, theme
-- [ ] About: engine version, net, licences (cburnett attribution)
-- [ ] Consistency pass over all screens
-- [ ] nginx config with COOP/COEP on the VPS; deploy script; test on iPhone and Android
+- [x] Settings screen: threads, hash, target-only click, theme (system / light / dark)
+- [x] About: engine build, net, threads, measured speed, licences (cburnett attribution)
+- [x] Consistency pass over all screens (headings, spelling, phone and desktop, light and
+      dark)
+- [x] Deploy script (`deploy/deploy.sh`) and nginx configuration (`deploy/nginx.conf`)
+- [ ] Deploy to the VPS; test on iPhone and Android (speed, memory, touch input)
 
 ## After the MVP
 

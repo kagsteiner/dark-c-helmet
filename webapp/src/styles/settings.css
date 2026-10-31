@@ -1,0 +1,34 @@
+.settings {
+  gap: var(--space-3);
+}
+
+.section-title {
+  font-size: var(--text-body);
+  font-weight: var(--weight-strong);
+  margin-top: var(--space-4);
+}
+
+.about {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: var(--space-6);
+  row-gap: var(--space-2);
+  margin: 0;
+}
+
+.about dt {
+  color: var(--muted);
+}
+
+.about dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.settings a {
+  color: var(--accent);
+}
+
+.settings-status:empty {
+  display: none;
+}

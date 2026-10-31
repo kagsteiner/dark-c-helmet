@@ -73,6 +73,7 @@ export function parseInfo(line: string): SearchInfo | null {
 }
 
 interface Running {
+  measure: boolean;
   resolve: (r: SearchResult) => void;
   info: SearchInfo | null;
   onInfo?: (info: SearchInfo) => void;
@@ -104,6 +105,26 @@ export class Engine {
     const saved = await load<{ threads: number; nps: number }>(NPS_KEY);
     if (saved && saved.threads === options.threads) engine.nps = saved.nps;
     return engine;
+  }
+
+  get currentOptions(): EngineOptions {
+    return { ...this.options };
+  }
+
+  /** Changes threads and hash size (stops a running search). */
+  async setOptions(options: EngineOptions): Promise<void> {
+    await this.stop();
+    const threadsChanged = options.threads !== this.options.threads;
+    this.options = options;
+    this.transport.send(`setoption name Threads value ${options.threads}`);
+    this.transport.send(`setoption name Hash value ${options.hashMb}`);
+    this.transport.send("isready");
+    await this.waitFor("readyok");
+    if (threadsChanged) {
+      // The speed estimate belongs to the old thread count.
+      const saved = await load<{ threads: number; nps: number }>(NPS_KEY);
+      this.nps = saved && saved.threads === options.threads ? saved.nps : 0;
+    }
   }
 
   get canStop(): boolean {
@@ -141,8 +162,8 @@ export class Engine {
       const r = this.running;
       this.running = null;
       const move = line.split(/\s+/)[1];
-      if (r.info && r.info.time >= 1000 && r.info.nps > 0) {
-        this.nps = this.nps ? Math.round(this.nps * 0.7 + r.info.nps * 0.3) : r.info.nps;
+      if (r.measure && r.info && r.info.time >= 500 && r.info.nps > 0) {
+        this.nps = this.nps ? Math.round(this.nps * 0.5 + r.info.nps * 0.5) : r.info.nps;
         save(NPS_KEY, { threads: this.options.threads, nps: this.nps });
       }
       r.resolve({ bestmove: move && move !== "0000" ? move : null, info: r.info });
@@ -151,8 +172,14 @@ export class Engine {
     if (i >= 0) this.waiters.splice(i, 1)[0].resolve(line);
   }
 
-  /** Starts a search. A search still running is stopped first. */
-  async search(pos: EnginePosition, limits: SearchLimits, onInfo?: (info: SearchInfo) => void): Promise<SearchResult> {
+  /** Starts a search. A search still running is stopped first. `measure`: count its speed
+   *  towards the nodes-per-second estimate. */
+  async search(
+    pos: EnginePosition,
+    limits: SearchLimits,
+    onInfo?: (info: SearchInfo) => void,
+    measure = true,
+  ): Promise<SearchResult> {
     await this.stop();
     this.transport.send(`setoption name UCI_Chess960 value ${pos.chess960}`);
     const moves = pos.moves.length ? " moves " + pos.moves.join(" ") : "";
@@ -163,7 +190,7 @@ export class Engine {
       .join(" ");
     let resolve!: (r: SearchResult) => void;
     const done = new Promise<SearchResult>((r) => (resolve = r));
-    this.running = { resolve, info: null, onInfo, done };
+    this.running = { measure, resolve, info: null, onInfo, done };
     this.transport.send(`go ${go}`);
     return done;
   }
@@ -190,9 +217,11 @@ export class Engine {
     if (!this.running) this.transport.send("ucinewgame");
   }
 
-  /** A short search so the browser optimises the engine code before the first real move. */
+  /** A short search so the browser optimises the engine code before the first real move.
+   *  It runs slower than later searches, so it does not count for the speed estimate. */
   async warmUp(): Promise<void> {
-    await this.search({ startFen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", moves: [], chess960: false }, { movetime: 1500 });
+    const start = { startFen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", moves: [], chess960: false };
+    await this.search(start, { movetime: 1500 }, undefined, false);
     this.newGame();
   }
 }

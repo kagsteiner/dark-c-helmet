@@ -65,12 +65,3 @@ export function startShell(screens: Record<Route, Screen>): void {
   window.addEventListener("hashchange", show);
   show();
 }
-
-/** A screen that is not built yet. */
-export function placeholder(title: string, text: string): Screen {
-  return {
-    mount(root) {
-      root.innerHTML = `<section class="page"><h1 class="title">${title}</h1><p class="muted">${text}</p></section>`;
-    },
-  };
-}

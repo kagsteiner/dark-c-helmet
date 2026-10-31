@@ -11,6 +11,7 @@ import { Board, type Color } from "../ui/board.ts";
 import { EvalGraph } from "../ui/eval-graph.ts";
 import { icons } from "../ui/icons.ts";
 import { MoveInput } from "../ui/move-input.ts";
+import { settings } from "../settings.ts";
 import type { Screen } from "../ui/shell.ts";
 import "../styles/play.css";
 import "../styles/analysis.css";
@@ -80,10 +81,7 @@ export function analysisScreen(rules: Rules, controller: PlayController): Screen
             <button class="btn-icon" data-nav="last" aria-label="End" title="End">${icons.last}</button>
           </div>
           <div class="an-panel">
-            <div class="an-header">
-              <h1 class="title">Analysis</h1>
-              ${fromRunningGame ? `<a class="btn-secondary back" href="#/play">Back to game</a>` : ""}
-            </div>
+            ${fromRunningGame ? `<div class="an-header"><span class="small muted">Analyzing the game in progress</span><a class="btn-secondary back" href="#/play">Back to game</a></div>` : ""}
             <div class="an-engine">
               <div class="an-engine-top">
                 <button class="btn-icon" data-action="toggle" aria-label="Start analysis"></button>
@@ -159,7 +157,7 @@ export function analysisScreen(rules: Rules, controller: PlayController): Screen
           }
           positionChanged();
         },
-        targetOnly: () => true,
+        targetOnly: () => settings().targetOnly,
       });
       input.setMode("move");
 
@@ -226,7 +224,7 @@ export function analysisScreen(rules: Rules, controller: PlayController): Screen
             ? "Thinking…"
             : terminal !== "ongoing"
               ? "The game is over in this position."
-              : "Press play to analyse this position.";
+              : "Press play to analyze this position.";
           $(".an-pv").textContent = "";
           return;
         }

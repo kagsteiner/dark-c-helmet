@@ -6,6 +6,7 @@ import { chooseNewGame } from "../play/new-game.ts";
 import { Board } from "../ui/board.ts";
 import { icons } from "../ui/icons.ts";
 import { MoveInput } from "../ui/move-input.ts";
+import { settings } from "../settings.ts";
 import type { Screen } from "../ui/shell.ts";
 import "../styles/play.css";
 
@@ -49,7 +50,7 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
 
       const input = new MoveInput(board, {
         onMove: (uci) => controller.humanMove(uci),
-        targetOnly: () => true,
+        targetOnly: () => settings().targetOnly,
         onPremove: (pm) => controller.setPremove(pm),
       });
 

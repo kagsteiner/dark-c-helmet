@@ -8,6 +8,7 @@ const isolation = {
 };
 
 export default defineConfig({
+  base: "./", // relative paths: the build works in the server root or in a subfolder
   server: { headers: isolation },
   preview: { headers: isolation },
   worker: { format: "es" },
