@@ -88,8 +88,8 @@ function askToMerge(m: MasterManifest, onMerged: () => void): void {
   dialog.innerHTML = `
     <div class="sheet-body">
       <h2 class="title">New opening book</h2>
-      <p>Version ${m.version} of the master opening book is available: ${m.moves.toLocaleString("en")} moves,
-        a ${formatBytes(m.bytes)} download. Merge it into your book? Moves you already have
+      <p>Version ${m.version} of the master opening book is available: ${m.moves.toLocaleString("en")} moves
+        (${formatBytes(m.bytes)} to download). Merge it into your book? Moves you already have
         from deeper searches are kept.</p>
       <p class="master-ask-status small muted" aria-live="polite"></p>
       <div class="sheet-actions">
