@@ -7,6 +7,7 @@
 // tools/nnue/trainer.c. Accumulators are updated incrementally from DirtyPieces.
 
 extern int g_use_nnue;
+extern const char NNUE_EMBEDDED_NAME[];  // version of the embedded network, e.g. "v11"
 
 int nnue_init(void);                          // load the embedded network; 0 if none
 int nnue_load_file(const char* path);         // 1 on success

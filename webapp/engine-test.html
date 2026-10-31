@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Engine checks</title>
+    <style>
+      body { font: 15px system-ui, sans-serif; margin: 16px; max-width: 900px; }
+      button { font: inherit; margin: 0 8px 8px 0; }
+      pre { font: 12px ui-monospace, monospace; white-space: pre-wrap; background: #f4f4f4; padding: 8px; max-height: 60vh; overflow: auto; }
+    </style>
+  </head>
+  <body>
+    <h1>Engine checks</h1>
+    <p id="env"></p>
+    <p>
+      <label>Threads <input id="threads" type="number" min="1" max="16" value="1" style="width: 4em" /></label>
+      <label><input id="single" type="checkbox" /> force single-threaded build</label>
+    </p>
+    <p>
+      <button id="start">Start engine</button>
+      <button id="uci">uci</button>
+      <button id="movetime">go movetime 3000</button>
+      <button id="infinite">go infinite, stop after 3 s</button>
+      <button id="bench">bench</button>
+      <button id="perft">rules: perft</button>
+      <button id="states">rules: game states</button>
+    </p>
+    <pre id="log"></pre>
+    <script type="module" src="/src/dev/engine-test.ts"></script>
+  </body>
+</html>

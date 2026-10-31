@@ -81,7 +81,11 @@ static PieceToHistory cont_sentinel;  // used after null moves and at the root (
 static int lmr_table[64][64];
 
 // Static rather than heap: see the note on g_pos in uci.c. Untouched threads cost no memory.
+#ifdef __EMSCRIPTEN__
+#define MAX_THREADS 16  // WebAssembly: static memory is allocated up front
+#else
 #define MAX_THREADS 64
+#endif
 static SearchThread threads[MAX_THREADS];
 static int thread_count = 1;
 static volatile int stop_all;  // set by the main thread, read by helpers

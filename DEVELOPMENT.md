@@ -37,6 +37,7 @@ cmake --build build --config Release --target darkhelmet
 | `src/uci.c` | UCI protocol, `bench`, `perft`, `genfens` |
 | `src/datagen.*` | self-play data generation |
 | `tools/` | testing and tuning scripts |
+| `webapp/` | web app; the engine as WebAssembly (`webapp/engine/build.sh`, needs `emcc`). `uci.c` reads commands from JavaScript under `__EMSCRIPTEN__`; see `webapp/DESIGN.md` |
 
 ## Testing workflow
 

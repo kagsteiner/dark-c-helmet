@@ -3,7 +3,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef _WIN32
+#ifdef __EMSCRIPTEN__
+// WebAssembly build: commands come from JavaScript instead of stdin (webapp/engine/wasm_io.c).
+#include <emscripten.h>
+char* wasm_fgets(char* buf, int size);
+int wasm_input_waiting(void);
+#define fgets(buf, size, stream) wasm_fgets((buf), (size))
+#elif defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
@@ -89,7 +95,9 @@ static char* read_command(char* buf, int size) {
 // ---------------------------------------------------------------------------
 
 static int input_waiting(void) {
-#ifdef _WIN32
+#if defined(__EMSCRIPTEN__)
+    return wasm_input_waiting();
+#elif defined(_WIN32)
     static int init = 0, is_pipe = 0;
     static HANDLE inh;
     DWORD dw;
@@ -369,6 +377,7 @@ static void uci_loop(void) {
 #ifdef SPSA
             print_tune_options();
 #endif
+            printf("info string net %s\n", NNUE_EMBEDDED_NAME);
             printf("uciok\n");
         } else if (!strcmp(cmd, "isready")) {
             printf("readyok\n");
@@ -406,6 +415,10 @@ static void uci_loop(void) {
     }
 }
 
+#ifdef __EMSCRIPTEN__
+EMSCRIPTEN_KEEPALIVE void wasm_pump(void) { uci_loop(); }
+#endif
+
 int main(int argc, char** argv) {
     bitboards_init();
     position_init();
@@ -427,6 +440,10 @@ int main(int argc, char** argv) {
         return 0;
     }
 
+#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)
+    // Single-threaded WebAssembly: JavaScript runs the loop with wasm_pump() after each command.
+    emscripten_exit_with_live_runtime();
+#endif
     // Unbuffered input so polling stdin during search sees every pending command.
     setvbuf(stdin, NULL, _IONBF, 0);
     uci_loop();
