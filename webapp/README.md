@@ -23,14 +23,30 @@ threads, stop, and perft of the rules module.
 
 `tools/seed-book.ts` builds an opening book with the native engine (`make` in the project
 root first), one single-threaded engine per core. Load the result in the app with
-Book → Merge from file. It can be stopped (Ctrl-C) and resumed with the same command.
+Book → Merge from file. It runs in batches: `--hours 1.5` stops it by itself (or press
+Ctrl-C), and the same command resumes where it stopped. Each batch adds the earliest
+positions still missing, so the book is useful after every batch.
 
 ```bash
-node tools/seed-book.ts --out ~/chess-data/seed-standard.json
+node tools/seed-book.ts --out ~/chess-data/seed-standard.json --hours 1.5
 node tools/seed-book.ts --out ~/chess-data/seed-960.json --variant chess960 --positions all --widths 2,2,2,2 --max-move 10
 ```
 
 Options are described at the top of the file. Book files belong outside OneDrive.
+
+## Master book
+
+The master book is the published seed book: the app checks `book/manifest.json` next to it
+at startup and offers to merge a newer version (or merges it by itself, a setting on the
+Book screen). `tools/publish-book.ts` merges the seed files, writes a new numbered version
+(compact JSON, gzip) and with `--upload` copies it to the server:
+
+```bash
+node webapp/tools/publish-book.ts --in ~/chess-data/seed-standard.json --in ~/chess-data/seed-960.json \
+  --dir ~/chess-data/master-book --upload vps:nodejs/chess/book
+```
+
+`deploy.sh` leaves the server's `book/` folder alone.
 
 ## Deploying
 

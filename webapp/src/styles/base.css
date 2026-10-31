@@ -38,6 +38,13 @@ p {
   font-weight: var(--weight-strong);
 }
 
+/* Heading of a section within a page. */
+.section-title {
+  font-size: var(--text-body);
+  font-weight: var(--weight-strong);
+  margin-top: var(--space-4);
+}
+
 .small {
   font-size: var(--text-small);
 }

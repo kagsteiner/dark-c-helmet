@@ -198,8 +198,15 @@ all nets are treated alike; the rule is decided when v12 exists.
 - Node counts are the engine's totals of the whole search (its final `info nodes … time …`
   line), in the app and in the generator alike; the last `info depth` line only counts
   completed iterations.
-- Later: "merge from URL", fetching a static file from the VPS (read-only; you upload by
-  `scp`).
+- Master book: the seed book, published as static files next to the app (`book/manifest.json`
+  and `book/master-<version>.json.gz`, built and uploaded by `tools/publish-book.ts`). The
+  file is compact (moves grouped by position; no ids, build strings or dates) and gzip
+  compressed, about 15 bytes per move. At startup the app fetches the manifest; for a newer
+  version it asks "Merge / Later" (Later: not asked again for that version), or merges it
+  by itself when the Book screen's setting says so. The Book screen shows the merged version
+  and offers newer ones. The server holds no write access: only you publish, from the Mac.
+  Contributions from others are not taken: a merge keeps the higher node count, so a bad
+  file could push wrong moves to everyone.
 
 ## UI conventions
 

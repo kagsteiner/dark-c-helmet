@@ -6,6 +6,7 @@ import { bookScreen } from "./screens/book.ts";
 import { playScreen } from "./screens/play.ts";
 import { settingsScreen } from "./screens/settings.ts";
 import { setupScreen } from "./screens/setup.ts";
+import { checkMasterAtStartup } from "./book/master.ts";
 import { loadSettings } from "./settings.ts";
 import { startShell } from "./ui/shell.ts";
 import "./styles/tokens.css";
@@ -30,6 +31,9 @@ startShell({
   book: bookScreen(),
   settings: settingsScreen(controller),
 });
+
+// A newer master opening book on the server: merge it (setting) or ask, once per version.
+checkMasterAtStartup(() => window.dispatchEvent(new Event("book-changed")));
 
 try {
   const defaults = defaultEngineOptions();

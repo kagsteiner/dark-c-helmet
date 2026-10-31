@@ -10,10 +10,12 @@ export interface Settings {
   /** Clicking only the target square moves the one piece that can go there. */
   targetOnly: boolean;
   theme: Theme;
+  /** Merge a newer master opening book without asking. */
+  autoMergeMaster: boolean;
 }
 
 const KEY = "settings";
-let current: Settings = { threads: null, hashMb: null, targetOnly: true, theme: "system" };
+let current: Settings = { threads: null, hashMb: null, targetOnly: true, theme: "system", autoMergeMaster: false };
 
 export async function loadSettings(): Promise<Settings> {
   current = { ...current, ...(await load<Partial<Settings>>(KEY)) };

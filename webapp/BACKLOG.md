@@ -110,7 +110,8 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done.
 - [ ] Rule for book entries from different nets
 - [ ] PGN import (paste/file, choose game from multi-game file) and PGN export
 - [ ] "My games" list
-- [ ] Merge book from URL (static file on the VPS)
+- [x] Master book on the VPS (`tools/publish-book.ts`; startup check, ask or merge
+      automatically; Book screen section)
 - [ ] MultiPV (engine change) and up to 3 analysis lines
 - [ ] Strength levels
 - [ ] Native engine on localhost (WebSocket bridge)

@@ -14,5 +14,6 @@ npm run build
 # Readable for the web server, whatever the permissions on this machine (rsync -a keeps
 # them; the macOS rsync has no --chmod).
 chmod -R u=rwX,go=rX dist
-rsync -av --delete dist/ "$DEPLOY_TARGET/"
+# book/ holds the master opening book (tools/publish-book.ts): never touched by a deploy.
+rsync -av --delete --exclude /book/ dist/ "$DEPLOY_TARGET/"
 echo "Deployed to $DEPLOY_TARGET"

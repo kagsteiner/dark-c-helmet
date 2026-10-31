@@ -1,5 +1,8 @@
 // The Book screen: what the opening book holds, export to a file, merge a file, clear.
 import { clearBook, exportBook, mergeBook, stats, type BookStats } from "../book/book.ts";
+import { describeMerge, fetchManifest, formatBytes, installedMaster, mergeMaster } from "../book/master.ts";
+import type { MasterManifest } from "../book/master-format.ts";
+import { settings, updateSettings } from "../settings.ts";
 import type { Screen } from "../ui/shell.ts";
 import "../styles/book.css";
 
@@ -26,6 +29,18 @@ export function bookScreen(): Screen {
             <button class="btn-secondary danger" data-action="clear">Clear book</button>
           </div>
           <p class="book-status small" aria-live="polite"></p>
+
+          <h2 class="section-title">Master book</h2>
+          <p class="muted">A book built with the engine on a fast computer and published with this app.
+            Merging it adds its moves to yours; your own deeper searches are kept.</p>
+          <p class="master-installed"></p>
+          <div class="book-actions">
+            <button class="btn-secondary" data-action="check">Check for a new version</button>
+            <button class="btn-secondary" data-action="master" hidden></button>
+          </div>
+          <label class="check"><input type="checkbox" name="autoMergeMaster"${settings().autoMergeMaster ? " checked" : ""}>
+            Merge new versions automatically</label>
+          <p class="master-status small" aria-live="polite"></p>
         </section>`;
       const $ = <T extends Element>(sel: string) => root.querySelector<T>(sel)!;
       const section = $<HTMLElement>(".book");
@@ -33,6 +48,24 @@ export function bookScreen(): Screen {
         const el = $(".book-status");
         el.textContent = text;
         el.classList.toggle("error", error);
+      };
+
+      // Master book: what this device has, what the server offers.
+      let offered: MasterManifest | null = null;
+      const renderMaster = async (checked = false) => {
+        const inst = await installedMaster();
+        $(".master-installed").textContent = inst
+          ? `Merged here: version ${inst.version} of ${new Date(inst.created).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}, ${inst.moves.toLocaleString("en")} moves.`
+          : "Not merged on this device yet.";
+        const btn = $<HTMLButtonElement>('[data-action="master"]');
+        const newer = offered && offered.version > (inst?.version ?? 0);
+        btn.hidden = !newer;
+        if (newer) btn.textContent = `Merge version ${offered!.version} (${formatBytes(offered!.bytes)})`;
+        if (checked) $(".master-status").textContent = offered ? (newer ? "" : "You have the newest version.") : "No master book is published yet.";
+      };
+      const checkMaster = async (showResult: boolean) => {
+        offered = await fetchManifest();
+        renderMaster(showResult);
       };
 
       let current: BookStats | null = null;
@@ -64,6 +97,21 @@ export function bookScreen(): Screen {
           a.click();
           setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
           status(`Exported ${current?.moves.toLocaleString("en")} moves.`);
+        } else if (action === "check") {
+          $(".master-status").textContent = "Checking…";
+          checkMaster(true);
+        } else if (action === "master" && offered) {
+          const btn = $<HTMLButtonElement>('[data-action="master"]');
+          btn.disabled = true;
+          try {
+            const r = await mergeMaster(offered, (f) => ($(".master-status").textContent = `Downloading… ${Math.round(f * 100)}%`));
+            $(".master-status").textContent = "Merged: " + describeMerge(r);
+          } catch (err) {
+            $(".master-status").textContent = err instanceof Error ? err.message : String(err);
+          }
+          btn.disabled = false;
+          renderMaster();
+          render();
         } else if (action === "clear") {
           if (await confirmClear(current?.moves ?? 0)) {
             await clearBook();
@@ -92,7 +140,20 @@ export function bookScreen(): Screen {
         render();
       });
 
+      section.addEventListener("change", (e) => {
+        const t = e.target as HTMLInputElement;
+        if (t.name === "autoMergeMaster") updateSettings({ autoMergeMaster: t.checked });
+      });
+      // A merge started elsewhere (the question at startup) changes what is shown here.
+      const onBookChanged = () => {
+        render();
+        renderMaster();
+      };
+      window.addEventListener("book-changed", onBookChanged);
+
       render();
+      checkMaster(false);
+      return () => window.removeEventListener("book-changed", onBookChanged);
     },
   };
 }

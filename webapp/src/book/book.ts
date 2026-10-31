@@ -116,10 +116,15 @@ export async function mergeBook(text: string): Promise<MergeResult> {
     throw new Error("This file is not a book file (not valid JSON).");
   }
   if (file.format !== BOOK_FILE_FORMAT || !Array.isArray(file.entries)) throw new Error("This file is not a Dark C. Helmet book.");
+  return mergeEntries(file.entries);
+}
+
+/** Merges entries into the book: for the same position and move the deeper search wins. */
+export async function mergeEntries(incoming: unknown[]): Promise<MergeResult> {
   const result: MergeResult = { added: 0, updated: 0, kept: 0, invalid: 0 };
   const existing = new Map((await allEntries()).map((e) => [e.id, e]));
   const writes: BookEntry[] = [];
-  for (const e of file.entries) {
+  for (const e of incoming) {
     if (!isBookEntry(e)) {
       result.invalid++;
       continue;

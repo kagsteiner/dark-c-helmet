@@ -26,6 +26,7 @@
 //   --workers N          engine processes (default: logical cores - 1)
 //   --hash MB            hash per engine process (default 64)
 //   --engine PATH        native engine (default ../bin/darkhelmet)
+//   --hours H            stop by itself after H hours (like Ctrl-C once), e.g. 1.5
 // Ctrl-C once: finish the running searches, save, stop. Twice: save and stop at once.
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
@@ -75,6 +76,7 @@ const opts = {
   workers: num("workers", Math.max(1, availableParallelism() - 1)),
   hash: num("hash", 64),
   engine: args.get("engine") ?? fileURLToPath(new URL("../../bin/darkhelmet", import.meta.url)),
+  hours: num("hours", 0),
 };
 const stateFile = out + ".state.json";
 
@@ -365,6 +367,15 @@ process.on("SIGINT", () => {
   }
 });
 const timer = setInterval(report, 60_000);
+if (opts.hours > 0) {
+  const end = new Date(Date.now() + opts.hours * 3_600_000);
+  console.log(`Stopping by itself at ${end.toLocaleTimeString("en-GB")} (--hours ${opts.hours}).`);
+  setTimeout(() => {
+    if (stopping) return;
+    stopping = true;
+    console.log("Time is up: stopping after the running searches…");
+  }, opts.hours * 3_600_000).unref();
+}
 
 await Promise.all(engines.map((e) => worker(e)));
 clearInterval(timer);

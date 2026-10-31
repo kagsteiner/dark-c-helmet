@@ -2,12 +2,6 @@
   gap: var(--space-3);
 }
 
-.section-title {
-  font-size: var(--text-body);
-  font-weight: var(--weight-strong);
-  margin-top: var(--space-4);
-}
-
 .about {
   display: grid;
   grid-template-columns: max-content 1fr;
