@@ -15,10 +15,12 @@
 #include <math.h>
 #include <string.h>
 
-// name, candidates, cand_mass, temperature, replies, line_depth, alt_depth, optimism,
-// satisfied, prior, blind, budget, material. Stronger profiles (with their own nets): see README.md.
+// One profile per band, each with its own net (see README.md). Named fields: the order of
+// HProfile is easy to get wrong.
 const HProfile HPROFILES[] = {
-    {"1300", 3, 0.80f, 0.60f, 2, 3, 1, 0.30f, 0.03f, 0.03f, 0.25f, 60, 0.0f},
+    {.name = "1300", .candidates = 3, .cand_mass = 0.80f, .temperature = 0.60f, .replies = 2,
+     .line_depth = 3, .alt_depth = 1, .optimism = 0.30f, .satisfied = 0.03f, .prior = 0.03f,
+     .blind = 0.25f, .material = 0.0f, .budget = 60},
 };
 const int HPROFILE_COUNT = sizeof(HPROFILES) / sizeof(HPROFILES[0]);
 

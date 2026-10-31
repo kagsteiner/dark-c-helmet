@@ -71,3 +71,8 @@ policy move match 42.0%. `calibrate.py`, 2000 positions, seed 1, judged at 100k 
 
 More replies, more blindness/optimism, more candidates or deeper lines did not get closer
 (176-180 cp); the remaining gap is the net's. The profile plays somewhat below a real 1300.
+
+**Correction (same day):** the profile line above was written in the wrong field order
+(budget 0, material 60), so the search stopped after its first candidate. Fixed with named
+fields; the corrected profile 1300 measures 146 cp avg loss, 18.9% blunders, 41.6% move match
+(real 1300 players in the same run: 144 cp, 20.4%) - now a close match.

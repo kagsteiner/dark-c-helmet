@@ -61,7 +61,7 @@ export async function chooseNewGame(position?: { startFen: string; chess960: boo
       <h2 class="title">New game</h2>
       <div class="field" data-show="opponent">
         <span class="field-label">Opponent</span>
-        ${segmented("opponent", [["engine", "Dark C. Helmet"], ["human-1300", "1200 Elo player"]], c.opponent)}
+        ${segmented("opponent", [["engine", "Dark C. Helmet"], ["human-1300", "1300 Elo player"]], c.opponent)}
       </div>
       <div class="field" data-show="variant">
         <span class="field-label">Variant</span>
