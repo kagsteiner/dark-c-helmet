@@ -40,8 +40,9 @@ function segmented(name: string, options: [string, string][], value: string): st
     .join("")}</div>`;
 }
 
-/** Shows the sheet. Resolves to the new game's setup, or null if cancelled. */
-export async function chooseNewGame(): Promise<GameSetup | null> {
+/** Shows the sheet. Resolves to the new game's setup, or null if cancelled. With `position`
+ *  (from the Setup screen) the variant choice is left out. */
+export async function chooseNewGame(position?: { startFen: string; chess960: boolean }): Promise<GameSetup | null> {
   const c: Choices = { ...DEFAULTS, ...(await load<Partial<Choices>>(PREFS_KEY)) };
   const dialog = document.createElement("dialog");
   dialog.className = "sheet";
@@ -49,7 +50,7 @@ export async function chooseNewGame(): Promise<GameSetup | null> {
   dialog.innerHTML = `
     <form class="sheet-body" method="dialog">
       <h2 class="title">New game</h2>
-      <div class="field">
+      <div class="field" data-show="variant">
         <span class="field-label">Variant</span>
         ${segmented("variant", [["standard", "Standard"], ["chess960", "Chess960"]], c.variant)}
       </div>
@@ -125,7 +126,8 @@ export async function chooseNewGame(): Promise<GameSetup | null> {
   const update = () => {
     const r = read();
     const visible: Record<string, boolean> = {
-      chess960: r.variant === "chess960",
+      variant: !position,
+      chess960: !position && r.variant === "chess960",
       number960: r.start960 === "number",
       move: r.tcKind === "move",
       game: r.tcKind === "game",
@@ -152,7 +154,9 @@ export async function chooseNewGame(): Promise<GameSetup | null> {
               ? { kind: "game", minutes: r.incMinutes, increment: r.incSeconds }
               : { kind: "classical" };
       const human = r.color === "random" ? (Math.random() < 0.5 ? "w" : "b") : r.color;
-      if (r.variant === "chess960") {
+      if (position) {
+        result = { ...position, human, tc };
+      } else if (r.variant === "chess960") {
         const n = r.start960 === "random" ? randomChess960() : r.number960;
         result = { startFen: chess960Fen(n), chess960: true, position960: n, human, tc };
       } else {

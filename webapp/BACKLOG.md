@@ -58,11 +58,15 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done.
 
 ## M3 — Setup
 
-- [ ] Position editor: empty / start / Chess960 start, place and remove pieces
-- [ ] Side to move, castling rights (incl. Chess960 rook choice)
-- [ ] Validation; "Play" and "Analyze" from the edited position
-- [ ] FEN import/export
-- [ ] e.p. square (prio 2)
+- [x] Position editor: start / Chess960 / empty / current game; palette to place pieces,
+      tap to remove, drag to move
+- [x] Side to move, castling rights (outermost rook on each side of the king, so Chess960
+      positions work; written as Shredder-FEN when not standard)
+- [x] Validation (kings, pawns on the edge ranks, piece counts, side not to move in check);
+      "Play" (new-game sheet without the variant choice) and "Analyze" (opens Analysis,
+      which comes in M4)
+- [x] FEN import/export (editable FEN field)
+- [x] e.p. square: offered only when a double step could just have happened
 
 ## M4 — Analysis
 

@@ -226,3 +226,44 @@ dialog.sheet::backdrop {
   gap: var(--space-2);
   margin-top: var(--space-2);
 }
+
+/* Checkbox with its label on the right. */
+.check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--touch);
+  cursor: pointer;
+}
+
+.check input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.check:has(input:disabled) {
+  color: var(--muted);
+  cursor: default;
+}
+
+input[type="text"] {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  min-height: var(--touch);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  width: 100%;
+}
+
+input[type="text"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.error {
+  color: var(--danger);
+}

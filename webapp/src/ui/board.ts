@@ -6,7 +6,7 @@ import "./board.css";
 
 const PIECE_URLS = import.meta.glob("../assets/pieces/*.svg", { eager: true, query: "?url", import: "default" }) as Record<string, string>;
 
-function pieceUrl(piece: PieceCode): string {
+export function pieceUrl(piece: PieceCode): string {
   const name = (isWhite(piece) ? "w" : "b") + piece.toUpperCase();
   return PIECE_URLS[`../assets/pieces/${name}.svg`];
 }

@@ -1,0 +1,80 @@
+/* Setup screen. Phone / portrait: board, then the controls (the page scrolls).
+   Landscape from 768 px: board on the left, controls on the right. */
+
+.setup {
+  --board: min(100vw, 640px);
+  display: grid;
+  grid-template-columns: var(--board);
+  justify-content: center;
+  align-content: start;
+}
+
+.setup-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+}
+
+.palette {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: var(--space-1);
+}
+
+.palette-piece {
+  aspect-ratio: 1;
+  max-height: 56px;
+  background-size: 86%;
+  background-position: center;
+  background-repeat: no-repeat;
+  border-radius: var(--radius);
+}
+
+.palette-piece[aria-checked="true"] {
+  background-color: color-mix(in srgb, var(--accent) 18%, transparent);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.setup-presets {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: var(--space-2);
+  margin: 0 calc(-1 * var(--space-2));
+}
+
+.castling {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.setup-problems:empty {
+  display: none;
+}
+
+.setup-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+input.invalid {
+  border-color: var(--danger);
+}
+
+@media (min-width: 768px) and (min-aspect-ratio: 1/1) {
+  .setup {
+    --panel: clamp(300px, 30vw, 380px);
+    --board: min(calc(100dvh - var(--topbar) - 2 * var(--space-6)), calc(100vw - var(--panel) - 3 * var(--space-6)));
+    grid-template-columns: var(--board) var(--panel);
+    column-gap: var(--space-6);
+    padding: var(--space-6);
+    align-content: center;
+  }
+
+  .setup-panel {
+    padding: 0;
+    max-height: var(--board);
+    overflow-y: auto;
+  }
+}
