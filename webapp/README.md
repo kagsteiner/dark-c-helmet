@@ -19,6 +19,19 @@ npm run build        # production build into dist/
 `engine-test.html` (also in the build) checks the engine in a browser: `uci`, `bench`,
 threads, stop, and perft of the rules module.
 
+## Seed book
+
+`tools/seed-book.ts` builds an opening book with the native engine (`make` in the project
+root first), one single-threaded engine per core. Load the result in the app with
+Book → Merge from file. It can be stopped (Ctrl-C) and resumed with the same command.
+
+```bash
+node tools/seed-book.ts --out ~/chess-data/seed-standard.json
+node tools/seed-book.ts --out ~/chess-data/seed-960.json --variant chess960 --positions all --widths 2,2,2,2 --max-move 10
+```
+
+Options are described at the top of the file. Book files belong outside OneDrive.
+
 ## Deploying
 
 ```bash

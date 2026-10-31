@@ -4,6 +4,8 @@
 // engine found, with how many nodes the search took. When the engine is about to search a
 // position for N nodes and the book has a move searched for at least N, that move is played
 // instead (a random one among those within 10 cp of the best). See DESIGN.md, "Opening book".
+import type { LegalMove } from "../chess/rules.ts";
+import { squareName } from "../chess/san.ts";
 
 export interface BookEntry {
   /** key + " " + move */
@@ -29,6 +31,11 @@ export const BOOK_SPREAD_CP = 10; // moves this close to the best are chosen at 
 // A search with the same time does not reach exactly the same node count (speed varies by a
 // few percent), so entries count from 85% of the planned nodes on.
 export const BOOK_NODE_TOLERANCE = 0.85;
+
+/** A move as the book writes it: castling as king takes own rook in both variants. */
+export function bookMoveName(m: LegalMove): string {
+  return m.castle ? squareName(m.from) + squareName(m.rook) : m.uci;
+}
 
 export function bookKey(fen: string): string {
   return fen.split(" ").slice(0, 4).join(" ");

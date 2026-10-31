@@ -188,10 +188,16 @@ all nets are treated alike; the rule is decided when v12 exists.
 
 - MVP: export to a file; merge from a file. On merge, for the same position and move the
   entry with more nodes wins.
-- Post-MVP: a seed book built on the Mac with the native engine (single thread, so node
-  counts mean the same as in the browser), by tree expansion: the best move is searched deeply,
-  plausible alternatives are branched into so that human deviations are covered. Output is the
-  same file format.
+- Seed book (`tools/seed-book.ts`): built on the Mac with the native engine, one
+  single-threaded engine per core with a fixed node count per move. The opening tree is
+  expanded level by level: each position gets a deep search (its best move is the entry);
+  where the tree branches (`--widths`, e.g. 3 moves per ply for the first plies), every
+  legal move gets a short probe search and the best alternatives within `--margin` are
+  explored too, so that human deviations are covered. Transpositions are expanded once. The
+  output is a normal book file; a state file next to it makes runs resumable.
+- Node counts are the engine's totals of the whole search (its final `info nodes … time …`
+  line), in the app and in the generator alike; the last `info depth` line only counts
+  completed iterations.
 - Later: "merge from URL", fetching a static file from the VPS (read-only; you upload by
   `scp`).
 

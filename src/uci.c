@@ -301,7 +301,11 @@ static void cmd_go(char* args) {
     }
 
     g_stop_received = 0;
+    long long start = now_ms();
     SearchResult r = search_run(&g_pos, &lim, 0, poll_stop);
+    // Totals of the whole search; the last "info depth" line only counts completed iterations.
+    long long elapsed = now_ms() - start;
+    printf("info nodes %lld time %lld nps %lld\n", r.nodes, elapsed, elapsed > 0 ? r.nodes * 1000 / elapsed : r.nodes);
 
     // In infinite mode bestmove may only be sent after "stop" (unless it already arrived).
     if (lim.infinite && !g_quit && !g_stop_received) {

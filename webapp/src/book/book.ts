@@ -1,13 +1,12 @@
 // The opening book in IndexedDB: lookup, recording search results, statistics, export, merge.
-import { squareName } from "../chess/san.ts";
 import type { Game } from "../chess/game.ts";
-import type { LegalMove } from "../chess/rules.ts";
 import type { Engine, SearchResult } from "../engine/engine.ts";
 import { BOOK_STORE, db, request } from "../storage.ts";
 import {
   BOOK_FILE_FORMAT,
   BOOK_MAX_MOVE,
   bookKey,
+  bookMoveName,
   bookScore,
   chooseBookMove,
   isBookEntry,
@@ -16,11 +15,6 @@ import {
   shouldStore,
   type BookEntry,
 } from "./book-logic.ts";
-
-/** A move as the book writes it: castling as king takes own rook in both variants. */
-export function bookMoveName(m: LegalMove): string {
-  return m.castle ? squareName(m.from) + squareName(m.rook) : m.uci;
-}
 
 /** Does the book cover the current position of this game? (Games from a start position, up
  *  to move 20.) */
@@ -64,7 +58,7 @@ export async function record(game: Game, result: SearchResult, engine: Engine, s
       id: key + " " + name,
       key,
       move: name,
-      nodes: info.nodes,
+      nodes: result.nodes || info.nodes,
       depth: info.depth,
       score: bookScore(info.score),
       net: engine.net,

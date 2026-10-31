@@ -105,7 +105,8 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done.
 
 ## After the MVP
 
-- [ ] Seed book generator (native engine, tree expansion, standard and Chess960), resumable
+- [x] Seed book generator (`tools/seed-book.ts`: native engine, tree expansion, standard and
+      Chess960, resumable); the engine now prints the totals of each search before `bestmove`
 - [ ] Rule for book entries from different nets
 - [ ] PGN import (paste/file, choose game from multi-game file) and PGN export
 - [ ] "My games" list

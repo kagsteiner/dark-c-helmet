@@ -40,6 +40,10 @@ export interface SearchResult {
   bestmove: string | null;
   /** The last complete "info" line. */
   info: SearchInfo | null;
+  /** Nodes and milliseconds of the whole search (the engine's final "info nodes ... time"
+   *  line); the last info line only counts completed iterations. */
+  nodes: number;
+  time: number;
 }
 
 export interface EngineOptions {
@@ -76,6 +80,7 @@ interface Running {
   measure: boolean;
   resolve: (r: SearchResult) => void;
   info: SearchInfo | null;
+  totals: { nodes: number; time: number } | null;
   onInfo?: (info: SearchInfo) => void;
   done: Promise<SearchResult>;
 }
@@ -152,7 +157,10 @@ export class Engine {
   private onLine(line: string): void {
     if (line.startsWith("id name ")) this.name = line.slice(8);
     else if (line.startsWith("info string net ")) this.net = line.slice(16);
-    else if (line.startsWith("info ") && this.running) {
+    else if (line.startsWith("info nodes ") && this.running) {
+      const t = line.split(/\s+/);
+      this.running.totals = { nodes: Number(t[2]), time: Number(t[4]) };
+    } else if (line.startsWith("info ") && this.running) {
       const info = parseInfo(line);
       if (info) {
         this.running.info = info;
@@ -162,11 +170,14 @@ export class Engine {
       const r = this.running;
       this.running = null;
       const move = line.split(/\s+/)[1];
-      if (r.measure && r.info && r.info.time >= 500 && r.info.nps > 0) {
-        this.nps = this.nps ? Math.round(this.nps * 0.5 + r.info.nps * 0.5) : r.info.nps;
+      const nodes = r.totals?.nodes ?? r.info?.nodes ?? 0;
+      const time = r.totals?.time ?? r.info?.time ?? 0;
+      if (r.measure && time >= 500 && nodes > 0) {
+        const nps = Math.round((nodes * 1000) / time);
+        this.nps = this.nps ? Math.round(this.nps * 0.5 + nps * 0.5) : nps;
         save(NPS_KEY, { threads: this.options.threads, nps: this.nps });
       }
-      r.resolve({ bestmove: move && move !== "0000" ? move : null, info: r.info });
+      r.resolve({ bestmove: move && move !== "0000" ? move : null, info: r.info, nodes, time });
     }
     const i = this.waiters.findIndex((w) => line.startsWith(w.prefix));
     if (i >= 0) this.waiters.splice(i, 1)[0].resolve(line);
@@ -190,7 +201,7 @@ export class Engine {
       .join(" ");
     let resolve!: (r: SearchResult) => void;
     const done = new Promise<SearchResult>((r) => (resolve = r));
-    this.running = { measure, resolve, info: null, onInfo, done };
+    this.running = { measure, resolve, info: null, totals: null, onInfo, done };
     this.transport.send(`go ${go}`);
     return done;
   }
@@ -210,7 +221,7 @@ export class Engine {
     this.transport = await WasmEngineTransport.create(false, this.onProgress);
     this.waiters = [];
     await this.handshake();
-    r.resolve({ bestmove: null, info: r.info });
+    r.resolve({ bestmove: null, info: r.info, nodes: r.info?.nodes ?? 0, time: r.info?.time ?? 0 });
   }
 
   newGame(): void {
