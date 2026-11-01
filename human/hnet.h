@@ -7,7 +7,7 @@
 //         rights (own O-O, own O-O-O, opponent O-O, opponent O-O-O).
 // Hidden: HNET_H1 -> HNET_H2, ReLU.
 // Policy: one logit per from-to pair (64 x 64, mirrored squares); a promotion is its pawn
-//         move (the engine always promotes to a queen). Castling is king from -> g1/c1.
+//         move (the engine always promotes to a queen). Castling is e1 -> g1/c1 (also in Chess960).
 // Value:  probability that the side to move wins (draw = half), as players of the band
 //         that the training games come from would score from here.
 #ifndef HNET_H
@@ -58,7 +58,12 @@ static inline int hnet_sq(int side, int sq) { return side == WHITE ? sq : sq ^ 5
 // Policy index of a legal move in pos.
 static inline int hnet_move_index(const Position* pos, Move m) {
     int from = move_from(m), to = move_to(m);
-    if (move_is_castle(m)) to = make_square(rank_of(from), move_flags(m) == FLAG_KING_CASTLE ? 6 : 2);
+    // Castling is always e1 -> g1/c1, wherever the king starts (Chess960): the net learned
+    // "castle short/long" from that index, and a king step such as b1-c1 keeps its own.
+    if (move_is_castle(m)) {
+        from = make_square(rank_of(from), 4);
+        to = make_square(rank_of(from), move_flags(m) == FLAG_KING_CASTLE ? 6 : 2);
+    }
     return hnet_sq(pos->side, from) * 64 + hnet_sq(pos->side, to);
 }
 
