@@ -21,6 +21,11 @@ const HProfile HPROFILES[] = {
     {.name = "1300", .candidates = 3, .cand_mass = 0.80f, .temperature = 0.60f, .replies = 2,
      .line_depth = 3, .alt_depth = 1, .optimism = 0.30f, .satisfied = 0.03f, .prior = 0.03f,
      .blind = 0.25f, .material = 0.0f, .budget = 60},
+    // Chess960, with the net h1300-960 (picked automatically when UCI_Chess960 is on): sees
+    // more of the opponent's replies, otherwise it plays below a 1300 there.
+    {.name = "1300-960", .candidates = 3, .cand_mass = 0.80f, .temperature = 0.60f, .replies = 2,
+     .line_depth = 3, .alt_depth = 1, .optimism = 0.30f, .satisfied = 0.03f, .prior = 0.03f,
+     .blind = 0.15f, .material = 0.0f, .budget = 60},
     {.name = "1600", .candidates = 4, .cand_mass = 0.85f, .temperature = 0.45f, .replies = 3,
      .line_depth = 4, .alt_depth = 2, .optimism = 0.20f, .satisfied = 0.04f, .prior = 0.03f,
      .blind = 0.15f, .material = 0.0f, .budget = 120},

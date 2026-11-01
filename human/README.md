@@ -92,3 +92,27 @@ Trained 2 epochs on 369M positions (Lichess 2024-01, 1500-1700, 5.6M games); val
 
 Blind=25 Replies=2 (115 cp, 42.7%) and Blind=8 Budget=200 LineDepth=5 (116 cp, 41.8%) were
 within noise but less human; the profile is kept as it is.
+
+## Chess960, 1300 band
+
+### net_h1300-960_v1 (2026-11-01)
+
+The 1300 net, trained on for 3 epochs (lr 3e-4) on 12.5M positions of Chess960 games plus as
+many standard positions (Lichess Chess960 2021-10..2026-09 without 2024-01, both players'
+960 ratings 1200-1400; data in `~/VibeEngineData/lichess-960-1200-1400/`, `fetch.sh`). The
+converter starts a game from its `[FEN]` header; `human-train --init net.hnet` continues
+training a net. The engine uses a band's `-960` net and profile when UCI_Chess960 is on.
+
+Validation: Chess960 games of 2024-01 (3,256 games), move match of the plain policy:
+
+| net | all | first 10 moves each | later | standard (2017-01) |
+|---|---|---|---|---|
+| h1300_v1 | 28.6% | 19.0% | 34.1% | 42.0% |
+| 960 games only, lr 3e-4 | 35.4% | 32.6% | 37.0% | 40.1% |
+| 960 games only, lr 1e-4 | 34.9% | 31.9% | 36.6% | 40.5% |
+| **960 + standard, lr 3e-4 (v1)** | 35.3% | 32.3% | 37.1% | 41.6% |
+
+`calibrate.py --chess960`, 2000 positions: with h1300_v1 and profile 1300 the player lost
+170 cp per move (real players 146). With h1300-960_v1 it still lost 163, so the profile
+"1300-960" overlooks fewer replies (Blind 15 instead of 25; 10-15 measured within noise):
+156 cp, 21.3% blunders, 36.6% move match; real 1300 players in the same run 154 cp, 20.7%.

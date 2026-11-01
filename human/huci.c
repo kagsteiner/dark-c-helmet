@@ -7,7 +7,7 @@
 // integers, see the "uci" output), Seed.
 //
 //   bin/humanplayer                      UCI
-//   bin/humanplayer sample <val.bin> <count> [profile]
+//   bin/humanplayer sample <val.bin> <count> [profile] [960]   (960: Chess960 samples)
 //       prints "fen human-move search-move policy-move" for <count> positions of a sample file
 //       (bin/human-convert output), for measuring how human the moves are.
 
@@ -73,16 +73,34 @@ static void field_set(const Field* f, int v) {
     else *(int*)p = v;
 }
 
-static int use_profile(const char* name) {
+// The band's net; in Chess960 its Chess960 net ("1300-960") when there is one.
+static const char* use_net(const char* band) {
+    char name[32];
+    snprintf(name, sizeof(name), "%s-960", band);
+    const char* net = g_chess960 ? hnet_use(name) : NULL;
+    return net ? net : hnet_use(band);
+}
+
+static const HProfile* find_profile(const char* name) {
     for (int i = 0; i < HPROFILE_COUNT; ++i)
-        if (!strcmp(HPROFILES[i].name, name)) {
-            const char* net = hnet_use(name);
-            if (!net) return 0;
-            g_profile = HPROFILES[i];
-            g_net = net;
-            return 1;
-        }
-    return 0;
+        if (!strcmp(HPROFILES[i].name, name)) return &HPROFILES[i];
+    return NULL;
+}
+
+// The band chosen with the Profile option; in Chess960 its "-960" profile when there is one.
+static char g_band[16];
+
+static int use_profile(const char* name) {
+    char name960[32];
+    snprintf(name960, sizeof(name960), "%s-960", name);
+    const HProfile* p = g_chess960 ? find_profile(name960) : NULL;
+    if (!p) p = find_profile(name);
+    const char* net = p ? use_net(name) : NULL;
+    if (!net) return 0;
+    g_profile = *p;
+    g_net = net;
+    snprintf(g_band, sizeof(g_band), "%s", name);
+    return 1;
 }
 
 static void cmd_position(char* args) {
@@ -199,7 +217,12 @@ static void cmd_setoption(char* args) {
     } else if (!strcasecmp(name, "Seed")) {
         hsearch_seed((uint64_t)atoll(value));
     } else if (!strcasecmp(name, "UCI_Chess960")) {
-        g_chess960 = !strcmp(value, "true");
+        // Switching resets options set since the Profile (the band's other profile and net).
+        int on = !strcmp(value, "true");
+        if (on != g_chess960) {
+            g_chess960 = on;
+            if (g_band[0]) use_profile(g_band);
+        }
     } else {
         for (int i = 0; i < FIELD_COUNT; ++i)
             if (!strcasecmp(name, FIELDS[i].name)) field_set(&FIELDS[i], atoi(value));
@@ -330,7 +353,10 @@ int main(int argc, char** argv) {
     srand((unsigned)time(NULL));
     if (!use_profile(HPROFILES[0].name)) fprintf(stderr, "no network embedded for profile %s\n", HPROFILES[0].name);
     pos_set_fen(&g_pos, START_FEN);
-    if (argc > 3 && !strcmp(argv[1], "sample")) return run_sample(argv[2], atoi(argv[3]), argc > 4 ? argv[4] : NULL);
+    if (argc > 3 && !strcmp(argv[1], "sample")) {
+        g_chess960 = argc > 5 && !strcmp(argv[5], "960");
+        return run_sample(argv[2], atoi(argv[3]), argc > 4 ? argv[4] : NULL);
+    }
 #ifdef __EMSCRIPTEN__
     // Single-threaded WebAssembly: JavaScript runs the loop with wasm_pump() after each command.
     emscripten_exit_with_live_runtime();

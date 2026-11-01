@@ -3,7 +3,7 @@
 //
 //   zstdcat games.pgn.zst | bin/human-convert out.bin [--min-clock 30]
 //
-// One sample per move played. Moves made with less than --min-clock seconds left on the
+// Chess960 games (a [FEN] header) start from their position. One sample per move played. Moves made with less than --min-clock seconds left on the
 // mover's clock (time scrambles, read from the [%clk] comments) are left out; games without
 // clock comments keep all moves.
 
@@ -91,18 +91,22 @@ int main(int argc, char** argv) {
     static char line[1 << 16];
     static HSample game[MAX_GAME_PLY];
     int welo = 0, belo = 0, result = 0;
+    char fen[128] = "";
     long games = 0, bad = 0, samples = 0, scrambles = 0;
     while (fgets(line, sizeof(line), stdin)) {
         if (line[0] == '[') {
             sscanf(line, "[WhiteElo \"%d", &welo);
             sscanf(line, "[BlackElo \"%d", &belo);
+            sscanf(line, "[FEN \"%127[^\"]", fen);
             if (!strncmp(line, "[Result ", 8))
                 result = !strncmp(line + 9, "1-0", 3) ? 1 : !strncmp(line + 9, "0-1", 3) ? -1 : 0;
             continue;
         }
         if (!isdigit((unsigned char)line[0])) continue;
         // The move line: tokens separated by spaces, comments in braces.
-        pos_set_fen(&pos, START_FEN);
+        g_chess960 = fen[0] != '\0';
+        pos_set_fen(&pos, g_chess960 ? fen : START_FEN);
+        fen[0] = '\0';
         int n = 0, ok = 1, elo = (welo + belo) / 20;
         uint8_t keep[MAX_GAME_PLY];
         int movers[MAX_GAME_PLY];

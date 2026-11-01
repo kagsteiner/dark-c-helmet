@@ -10,7 +10,7 @@ should lose about as much as the humans of its band do.
 
 Usage: python3 human/calibrate.py val.bin [--positions 2000] [--profile 1300] [--nodes 100000]
                                    [--set Name=value ...]   (UCI options of bin/humanplayer)
-                                   [--seed 1] [--jobs 14]
+                                   [--seed 1] [--jobs 14] [--chess960]   (Chess960 samples)
 """
 import argparse
 import subprocess
@@ -61,17 +61,20 @@ def main():
     ap.add_argument("--set", action="append", default=[])
     ap.add_argument("--jobs", type=int, default=14)
     ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--chess960", action="store_true")
     a = ap.parse_args()
 
     # The positions, the human moves and the policy moves; then the search moves through UCI
     # with the options of --set and a fixed seed, so that runs can be compared.
-    rows = subprocess.run([str(ROOT / "bin/humanplayer"), "sample", a.samples, str(a.positions), a.profile],
+    rows = subprocess.run([str(ROOT / "bin/humanplayer"), "sample", a.samples, str(a.positions), a.profile]
+                          + (["960"] if a.chess960 else []),
                           capture_output=True, text=True, check=True).stdout.split("\n")
     rows = [r.split(";") for r in rows if r]
     if True:
         hp = subprocess.Popen([str(ROOT / "bin/humanplayer")], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                               text=True, bufsize=1)
         hp.stdin.write(f"setoption name Profile value {a.profile}\nsetoption name Seed value {a.seed}\n")
+        hp.stdin.write(f"setoption name UCI_Chess960 value {str(a.chess960).lower()}\n")
         for s in a.set:
             name, value = s.split("=")
             hp.stdin.write(f"setoption name {name} value {value}\n")
@@ -83,6 +86,8 @@ def main():
         hp.stdin.write("quit\n")
 
     engines = [Engine(str(ROOT / "bin/darkhelmet")) for _ in range(a.jobs)]
+    for e in engines:
+        e.send(f"setoption name UCI_Chess960 value {str(a.chess960).lower()}")
 
     def judge(k):
         e = engines[k % a.jobs]

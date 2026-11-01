@@ -5,6 +5,8 @@
 //
 //   bin/human-train train.bin val.bin out.hnet [--epochs 1] [--batch 1024] [--lr 0.001]
 //                   [--max 0 (= all samples)] [--value-weight 1.0] [--seed 1]
+//                   [--init net.hnet (fine-tune it instead of starting from random weights)]
+//   --epochs 0 with --init only measures the net on val.bin.
 
 #include <Accelerate/Accelerate.h>
 #include <dispatch/dispatch.h>
@@ -228,6 +230,7 @@ int main(int argc, char** argv) {
     int epochs = 1;
     float lr0 = 1e-3f, value_weight = 1.0f;
     size_t max = 0;
+    const char* init = NULL;
     B = 1024;
     for (int i = 4; i + 1 < argc; i += 2) {
         if (!strcmp(argv[i], "--epochs")) epochs = atoi(argv[i + 1]);
@@ -235,6 +238,7 @@ int main(int argc, char** argv) {
         else if (!strcmp(argv[i], "--lr")) lr0 = (float)atof(argv[i + 1]);
         else if (!strcmp(argv[i], "--max")) max = (size_t)atoll(argv[i + 1]);
         else if (!strcmp(argv[i], "--value-weight")) value_weight = (float)atof(argv[i + 1]);
+        else if (!strcmp(argv[i], "--init")) init = argv[i + 1];
         else if (!strcmp(argv[i], "--seed")) rng_state = (uint64_t)atoll(argv[i + 1]) * 2654435761u + 1;
     }
     if (B > 4096) B = 4096;
@@ -255,6 +259,19 @@ int main(int argc, char** argv) {
     for (size_t i = 0; i < HNET_W2; ++i) net.w2[i] = gauss() * sqrtf(2.0f / HNET_H1);
     for (size_t i = 0; i < HNET_W3; ++i) net.w3[i] = gauss() * sqrtf(1.0f / HNET_H2);
     for (size_t i = 0; i < HNET_H2; ++i) net.w4[i] = gauss() * sqrtf(1.0f / HNET_H2);
+    if (init) {
+        FILE* f = fopen(init, "rb");
+        char magic[8];
+        int32_t dims[4];
+        if (!f || fread(magic, 1, 8, f) != 8 || memcmp(magic, "HNET1", 5) || fread(dims, sizeof(dims), 1, f) != 1 ||
+            dims[0] != HNET_INPUTS || dims[1] != HNET_H1 || dims[2] != HNET_H2 || dims[3] != HNET_MOVES ||
+            fread(params, sizeof(float), HNET_FLOATS, f) != HNET_FLOATS) {
+            fprintf(stderr, "%s: not a net of this layout\n", init);
+            return 1;
+        }
+        fclose(f);
+        printf("starting from %s\n", init);
+    }
 
     h1 = malloc(sizeof(float) * (size_t)B * HNET_H1);
     dh1 = malloc(sizeof(float) * (size_t)B * HNET_H1);
@@ -312,6 +329,6 @@ int main(int argc, char** argv) {
         snprintf(label, sizeof(label), "epoch %d", e + 1);
         validate(val, nval, label);
     }
-    printf("saved %s\n", argv[3]);
+    if (epochs > 0) printf("saved %s\n", argv[3]);
     return 0;
 }
