@@ -1,0 +1,8 @@
+# First moves for the deep seed book (tools/seed-book.ts --include tools/openings-deep.txt),
+# searched with about 10 minutes of one core per position. Replies and later moves are chosen
+# by the engine (--widths, --margin), not listed here.
+e4
+d4
+c4
+Nf3
+f4
