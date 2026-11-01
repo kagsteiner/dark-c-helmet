@@ -220,7 +220,11 @@ export class PlayController {
     const profile = this.setup.humanProfile;
     if (!profile) return this.engine ? Promise.resolve(this.engine) : null;
     if (!this.humanLoader) return null;
-    if (this.human?.profile !== profile) this.human = { profile, engine: this.humanLoader(profile) };
+    if (this.human?.profile !== profile) {
+      // One human-like engine at a time: each keeps its own worker and memory.
+      this.human?.engine.then((e) => e.close(), () => {});
+      this.human = { profile, engine: this.humanLoader(profile) };
+    }
     return this.human.engine;
   }
 
