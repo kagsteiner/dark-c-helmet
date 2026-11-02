@@ -143,3 +143,16 @@ run, about 15% blunders):
 Blind 5/8, Replies 4, Optimism 5, Satisfied 80, more candidates and deeper lines (up to
 Replies 5, LineDepth 6, Budget 600) all stayed at 128-138 cp: in Chess960 the 1600 player
 still plays somewhat below a real 1600. The remaining gap is the net's.
+
+**Tried (2026-11-02), not shipped: h1600-960_v2**, trained the same way on Chess960 games one band
+higher (1600-1800, 1.0M games, 63.5M positions) to make the player stronger. Move match 37.5%
+(as v1), but 133 cp instead of 129: no stronger. Split by game phase (h1600-960_v1, profile 1600-960):
+
+| | real 1600 players | 1600 player |
+|---|---|---|
+| Chess960, first 10 moves each | 35 cp, 2.5% blunders | 34 cp, 2.8% |
+| Chess960, later | 133 cp, 18.4% | 167 cp, 23.5% |
+| standard, all moves | 106 cp, 13.7% | 112 cp, 15.7% |
+
+The opening is fine; the gap is blunders in Chess960 middlegames, which the line search
+overlooks more often than real players do (not something the net lacks).
