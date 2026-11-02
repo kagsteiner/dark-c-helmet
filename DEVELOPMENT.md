@@ -190,6 +190,21 @@ Build 83 (net v11) against HIARCS 15.4, 400 games each, 20+0.2, 1 thread: standa
 **+298 ± 34** (+297 =84 −19), Chess960 **+361 ± 43** (+323 =65 −12),
 both matches in parallel at concurrency 8 each, openings `random8.epd` / `frc960.epd`.
 
+### Chess960 yardstick: Stockfish with time odds
+
+HIARCS is too weak to measure further Chess960 progress, so `tools/sf960.sh [engine]` plays
+Stockfish 19 (`brew install stockfish`, 1 thread) with time odds: we get 20+0.2, Stockfish
+1/`ODDS` of that, all 960 starting positions. Calibration with build 94 (net v11), 200 games
+each: 1/4 −244 ± 46, 1/8 −119 ± 34, 1/16 +49 ± 33, so 50% lies near 1/13. The yardstick is
+fixed at **`ODDS=12`** (Stockfish 1.667+0.0167):
+
+| Engine | Chess960 (400 games) | Standard, `random8.epd` (400 games) |
+|---|---|---|
+| build 94, net v11 | **−59 ± 23** (+69 =195 −136) | **−19 ± 22** (+115 =148 −137) |
+
+The ~40 Elo gap between the two (±32) suggests Chess960 still lags standard chess, though the
+960 openings are also more unbalanced. Games and logs: `tools/games/sf960/`.
+
 ## UCI extensions
 
 | Command | Purpose |
