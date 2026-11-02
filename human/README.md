@@ -116,3 +116,30 @@ Validation: Chess960 games of 2024-01 (3,256 games), move match of the plain pol
 170 cp per move (real players 146). With h1300-960_v1 it still lost 163, so the profile
 "1300-960" overlooks fewer replies (Blind 15 instead of 25; 10-15 measured within noise):
 156 cp, 21.3% blunders, 36.6% move match; real 1300 players in the same run 154 cp, 20.7%.
+
+## Chess960, 1600 band
+
+### net_h1600-960_v1 (2026-11-02)
+
+Same procedure as for 1300: the 1600 net trained on for 3 epochs (lr 3e-4) on 58.2M positions of
+Chess960 games plus as many standard positions (Lichess Chess960 2021-10..2026-09 without
+2024-01, 954k games, both players' 960 ratings 1500-1700; games with a player at exactly 1500,
+the starting rating, left out). Data in `~/VibeEngineData/lichess-960-1500-1700/`.
+
+| net (validation: Chess960 2024-01, 14,254 games) | all | first 10 moves each | later | standard (2017-01) |
+|---|---|---|---|---|
+| h1600_v1 | 30.3% | 21.4% | 34.6% | 43.1% |
+| h1600-960_v1 | 37.5% | 36.6% | 38.0% | 42.7% |
+
+`calibrate.py --chess960 --profile 1600`, 2000 positions (real 1600 players: 108-117 cp per
+run, about 15% blunders):
+
+| | move match | avg loss | blunders |
+|---|---|---|---|
+| h1600_v1, profile 1600 | 32.5% | 137 cp | 18.1% |
+| h1600-960_v1, profile 1600 | 33.8% | 132 cp | 17.8% |
+| h1600-960_v1, Temperature 25 (profile "1600-960") | 35.0% | 129 cp | 17.1% |
+
+Blind 5/8, Replies 4, Optimism 5, Satisfied 80, more candidates and deeper lines (up to
+Replies 5, LineDepth 6, Budget 600) all stayed at 128-138 cp: in Chess960 the 1600 player
+still plays somewhat below a real 1600. The remaining gap is the net's.
