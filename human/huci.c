@@ -3,6 +3,7 @@
 // The profile decides how much it thinks; the clock decides how long it takes: like a person,
 // it uses the time a move deserves (the main engine's budget, varied by +-25%) before
 // answering. The WebAssembly build cannot wait, so there the app holds the move back.
+// "policy" prints the net's moves for the current position, most likely first.
 // Options: Profile (a rating band of HPROFILES), each profile field (scaled to
 // integers, see the "uci" output), Seed.
 //
@@ -266,6 +267,17 @@ static void uci_loop(void) {
             break;
         } else if (!strcmp(cmd, "d")) {
             pos_print(&g_pos);
+        } else if (!strcmp(cmd, "policy")) {
+            // The net's moves for the current position, most likely first (for analysis).
+            HEval e;
+            hnet_evaluate(&g_pos, &e);
+            char buf[6];
+            printf("policy value %.3f", e.value);
+            for (int i = 0; i < e.count; ++i) {
+                move_to_str(&g_pos, e.moves[i], buf);
+                printf(" %s %.4f", buf, e.prob[i]);
+            }
+            printf("\n");
         }
         fflush(stdout);
     }

@@ -13,6 +13,7 @@ Usage: python3 human/calibrate.py val.bin [--positions 2000] [--profile 1300] [-
                                    [--seed 1] [--jobs 14] [--chess960]   (Chess960 samples)
 """
 import argparse
+import queue
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
@@ -89,8 +90,20 @@ def main():
     for e in engines:
         e.send(f"setoption name UCI_Chess960 value {str(a.chess960).lower()}")
 
+    # Each judging engine serves one position at a time (taking engines[k % jobs] let two
+    # threads talk to the same engine at once and mixed up their answers).
+    free = queue.Queue()
+    for e in engines:
+        free.put(e)
+
     def judge(k):
-        e = engines[k % a.jobs]
+        e = free.get()
+        try:
+            return judge_with(e, k)
+        finally:
+            free.put(e)
+
+    def judge_with(e, k):
         fen, human, search, policy = rows[k][:4]
         best = e.score(fen, [], a.nodes)
         loss = {}

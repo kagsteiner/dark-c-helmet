@@ -156,3 +156,33 @@ higher (1600-1800, 1.0M games, 63.5M positions) to make the player stronger. Mov
 
 The opening is fine; the gap is blunders in Chess960 middlegames, which the line search
 overlooks more often than real players do (not something the net lacks).
+
+## Correction: calibrate.py shared its judging engines between threads (fixed 2026-11-02)
+
+`calibrate.py` took `engines[k % jobs]` for position k, so two threads could talk to the same
+engine at once and mix up their answers. Every loss figure above was measured with that bug:
+noisy, and too high. The same positions measured again with the fixed script (2000 positions):
+
+| | real players | human player | gap |
+|---|---|---|---|
+| 1300, standard (h1300_v1, profile 1300) | 136 cp, 18.6% | 130 cp, 17.4% | -6 |
+| 1300, Chess960 (h1300-960_v1, profile 1300-960) | 136 cp, 19.3% | 145 cp, 19.9% | +9 |
+| 1600, standard (h1600_v1, profile 1600) | 94 cp, 11.8% | 100 cp, 13.4% | +6 |
+| 1600, Chess960 (h1600-960_v1, profile 1600-960) | 102 cp, 13.5% | 124 cp, 16% | +22 |
+
+Repeated runs agree within about 2 cp. The profiles were tuned with the faulty script, but all
+except 1600 in Chess960 still match their band within 10 cp.
+
+**1600 in Chess960: the players differ, not the search.** Middlegames only (move 11 on),
+3000 positions each:
+
+| | real 1600 players | human player |
+|---|---|---|
+| Chess960 | 123 cp, 16.7% blunders | 148 cp, 21.4% |
+| standard | 142 cp, 19.7% | 148 cp, 20.5% |
+
+The human player plays 960 middlegames exactly as well as standard ones, and the refutations
+it misses are of the same kinds (rank in the policy, backward moves, long slides). It is the
+Lichess players rated 1600 in Chess960 who are stronger than those rated 1600 in standard
+chess: the Chess960 rating scale sits lower. So profile 1600-960 plays Chess960 like a
+standard 1600 that knows Chess960 openings. (At 1300 the two pools match: 136 cp in both.)
