@@ -209,6 +209,10 @@ The ~40 Elo gap between the two (±32) suggested Chess960 still lagged standard 
 960 openings are also more unbalanced. Net v12, trained with 80% Chess960 starts in the new data,
 gained ~60 Elo on this yardstick and closed that gap. Games and logs: `tools/games/sf960/`.
 
+Build 116 (net v12) against Shredder 14 (which supports Chess960), 200 games each, 20+0.2,
+1 thread: standard chess **−67 ± 27** (+35 =92 −73; build 69: −87 ± 28), Chess960
+**+7 ± 35** (+51 =102 −47). Games: `tools/games/shredder-v12/`.
+
 ## UCI extensions
 
 | Command | Purpose |
