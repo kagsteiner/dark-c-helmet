@@ -25,7 +25,17 @@
     X(hist_bonus_mult, 18, 4, 32)         \
     X(hist_bonus_max, 1623, 400, 3200)    \
     X(qs_fut_margin, 145, 50, 300)        \
-    X(asp_delta, 17, 8, 50)
+    X(asp_delta, 17, 8, 50)               \
+    X(razor_depth, 3, 1, 6)               \
+    X(nmp_min_depth, 3, 2, 6)             \
+    X(nmp_eval_cap, 3, 1, 6)              \
+    X(lmp_depth, 8, 4, 12)                \
+    X(fut_depth, 8, 4, 12)                \
+    X(see_depth, 8, 4, 12)                \
+    X(lmr_min_depth, 3, 2, 6)             \
+    X(se_tt_depth, 3, 1, 6)               \
+    X(corr_weight_max, 16, 4, 40)         \
+    X(corr_limit, 64, 16, 160)  /* cp */
 
 #ifdef SPSA
 #define TUNE_DECLARE(name, def, lo, hi) extern int name;

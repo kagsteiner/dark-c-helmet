@@ -14,6 +14,8 @@ r_end (learning rate at the end), and the engine sees the rounded values.
     make spsa
     python3 tools/spsa/spsa.py --pairs 16000 --workers 16 --tc 5+0.05
 
+--frc-share 0.5 plays half of the game pairs from Chess960 starting positions (--frc-book).
+
 The state is saved to --state after every update, and a run resumes from it when restarted.
 """
 import argparse
@@ -115,11 +117,15 @@ class Spsa:
     def play_pair(self, job, workdir):
         a = self.args
         cmd = [a.fastchess]
+        book = a.book
+        if random.random() < a.frc_share:
+            cmd += ["-variant", "fischerandom"]
+            book = a.frc_book
         for side in ("plus", "minus"):
             cmd += ["-engine", f"cmd={a.engine}", f"name={side}"]
             cmd += [f"option.{n}={v}" for n, v in job[side].items()]
         cmd += ["-each", "proto=uci", f"tc={a.tc}", "option.Hash=16", "option.Threads=1",
-                "-openings", f"file={a.book}", "format=epd", "order=random",
+                "-openings", f"file={book}", "format=epd", "order=random",
                 "-srand", str(random.randrange(1, 2**31)),
                 "-games", "2", "-rounds", "1", "-repeat", "-concurrency", "1",
                 "-draw", "movenumber=40", "movecount=8", "score=10",
@@ -178,6 +184,8 @@ def main():
     p.add_argument("--engine", default=os.path.join(ROOT, "bin", "darkhelmet-spsa"))
     p.add_argument("--fastchess", default=os.path.join(ROOT, "..", "fastchess", "fastchess"))
     p.add_argument("--book", default=os.path.join(ROOT, "tools", "books", "random8.epd"))
+    p.add_argument("--frc-book", default=os.path.join(ROOT, "tools", "books", "frc960.epd"))
+    p.add_argument("--frc-share", type=float, default=0.0, help="share of pairs from Chess960 starts")
     p.add_argument("--tc", default="5+0.05")
     p.add_argument("--pairs", type=int, default=16000, help="total game pairs (sets the gain schedule)")
     p.add_argument("--workers", type=int, default=16)
@@ -188,6 +196,7 @@ def main():
     os.makedirs(os.path.dirname(args.state), exist_ok=True)
     args.engine = os.path.abspath(args.engine)
     args.book = os.path.abspath(args.book)
+    args.frc_book = os.path.abspath(args.frc_book)
     Spsa(args).run()
 
 

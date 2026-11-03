@@ -30,7 +30,7 @@ int g_move_overhead = 20;
 // result. Stored in units of 1/CORR_GRAIN centipawn, indexed by side to move and pawn key.
 #define CORR_SIZE 16384
 #define CORR_GRAIN 256
-#define CORR_LIMIT (CORR_GRAIN * 64)
+#define CORR_LIMIT (CORR_GRAIN * corr_limit)
 
 // History indexed by [piece][to-square] of a follow-up move.
 typedef int PieceToHistory[12][64];
@@ -404,7 +404,7 @@ static inline int corrected_eval(SearchThread* t, int raw) {
 // Move the correction towards (search result - static eval), weighted by depth.
 static void update_correction(SearchThread* t, int depth, int diff) {
     int* e = correction_entry(t);
-    int weight = depth + 1 < 16 ? depth + 1 : 16;
+    int weight = depth + 1 < corr_weight_max ? depth + 1 : corr_weight_max;
     int v = (*e * (256 - weight) + diff * CORR_GRAIN * weight) / 256;
     *e = v > CORR_LIMIT ? CORR_LIMIT : v < -CORR_LIMIT ? -CORR_LIMIT : v;
 }
@@ -560,15 +560,15 @@ static int search(SearchThread* t, int alpha, int beta, int depth, int ply) {
         if (depth <= rfp_depth && eval - rfp_margin * (depth - improving) >= beta && eval < VALUE_MATE_IN_MAX) return eval;
 
         // Razoring
-        if (depth <= 3 && eval + razor_margin * depth <= alpha) {
+        if (depth <= razor_depth && eval + razor_margin * depth <= alpha) {
             int score = qsearch(t, alpha, beta, ply);
             if (score <= alpha) return score;
         }
 
         // Null move pruning
-        if (depth >= 3 && eval >= beta && ss->static_eval >= beta && ss[-1].move != MOVE_NONE &&
+        if (depth >= nmp_min_depth && eval >= beta && ss->static_eval >= beta && ss[-1].move != MOVE_NONE &&
             non_pawn_material(pos, pos->side) && beta > -VALUE_MATE_IN_MAX) {
-            int r = nmp_base + depth / nmp_depth_div + ((eval - beta) / nmp_eval_div < 3 ? (eval - beta) / nmp_eval_div : 3);
+            int r = nmp_base + depth / nmp_depth_div + ((eval - beta) / nmp_eval_div < nmp_eval_cap ? (eval - beta) / nmp_eval_div : nmp_eval_cap);
             ss->move = MOVE_NONE;
             ss->piece = NO_PIECE;
             ss->cont = &cont_sentinel;
@@ -603,27 +603,27 @@ static int search(SearchThread* t, int alpha, int beta, int depth, int ply) {
         // Shallow-depth pruning, once a real score is secured
         if (!root && best > -VALUE_MATE_IN_MAX && non_pawn_material(pos, pos->side)) {
             if (quiet) {
-                if (depth <= 8 && legal > (lmp_base + depth * depth) / (2 - improving)) {
+                if (depth <= lmp_depth && legal > (lmp_base + depth * depth) / (2 - improving)) {
                     skip_quiets = 1;
                     continue;
                 }
-                if (!checked && depth <= 8 && ss->static_eval != VALUE_NONE &&
+                if (!checked && depth <= fut_depth && ss->static_eval != VALUE_NONE &&
                     ss->static_eval + fut_base + fut_mult * depth <= alpha) {
                     skip_quiets = 1;
                     continue;
                 }
-                if (depth <= 8 && !see_ge(pos, m, -see_quiet * depth)) continue;
+                if (depth <= see_depth && !see_ge(pos, m, -see_quiet * depth)) continue;
             } else {
                 // Captures from the good-capture stage already passed SEE >= 0, which implies
                 // this (negative) threshold.
-                if (depth <= 8 && mp.stage != STAGE_GOOD_NOISY && !see_ge(pos, m, -see_noisy * depth)) continue;
+                if (depth <= see_depth && mp.stage != STAGE_GOOD_NOISY && !see_ge(pos, m, -see_noisy * depth)) continue;
             }
         }
 
         // Singular extension: if every alternative to the hash move fails well below its
         // score, the hash move is forced and deserves an extra ply.
         int extension = 0;
-        if (!root && m == tt_move && !excluded && depth >= se_depth && hit && tt_depth(tte) >= depth - 3 &&
+        if (!root && m == tt_move && !excluded && depth >= se_depth && hit && tt_depth(tte) >= depth - se_tt_depth &&
             (tt_bound(tte) & BOUND_LOWER) && abs(tt_score) < VALUE_MATE_IN_MAX && ply < 2 * t->root_depth) {
             int singular_beta = tt_score - se_margin * depth / 16;
             ss->excluded = m;
@@ -648,7 +648,7 @@ static int search(SearchThread* t, int alpha, int beta, int depth, int ply) {
         int new_depth = depth - 1 + extension;
         int score;
 
-        if (depth >= 3 && legal > 1 + pv_node && quiet) {
+        if (depth >= lmr_min_depth && legal > 1 + pv_node && quiet) {
             int r = lmr_table[depth < 64 ? depth : 63][legal < 64 ? legal : 63];
             r -= pv_node;
             r += !improving;
