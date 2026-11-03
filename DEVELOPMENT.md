@@ -148,7 +148,8 @@ Nets so far:
 | `nets/net_v8.nnue` | 663M positions (+180M from SPSA-tuned build 59) | +10.6 ± 5.8 Elo vs net_v7 (4,432 games) |
 | `nets/net_v9.nnue` | 834M positions (+170M from build 62) | +9.7 ± 5.5 vs net_v8; a variant with output buckets by piece-count range × queens on/off (`OUT_SCHEME=1`) scored +14.6 ± 7.0 vs net_v8, not compared head-to-head |
 | `nets/net_v10.nnue` | 998M positions (+164M from build 65), **7 factorized king buckets** (ranks 3–8 one bucket) | +33.7 ± 10.8 vs net_v9; same data: kb4 +33.4 ± 11.1, kb8 +23.3 ± 9.0; kb7 + queens output buckets −7.5 ± 5.8 vs kb7. ~18% fewer nodes/s (no accumulator cache yet) |
-| `nets/net_v11.nnue` (default) | 1,189M positions (+191M from build 82, **half of the games from random Chess960 starting positions**), kb7 as v10 | standard chess +16.2 ± 6.0 vs net_v10 (3,794 games, non-regression SPRT [−3, 0] passed); Chess960 +143.7 ± 24.3 (470 games). One shared net for both variants |
+| `nets/net_v11.nnue` | 1,189M positions (+191M from build 82, **half of the games from random Chess960 starting positions**), kb7 as v10 | standard chess +16.2 ± 6.0 vs net_v10 (3,794 games, non-regression SPRT [−3, 0] passed); Chess960 +143.7 ± 24.3 (470 games). One shared net for both variants |
+| `nets/net_v12.nnue` (default) | 1,104M positions: v6–v11 + 189M from build 115 with **80% Chess960 starts**; v3–v5 (273M, weak engines) dropped so training fits in 48 GB | Chess960 +29.1 ± 10.3 vs net_v11 (1,582 games, SPRT [0, 5] passed); standard chess +5.5 ± 3.7 (10,272 games, non-regression SPRT [−3, 0] passed); Stockfish 1/12 yardstick in Chess960: +2 ± 16 (v11: −59) |
 
 ## Search changes and their measured value
 
@@ -184,7 +185,8 @@ Against HIARCS 15.4 in Chess960 (build 81, 400 games, 20+0.2, 1 thread each, all
 positions): **+176 ± 35** (+252 =83 −65), compared with +250 ± 32 in standard chess. That
 network (v10) had never seen Chess960 openings. Net v11 was trained with 50% Chess960 starts
 (`FRC_PERCENT=50 tools/nnue/pipeline.sh`, or `datagen … <frc_percent>`): +144 Elo vs v10 in
-Chess960 and +16 in standard chess, so one network serves both variants.
+Chess960 and +16 in standard chess, so one network serves both variants. Net v12 (80% Chess960
+starts in the new data) added another +29 in Chess960 and +5.5 in standard chess.
 
 Build 83 (net v11) against HIARCS 15.4, 400 games each, 20+0.2, 1 thread: standard chess
 **+298 ± 34** (+297 =84 −19), Chess960 **+361 ± 43** (+323 =65 −12),
@@ -201,9 +203,11 @@ fixed at **`ODDS=12`** (Stockfish 1.667+0.0167):
 | Engine | Chess960 (400 games) | Standard, `random8.epd` (400 games) |
 |---|---|---|
 | build 94, net v11 | **−59 ± 23** (+69 =195 −136) | **−19 ± 22** (+115 =148 −137) |
+| build 115, net v12 | **+2 ± 16** (800 games: +200 =405 −195) | |
 
-The ~40 Elo gap between the two (±32) suggests Chess960 still lags standard chess, though the
-960 openings are also more unbalanced. Games and logs: `tools/games/sf960/`.
+The ~40 Elo gap between the two (±32) suggested Chess960 still lagged standard chess, though the
+960 openings are also more unbalanced. Net v12, trained with 80% Chess960 starts in the new data,
+gained ~60 Elo on this yardstick and closed that gap. Games and logs: `tools/games/sf960/`.
 
 ## UCI extensions
 
