@@ -55,10 +55,10 @@ on the VPS; you publish the master book there. Details in `DESIGN.md`, "Contribu
 
 ```bash
 sh server/deploy.sh                                   # build and (re)start the server (pm2: chess-api)
-ssh vps ~/nodejs/chess-api/book-admin pending         # browsers waiting, with their codes
-ssh vps ~/nodejs/chess-api/book-admin approve K7QF-2M9X --user fred
-ssh vps ~/nodejs/chess-api/book-admin publish         # new master book version from all inputs
-ssh vps ~/nodejs/chess-api/book-admin users           # moves each user added
+ssh vps '~/nodejs/chess-api/book-admin pending'         # browsers waiting, with their codes
+ssh vps '~/nodejs/chess-api/book-admin approve K7QF-2M9X --user fred'
+ssh vps '~/nodejs/chess-api/book-admin publish'         # new master book version from all inputs
+ssh vps '~/nodejs/chess-api/book-admin users'           # moves each user added
 rsync ~/chess-data/seed-standard.json vps:chess-data/seed/   # a seed book as input
 ```
 
