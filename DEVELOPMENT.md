@@ -215,7 +215,9 @@ Build 116 (net v12) against Shredder 14 (which supports Chess960), 200 games eac
 1 thread: standard chess **−67 ± 27** (+35 =92 −73; build 69: −87 ± 28), Chess960
 **+7 ± 35** (+51 =102 −47). Games: `tools/games/shredder-v12/`. Build 120 (SPSA run 2),
 1,000 Chess960 games, concurrency 16: **+23 ± 16** (+278 =509 −213). Games:
-`tools/games/shredder-b120-960/`.
+`tools/games/shredder-b120-960/`. The same in standard chess (random 8-ply openings):
+**−45 ± 13** (+217 =437 −346), no time losses. Games: `tools/games/shredder-b120-std/`.
+Against Shredder, build 120 is ~70 Elo stronger in Chess960 than in standard chess.
 
 ## UCI extensions
 
