@@ -76,7 +76,7 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done.
       which replace the rest of the line without touching the game
 - [x] Opened from a game: clocks stop, star goes out, "Back to game"; from Setup with a
       position
-- [x] Full-game review: time per position (0.5–10 s), evaluation graph (hover, click to
+- [x] Full-game review: time per position (0.5 s–5 min), evaluation graph (hover, click to
       jump), marks ?! ? ?? by the drop in winning chances (lichess thresholds), summary
       per side
 

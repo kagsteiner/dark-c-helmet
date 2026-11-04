@@ -30,7 +30,18 @@ interface Review {
   marks: (Mark | null)[];
 }
 
-const REVIEW_TIMES = [0.5, 1, 2, 5, 10]; // seconds per position
+const REVIEW_TIMES = [0.5, 1, 2, 5, 10, 30, 60, 120, 300]; // seconds per position
+
+function formatSeconds(s: number): string {
+  return s < 60 ? `${s} s` : `${s / 60} min`;
+}
+
+/** Time left in a review, rounded up to a minute: "about 1 h 05 min left". */
+function formatLeft(s: number): string {
+  if (s < 60) return "less than a minute left";
+  const m = Math.ceil(s / 60);
+  return `about ${m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}` : m} min left`;
+}
 
 function formatCount(n: number): string {
   return n >= 1e9 ? (n / 1e9).toFixed(1) + "G" : n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? Math.round(n / 1e3) + "k" : String(n);
@@ -96,7 +107,7 @@ export function analysisScreen(rules: Rules, controller: PlayController, engineS
               <div class="an-review-row">
                 <label class="field">
                   <span class="field-label">Review the game, time per move</span>
-                  <select name="reviewTime">${REVIEW_TIMES.map((t) => `<option value="${t}"${t === reviewSeconds ? " selected" : ""}>${t} s</option>`).join("")}</select>
+                  <select name="reviewTime">${REVIEW_TIMES.map((t) => `<option value="${t}"${t === reviewSeconds ? " selected" : ""}>${formatSeconds(t)}</option>`).join("")}</select>
                 </label>
                 <button class="btn-secondary" data-action="review">Review</button>
               </div>
@@ -112,7 +123,7 @@ export function analysisScreen(rules: Rules, controller: PlayController, engineS
 
       let analyzing = false; // endless analysis running
       let lastInfo: SearchInfo | null = null;
-      let reviewing: { token: number; done: number; total: number } | null = null;
+      let reviewing: { token: number; done: number; total: number; seconds: number } | null = null;
       let token = 0;
 
       // Positions of the line: fens[i] after i moves, played[i] the (i+1)-th move.
@@ -284,7 +295,9 @@ export function analysisScreen(rules: Rules, controller: PlayController, engineS
         btn.textContent = reviewing ? "Cancel" : "Review";
         btn.disabled = !controller.engine || played.length === 0;
         if (reviewing) {
-          status.textContent = `Reviewing position ${reviewing.done + 1} of ${reviewing.total}…`;
+          const left = (reviewing.total - reviewing.done) * reviewing.seconds;
+          status.textContent =
+            `Reviewing position ${reviewing.done + 1} of ${reviewing.total}` + (reviewing.seconds >= 5 ? `, ${formatLeft(left)}` : "…");
         } else if (review && review.evals.length === played.length + 1 && review.evals.every((e) => e !== null)) {
           const count = (white: boolean, m: Mark) =>
             review!.marks.filter((x, i) => x === m && whiteToMoveAt(i) === white).length;
@@ -338,7 +351,8 @@ export function analysisScreen(rules: Rules, controller: PlayController, engineS
         const total = played.length + 1;
         const evals: (number | null)[] = new Array(total).fill(null);
         review = { evals, marks: [] };
-        reviewing = { token: t, done: 0, total };
+        const seconds = reviewSeconds; // changing the choice does not affect a running review
+        reviewing = { token: t, done: 0, total, seconds };
         render();
         for (let i = 0; i < total; i++) {
           if (t !== token) return;
@@ -352,7 +366,7 @@ export function analysisScreen(rules: Rules, controller: PlayController, engineS
           else {
             const r = await engine.search(
               { startFen: line!.startFen, moves: line!.moves.slice(0, i), chess960: line!.chess960 },
-              { movetime: reviewSeconds * 1000 },
+              { movetime: seconds * 1000 },
             );
             if (t !== token) return;
             record(g, r, engine, "analysis");
