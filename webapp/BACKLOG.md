@@ -112,6 +112,14 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done.
 - [ ] "My games" list
 - [x] Master book on the VPS (`tools/publish-book.ts`; startup check, ask or merge
       automatically; Book screen section)
+- [ ] Book contributions, server (DESIGN.md, Opening book → Contributions): endpoint
+      `/chess/api/` and `book-admin` on the VPS (register, approve with `--user`, revoke,
+      status, submit)
+- [ ] Book contributions, app: device key and Settings section, outbox, sending in the
+      background
+- [ ] Publishing on the VPS (`book-admin publish`) with counts per user
+- [ ] Later, near a million book moves: delta files; merge and statistics without loading the
+      whole book
 - [ ] MultiPV (engine change) and up to 3 analysis lines
 - [ ] Strength levels
 - [ ] Native engine on localhost (WebSocket bridge)

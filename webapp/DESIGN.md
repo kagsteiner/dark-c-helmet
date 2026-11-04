@@ -6,7 +6,8 @@ The work plan is in `BACKLOG.md`.
 ## Architecture
 
 - **Client-only.** The engine runs in the browser as WebAssembly. There is no backend in the MVP;
-  games, settings and the opening book live on the device (IndexedDB).
+  games, settings and the opening book live on the device (IndexedDB). After the MVP, one
+  small endpoint takes opening book contributions (see Opening book → Contributions).
 - **Hosting.** `npm run build` produces static files (`webapp/dist/`). They are served by nginx on
   the VPS (HTTPS already set up). Two headers are required, otherwise the engine runs with one
   thread only:
@@ -210,9 +211,106 @@ all nets are treated alike; the rule is decided when v12 exists.
   compressed, about 15 bytes per move. At startup the app fetches the manifest; for a newer
   version it asks "Merge / Later" (Later: not asked again for that version), or merges it
   by itself when the Book screen's setting says so. The Book screen shows the merged version
-  and offers newer ones. The server holds no write access: only you publish, from the Mac.
-  Contributions from others are not taken: a merge keeps the higher node count, so a bad
-  file could push wrong moves to everyone.
+  and offers newer ones. Only you publish, today from the Mac. Book files from others are
+  not merged into it: a merge keeps the higher node count, so a bad file could push wrong
+  moves to everyone. Entries from devices you approved are the exception (see
+  Contributions, which also moves publishing to the VPS).
+
+### Contributions (planned)
+
+Search results from browsers you approved go into the master book by themselves. Only
+approved devices can send, and nothing they send is searched again.
+
+**Devices and users**
+
+- Settings → "Contribute to the opening book" creates a key pair in this browser (WebCrypto,
+  ECDSA P-256) and keeps it in IndexedDB. The private key is not extractable: the app can
+  sign with it, but nobody can read it out, so it cannot be forwarded. The setting says what
+  is sent: the positions and moves this browser's engine searched, under the user's name.
+- The app registers the public key with the server as *pending*, with an optional name
+  ("Fred's iPhone"), and shows a short device code: the first 8 characters of the public
+  key's SHA-256 in base32, e.g. `K7QF-2M9X`.
+- The friend sends you the code. On the VPS: `book-admin approve K7QF-2M9X --user fred`.
+  Further devices of the same person get the same `--user`. Each browser is a device of its
+  own (Safari and Chrome on one Mac are two codes); clearing the site's data loses the key,
+  and the browser has to be approved again.
+- Settings shows the state: pending, "Contributing as fred" with fred's count, or revoked.
+- Pending registrations expire after 7 days, and at most 50 are kept, so strangers cannot
+  fill the list.
+- `book-admin revoke <code>` or `book-admin revoke --user fred` stops a device or a person.
+  Their entries leave the master book with the next publish, which rebuilds it from all
+  inputs.
+
+**What is sent**
+
+- Every entry this browser's engine writes to the local book (game move, hint, evaluation,
+  endless analysis, game review) with at least **50 million nodes**: 3.3 s at 15 M nodes/s
+  (a Mac), 11 s at 4.7 M nodes/s (an iPhone).
+- Recording already keeps only searches deeper than what the local book has for this
+  position and move, and the local book contains the merged master book. So only new or
+  deeper results are sent. Entries merged from files or from the master book are never sent.
+- Standard chess and Chess960 alike (the key is Shredder-FEN), so a 960 book can grow over
+  time.
+
+**Sending in the background**
+
+- Entries go into an outbox in IndexedDB, keyed like book entries (position + move). A
+  deeper result for the same move replaces the waiting one: endless analysis that improves
+  an entry ten times sends it once.
+- An entry is sent once it has not changed for 2 minutes. The app sends at natural moments:
+  game over, analysis stopped, app start, page hidden (`fetch` with `keepalive`), back
+  online, and every 10 minutes while the app is open. Up to 500 entries per request; after a
+  failure the app waits 1 minute, doubling up to 1 hour. (The Background Sync API exists only
+  in Chromium browsers, so it is not used.)
+- The server answers with the ids it took, including ones it already had; only those leave
+  the outbox. Sending twice does no harm.
+- Entries recorded while the device is pending wait in the outbox and go out after approval.
+  The outbox holds at most 20 000 entries (the oldest go first). When the device is revoked,
+  the outbox is emptied and sending stops.
+
+**Server**
+
+- A small Node process (pm2, listening on localhost only) behind one nginx location,
+  `/chess/api/`; the nginx part is yours to set up (sudo). Its data lives outside the web
+  folder, in `~/chess-data/` on the VPS: users, devices, pending registrations, and one raw
+  log per device (JSON lines, append only).
+- Endpoints: `register` (public key, name), `status`, `submit`. Every request except
+  `register` is signed; the server checks the signature with the stored public key.
+- Checks on `submit`, all cheap: device approved, format, the move is legal in the position
+  (the app's rules module, run in Node), at least 50 million nodes, at most 5 000 entries per
+  user and day (against a bug that sends in a loop). No search: nothing is calculated again.
+- The endpoint stores no IP addresses (nginx's own logs aside).
+
+**Publishing**
+
+- On the VPS, by hand: `book-admin publish`. It rebuilds the master book from all inputs:
+  the seed books (uploaded from the Mac into `~/chess-data/seed/`) and the logs of all
+  approved devices. For the same position and move the deeper search wins, with equal nodes
+  the earlier one; all contributors count the same. It writes `master-<version>.json.gz` and
+  `manifest.json` into `~/nodejs/chess/book/`, which a deploy never touches.
+- This replaces publishing from the Mac (`tools/publish-book.ts --upload`); the merge code
+  stays the same.
+
+**Counting**
+
+- An entry counts for its user when a publish puts it into the master book: new there, or
+  deeper than the master's entry for that move. The count only grows: if someone later
+  replaces the entry with a deeper one, the earlier contributor keeps the credit. Resent
+  entries and ones the book already had deeper do not count; seed books count for no one.
+- `book-admin users` lists the counts. Later the manifest can carry them, so the Book screen
+  can show who contributed how much without another endpoint. The names are then visible to
+  everyone, so use names your friends agree to.
+
+**Size**
+
+The JSON file is only the transport. In the app the book lives in IndexedDB with an index on
+the position, so lookups do not slow down as it grows. Master book version 4: 10 371 moves,
+742 KB as JSON, 106 KB compressed (about 10 bytes per move). 100 000 moves (about 1 MB to
+download) work as things are. Around a million moves (about 10 MB) two things change:
+
+- delta files ("changes since version N") instead of the whole book for every new version;
+- merging and the Book screen's statistics stop loading the whole local book into memory
+  (merge: look up only the incoming entries; statistics: count with a cursor).
 
 ## UI conventions
 
