@@ -30,6 +30,17 @@
         "--strictPort"
       ],
       "port": 4173
+    },
+    {
+      "name": "contrib-server",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "webapp",
+        "run",
+        "server"
+      ],
+      "port": 3060
     }
   ]
 }

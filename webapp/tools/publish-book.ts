@@ -9,12 +9,11 @@
 //
 // The upload goes in two steps so that the manifest on the server never names a missing file:
 // first the new book file, then the manifest (removing older book files).
+// Since book contributions, the master book is published on the VPS (server/admin.ts publish).
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { gzipSync } from "node:zlib";
+import { mkdirSync, readFileSync } from "node:fs";
 import { BOOK_FILE_FORMAT, isBookEntry, shouldStore, type BookEntry } from "../src/book/book-logic.ts";
-import { isManifest, MASTER_FORMAT, toMasterFile, type MasterManifest } from "../src/book/master-format.ts";
+import { writeMaster } from "../server/master-write.ts";
 
 const inputs: string[] = [];
 let dir = "";
@@ -47,31 +46,10 @@ for (const path of inputs) {
 }
 
 mkdirSync(dir, { recursive: true });
-const manifestPath = join(dir, "manifest.json");
-const previous = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, "utf8")) : null;
-const version = isManifest(previous) ? previous.version + 1 : 1;
-const created = new Date().toISOString();
-
-const entries = [...merged.values()];
-const gz = gzipSync(JSON.stringify(toMasterFile(entries, version, created)), { level: 9 });
-const fileName = `master-${version}.json.gz`;
-writeFileSync(join(dir, fileName + ".tmp"), gz);
-renameSync(join(dir, fileName + ".tmp"), join(dir, fileName));
-for (const f of readdirSync(dir)) if (/^master-\d+\.json\.gz$/.test(f) && f !== fileName) unlinkSync(join(dir, f));
-
-const manifest: MasterManifest = {
-  format: MASTER_FORMAT,
-  version,
-  created,
-  positions: new Set(entries.map((e) => e.key)).size,
-  moves: entries.length,
-  file: fileName,
-  bytes: gz.length,
-};
-writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+const manifest = writeMaster(dir, [...merged.values()]);
 console.log(
-  `Master book version ${version}: ${manifest.positions.toLocaleString("en")} positions, ` +
-    `${manifest.moves.toLocaleString("en")} moves, ${(gz.length / 1e6).toFixed(2)} MB (gzip) in ${dir}`,
+  `Master book version ${manifest.version}: ${manifest.positions.toLocaleString("en")} positions, ` +
+    `${manifest.moves.toLocaleString("en")} moves, ${(manifest.bytes / 1e6).toFixed(2)} MB (gzip) in ${dir}`,
 );
 
 if (upload) {

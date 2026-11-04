@@ -211,26 +211,26 @@ all nets are treated alike; the rule is decided when v12 exists.
   compressed, about 15 bytes per move. At startup the app fetches the manifest; for a newer
   version it asks "Merge / Later" (Later: not asked again for that version), or merges it
   by itself when the Book screen's setting says so. The Book screen shows the merged version
-  and offers newer ones. Only you publish, today from the Mac. Book files from others are
-  not merged into it: a merge keeps the higher node count, so a bad file could push wrong
-  moves to everyone. Entries from devices you approved are the exception (see
-  Contributions, which also moves publishing to the VPS).
+  and offers newer ones. Only you publish, on the VPS (see Contributions). Book files from
+  others are not merged into it: a merge keeps the higher node count, so a bad file could push
+  wrong moves to everyone. Entries from browsers you approved are the exception.
 
-### Contributions (planned)
+### Contributions
 
 Search results from browsers you approved go into the master book by themselves. Only
 approved devices can send, and nothing they send is searched again.
 
 **Devices and users**
 
-- Settings → "Contribute to the opening book" creates a key pair in this browser (WebCrypto,
-  ECDSA P-256) and keeps it in IndexedDB. The private key is not extractable: the app can
+- Settings → Opening book contributions → "Take part" creates a key pair in this browser
+  (WebCrypto, ECDSA P-256) and keeps it in IndexedDB. The private key is not extractable: the app can
   sign with it, but nobody can read it out, so it cannot be forwarded. The setting says what
   is sent: the positions and moves this browser's engine searched, under the user's name.
 - The app registers the public key with the server as *pending*, with an optional name
   ("Fred's iPhone"), and shows a short device code: the first 8 characters of the public
   key's SHA-256 in base32, e.g. `K7QF-2M9X`.
-- The friend sends you the code. On the VPS: `book-admin approve K7QF-2M9X --user fred`.
+- The friend sends you the code. On the VPS: `~/nodejs/chess-api/book-admin approve K7QF-2M9X
+  --user fred` (`book-admin pending` lists the waiting ones).
   Further devices of the same person get the same `--user`. Each browser is a device of its
   own (Safari and Chrome on one Mac are two codes); clearing the site's data loses the key,
   and the browser has to be approved again.
@@ -257,9 +257,9 @@ approved devices can send, and nothing they send is searched again.
 - Entries go into an outbox in IndexedDB, keyed like book entries (position + move). A
   deeper result for the same move replaces the waiting one: endless analysis that improves
   an entry ten times sends it once.
-- An entry is sent once it has not changed for 2 minutes. The app sends at natural moments:
-  game over, analysis stopped, app start, page hidden (`fetch` with `keepalive`), back
-  online, and every 10 minutes while the app is open. Up to 500 entries per request; after a
+- An entry is sent once it has not changed for 2 minutes: a timer fires 2 minutes after the
+  last change. Besides, the app sends at startup, when the page is hidden (`fetch` with
+  `keepalive`, one batch of 200), when the device is back online, and every 10 minutes. Up to 500 entries per request; after a
   failure the app waits 1 minute, doubling up to 1 hour. (The Background Sync API exists only
   in Chromium browsers, so it is not used.)
 - The server answers with the ids it took, including ones it already had; only those leave
@@ -270,8 +270,11 @@ approved devices can send, and nothing they send is searched again.
 
 **Server**
 
-- A small Node process (pm2, listening on localhost only) behind one nginx location,
-  `/chess/api/`; the nginx part is yours to set up (sudo). Its data lives outside the web
+- A small Node process (`server/`, pm2 name `chess-api`, 127.0.0.1:3060) behind one nginx
+  location, `/chess/api/` (`deploy/nginx.conf`). The VPS has Node 20, which cannot run
+  TypeScript, so `npm run server:build` bundles it; `server/deploy.sh` copies it to
+  `~/nodejs/chess-api` and restarts it. `npm run server` runs it locally, and the dev server
+  forwards `/api/` to it. Its data lives outside the web
   folder, in `~/chess-data/` on the VPS: users, devices, pending registrations, and one raw
   log per device (JSON lines, append only).
 - Endpoints: `register` (public key, name), `status`, `submit`. Every request except
@@ -283,13 +286,14 @@ approved devices can send, and nothing they send is searched again.
 
 **Publishing**
 
-- On the VPS, by hand: `book-admin publish`. It rebuilds the master book from all inputs:
+- On the VPS, by hand: `~/nodejs/chess-api/book-admin publish`. It rebuilds the master book from all inputs:
   the seed books (uploaded from the Mac into `~/chess-data/seed/`) and the logs of all
   approved devices. For the same position and move the deeper search wins, with equal nodes
   the earlier one; all contributors count the same. It writes `master-<version>.json.gz` and
   `manifest.json` into `~/nodejs/chess/book/`, which a deploy never touches.
-- This replaces publishing from the Mac (`tools/publish-book.ts --upload`); the merge code
-  stays the same.
+- This replaces publishing from the Mac (`tools/publish-book.ts --upload`, still there for
+  tests); both write versions with `server/master-write.ts`. Seed books from the Mac go to the
+  VPS with `rsync <file> vps:chess-data/seed/`.
 
 **Counting**
 

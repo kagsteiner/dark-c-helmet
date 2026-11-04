@@ -2,6 +2,7 @@
 import type { Game } from "../chess/game.ts";
 import type { Engine, SearchResult } from "../engine/engine.ts";
 import { BOOK_STORE, db, request } from "../storage.ts";
+import { offerEntry } from "./contrib-client.ts";
 import {
   BOOK_FILE_FORMAT,
   BOOK_MAX_MOVE,
@@ -58,19 +59,21 @@ export async function record(game: Game, result: SearchResult, engine: Engine, s
   if (!move) return;
   const key = bookKey(game.fen());
   const name = bookMoveName(move);
+  const entry: BookEntry = {
+    id: key + " " + name,
+    key,
+    move: name,
+    nodes: result.nodes || info.nodes,
+    depth: info.depth,
+    score: bookScore(info.score),
+    net: engine.net,
+    build: engine.name,
+    source,
+    date: Date.now(),
+  };
   try {
-    await put({
-      id: key + " " + name,
-      key,
-      move: name,
-      nodes: result.nodes || info.nodes,
-      depth: info.depth,
-      score: bookScore(info.score),
-      net: engine.net,
-      build: engine.name,
-      source,
-      date: Date.now(),
-    });
+    // New or deeper than what the book had: also a candidate for the master book.
+    if ((await put(entry)) !== "kept") await offerEntry(entry);
   } catch {
     // storage unavailable: the book just does not learn
   }

@@ -9,7 +9,11 @@ const isolation = {
 
 export default defineConfig({
   base: "./", // relative paths: the build works in the server root or in a subfolder
-  server: { headers: isolation },
+  server: {
+    headers: isolation,
+    // The contribution server (npm run server) as on the VPS, where nginx maps /chess/api/.
+    proxy: { "/api/": { target: "http://127.0.0.1:3060", rewrite: (p) => p.replace(/^\/api/, "") } },
+  },
   preview: { headers: isolation },
   worker: { format: "es" },
   build: {

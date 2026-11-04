@@ -7,7 +7,9 @@
     "dev": "vite --host",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host",
-    "test": "node --test \"src/**/*.test.ts\""
+    "test": "node --test \"src/**/*.test.ts\" \"server/**/*.test.ts\"",
+    "server:build": "vite build -c server/vite.config.ts && mkdir -p server/dist/rules && cp public/engine/dh-rules.js public/engine/dh-rules.wasm server/dist/rules/",
+    "server": "RULES_DIR=public/engine CHESS_DATA=server/.data CHESS_BOOK=server/.data/book node server/main.ts"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",

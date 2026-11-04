@@ -48,6 +48,22 @@ node webapp/tools/publish-book.ts --in ~/chess-data/seed-standard.json --in ~/ch
 
 `deploy.sh` leaves the server's `book/` folder alone.
 
+## Book contributions
+
+Browsers you approve send their deep searches (at least 50 million nodes) to a small server
+on the VPS; you publish the master book there. Details in `DESIGN.md`, "Contributions".
+
+```bash
+sh server/deploy.sh                                   # build and (re)start the server (pm2: chess-api)
+ssh vps ~/nodejs/chess-api/book-admin pending         # browsers waiting, with their codes
+ssh vps ~/nodejs/chess-api/book-admin approve K7QF-2M9X --user fred
+ssh vps ~/nodejs/chess-api/book-admin publish         # new master book version from all inputs
+ssh vps ~/nodejs/chess-api/book-admin users           # moves each user added
+rsync ~/chess-data/seed-standard.json vps:chess-data/seed/   # a seed book as input
+```
+
+Locally: `npm run server` (data in `server/.data/`) next to `npm run dev`.
+
 ## Deploying
 
 ```bash

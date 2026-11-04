@@ -7,6 +7,7 @@ import { bookScreen } from "./screens/book.ts";
 import { playScreen } from "./screens/play.ts";
 import { settingsScreen } from "./screens/settings.ts";
 import { setupScreen } from "./screens/setup.ts";
+import { startContributions } from "./book/contrib-client.ts";
 import { checkMasterAtStartup } from "./book/master.ts";
 import { loadSettings } from "./settings.ts";
 import { startShell } from "./ui/shell.ts";
@@ -38,6 +39,9 @@ controller.humanLoader = (profile) => Engine.startHuman(profile);
 
 // A newer master opening book on the server: merge it (setting) or ask, once per version.
 checkMasterAtStartup(() => window.dispatchEvent(new Event("book-changed")));
+
+// Deep searches waiting to go to the master book (if this browser contributes).
+startContributions();
 
 // The threaded engine first; if it does not start (seen on an iPad after hours in the
 // background, until the browser was restarted), the single-threaded one.
