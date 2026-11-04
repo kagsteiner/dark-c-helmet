@@ -165,6 +165,7 @@ SPRT [0, 5] Elo at 8+0.08, each against the build before it (`tools/sprt_queue.s
 | Correction history (pawn-structure eval correction) | +10.5 ± 5.7 (4,312 games) |
 | Staged move picker (hash move before generation, lazy SEE, quiets generated on demand) | +45.3 ± 12.6 (1,018 games); +39% nodes/s |
 | SPSA-tuned search constants (`src/tune.h`, 16,000 pairs at 5+0.05, `tools/spsa/spsa.py`) | +20.5 ± 8.3 (2,092 games) |
+| SPSA run 2: 31 constants (10 depth limits and correction-history caps added), 20,000 pairs at 5+0.05, half of them from Chess960 starts (`--frc-share 0.5`); 18 values changed, the largest null-move base reduction 3 → 4 and aspiration window 17 → 13 | standard +10.4 ± 6.7 (2,606 games), Chess960 +11.8 ± 6.7 (2,600 games); stopped early at a clear lead |
 | Accumulator cache ("Finny table") for king-bucket refreshes, net v10 | +39.1 ± 11.4 (1,062 games); +22% nodes/s, same bench |
 | Speed: prefetch of NNUE weight rows after make-move, 64-byte alignment, no repeated SEE for good captures, `make pgo` | +5–6% nodes/s, same bench (not SPRT-tested: identical search, only faster) |
 
@@ -204,6 +205,7 @@ fixed at **`ODDS=12`** (Stockfish 1.667+0.0167):
 |---|---|---|
 | build 94, net v11 | **−59 ± 23** (+69 =195 −136) | **−19 ± 22** (+115 =148 −137) |
 | build 115, net v12 | **+2 ± 16** (800 games: +200 =405 −195) | |
+| build 120, net v12, SPSA run 2 | **+8 ± 24** (+99 =211 −90) | |
 
 The ~40 Elo gap between the two (±32) suggested Chess960 still lagged standard chess, though the
 960 openings are also more unbalanced. Net v12, trained with 80% Chess960 starts in the new data,
