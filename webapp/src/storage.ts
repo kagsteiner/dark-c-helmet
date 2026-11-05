@@ -50,3 +50,17 @@ export async function save(key: string, value: unknown): Promise<void> {
     // not persisted; the app keeps working
   }
 }
+
+/** The values of all keys that start with `prefix`, in key order. */
+export async function loadAll<T>(prefix: string): Promise<T[]> {
+  try {
+    return await request<T[]>(KV, "readonly", (s) => s.getAll(IDBKeyRange.bound(prefix, prefix + "\uffff")));
+  } catch {
+    return [];
+  }
+}
+
+/** Removes all keys that start with `prefix`. */
+export async function removeAll(prefix: string): Promise<void> {
+  await request(KV, "readwrite", (s) => s.delete(IDBKeyRange.bound(prefix, prefix + "\uffff"))).catch(() => {});
+}

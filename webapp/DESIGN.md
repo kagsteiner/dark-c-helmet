@@ -316,6 +316,36 @@ download) work as things are. Around a million moves (about 10 MB) two things ch
 - merging and the Book screen's statistics stop loading the whole local book into memory
   (merge: look up only the incoming entries; statistics: count with a cursor).
 
+### Exploring
+
+The Explore page (`#/explore`, linked from Settings) searches new positions in the background,
+in a Chrome tab of its own, on a computer that is on anyway. Standard chess or Chess960 (by
+default 70%, because Chess960 comes first for this app).
+
+- **Where it searches:** a walk starts from a random start position and plays moves up to the
+  first position without an entry of at least 50 million nodes. Each move comes from a short
+  probe of all legal moves (200 000 nodes each, kept per position for the session): within 60 cp
+  of the best, at most 4, each half as likely as the one before. So poor moves are not explored,
+  and common positions get filled first. Existing entries are not deepened.
+- **What it stores:** the position's best move, and the move that led there with the negated
+  score, as the seed book does. Both as source `analysis`, so they reach the master book through
+  the outbox like any other deep search (Contributions).
+- **Fixed nodes:** the time per position is turned into nodes once, with a 3 s measurement at
+  Start. Chrome may slow a hidden tab; a search then takes longer but stays as deep. The engine's
+  `go nodes` counts the main thread's nodes, so the limit is divided by the threads.
+- **In the background:** each search starts when the last one ends, driven by the engine's
+  messages, so Chrome's timer throttling of hidden tabs (once a minute) does not matter. Whether
+  exploring is on is remembered: an open Explore page carries on after a reload. Leaving the page
+  pauses it. The speed shown for a visible and a hidden tab tells whether Chrome slows it.
+- **Several tabs:** a Web Lock allows one explorer per browser; a second Explore page waits and
+  takes over when the first tab is closed. The searches do not count for the speed estimate that
+  games use, since other tabs of the app share it.
+- **Battery:** it pauses while the Battery Status API reports no charging (Chromium only); this
+  also keeps it away from Chrome's Energy Saver, which freezes busy hidden tabs.
+- **The list:** every analyzed position with its line from move 1, the engine's move, score,
+  depth and nodes, in the key-value store under `explore-log/`. Newest first, 300 rows until
+  "Show all".
+
 ## UI conventions
 
 The rules every screen follows. Exact values live as CSS variables in one file

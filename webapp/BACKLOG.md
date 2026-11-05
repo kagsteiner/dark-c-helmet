@@ -118,6 +118,8 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done.
 - [x] Book contributions, app: device key and Settings section, outbox, sending in the
       background
 - [x] Publishing on the VPS (`book-admin publish`) with counts per user
+- [x] Explore page (`#/explore`, linked from Settings): background search of positions the book
+      does not know, in a tab of its own; list of everything analyzed
 - [ ] Later, near a million book moves: delta files; merge and statistics without loading the
       whole book
 - [ ] MultiPV (engine change) and up to 3 analysis lines

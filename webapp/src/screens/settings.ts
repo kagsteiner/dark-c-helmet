@@ -73,6 +73,8 @@ export function settingsScreen(controller: PlayController): Screen {
             maintainer gives you; nothing else is sent.</p>
           <div class="contrib"></div>
           <p class="contrib-status small" aria-live="polite"></p>
+          <p class="small"><a href="#/explore" target="_blank" rel="noopener">Explore openings in the background</a>:
+            a page for a tab of its own that keeps adding new positions to the book.</p>
 
           <h2 class="section-title">About</h2>
           <dl class="about numeric"></dl>

@@ -1,6 +1,7 @@
 // The opening book in IndexedDB: lookup, recording search results, statistics, export, merge.
 import type { Game } from "../chess/game.ts";
-import type { Engine, SearchResult } from "../engine/engine.ts";
+import type { LegalMove } from "../chess/rules.ts";
+import type { Engine, SearchInfo, SearchResult } from "../engine/engine.ts";
 import { BOOK_STORE, db, request } from "../storage.ts";
 import { offerEntry } from "./contrib-client.ts";
 import {
@@ -51,32 +52,52 @@ async function put(entry: BookEntry): Promise<"added" | "updated" | "kept"> {
   return existing ? "updated" : "added";
 }
 
+/** Stores an entry; new or deeper than what the book had: also a candidate for the master book. */
+async function store(entry: BookEntry): Promise<void> {
+  try {
+    if ((await put(entry)) !== "kept") await offerEntry(entry);
+  } catch {
+    // storage unavailable: the book just does not learn
+  }
+}
+
+function makeEntry(fen: string, move: LegalMove, info: SearchInfo, nodes: number, score: number, engine: Engine, source: BookEntry["source"]): BookEntry {
+  const key = bookKey(fen);
+  const name = bookMoveName(move);
+  return {
+    id: key + " " + name,
+    key,
+    move: name,
+    nodes,
+    depth: info.depth,
+    score,
+    net: engine.net,
+    build: engine.name,
+    source,
+    date: Date.now(),
+  };
+}
+
 /** Records a finished search of the game's current position (before the move is played). */
 export async function record(game: Game, result: SearchResult, engine: Engine, source: BookEntry["source"]): Promise<void> {
   const info = result.info;
   if (!info || !result.bestmove || !inBookRange(game)) return;
   const move = game.legalMoves().find((m) => m.uci === result.bestmove);
   if (!move) return;
-  const key = bookKey(game.fen());
-  const name = bookMoveName(move);
-  const entry: BookEntry = {
-    id: key + " " + name,
-    key,
-    move: name,
-    nodes: result.nodes || info.nodes,
-    depth: info.depth,
-    score: bookScore(info.score),
-    net: engine.net,
-    build: engine.name,
-    source,
-    date: Date.now(),
-  };
-  try {
-    // New or deeper than what the book had: also a candidate for the master book.
-    if ((await put(entry)) !== "kept") await offerEntry(entry);
-  } catch {
-    // storage unavailable: the book just does not learn
-  }
+  await store(makeEntry(game.fen(), move, info, result.nodes || info.nodes, bookScore(info.score), engine, source));
+}
+
+/** A finished search of the game's current position also scores the move that led to it (as in
+ *  the seed book), so the book knows more than the best move of each position. */
+export async function recordMoveLeadingHere(game: Game, result: SearchResult, engine: Engine, source: BookEntry["source"]): Promise<void> {
+  const info = result.info;
+  const last = game.moves[game.moves.length - 1];
+  if (!info || !last) return;
+  game.undo();
+  const move = game.legalMoves().find((m) => m.uci === last.uci);
+  const entry = move && inBookRange(game) ? makeEntry(game.fen(), move, info, result.nodes || info.nodes, -bookScore(info.score), engine, source) : null;
+  game.play(last.uci);
+  if (entry) await store(entry);
 }
 
 export async function allEntries(): Promise<BookEntry[]> {

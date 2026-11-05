@@ -43,7 +43,6 @@ interface Queued extends BookEntry {
 }
 
 let current: ContribState = { enabled: false, name: "" };
-let loaded = false;
 let flushing = false;
 let retryMs = 0;
 let timer: ReturnType<typeof setTimeout> | undefined;
@@ -54,10 +53,8 @@ export function contribSupported(): boolean {
 }
 
 export async function contribState(): Promise<ContribState> {
-  if (!loaded) {
-    current = { ...current, ...(await load<ContribState>(STATE)) };
-    loaded = true;
-  }
+  // Read every time: another tab may have changed it (Settings, while Explore runs).
+  current = { ...current, ...(await load<ContribState>(STATE)) };
   return current;
 }
 

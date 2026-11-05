@@ -16,7 +16,10 @@ const ROUTES = [
   { path: "settings", label: "Settings" },
 ] as const;
 
-export type Route = (typeof ROUTES)[number]["path"];
+/** Reached through a link in Settings, not the navigation. */
+const OTHER_ROUTES = ["explore"] as const;
+
+export type Route = (typeof ROUTES)[number]["path"] | (typeof OTHER_ROUTES)[number];
 
 export function startShell(screens: Record<Route, Screen>): void {
   const app = document.getElementById("app")!;
@@ -51,7 +54,7 @@ export function startShell(screens: Record<Route, Screen>): void {
   let cleanup: (() => void) | void;
   const show = () => {
     const path = location.hash.replace(/^#\//, "").split("?")[0] as Route;
-    const route = ROUTES.some((r) => r.path === path) ? path : "play";
+    const route = ROUTES.some((r) => r.path === path) || (OTHER_ROUTES as readonly string[]).includes(path) ? path : "play";
     for (const a of app.querySelectorAll<HTMLAnchorElement>("[data-route]")) {
       if (a.dataset.route === route) a.setAttribute("aria-current", "page");
       else a.removeAttribute("aria-current");

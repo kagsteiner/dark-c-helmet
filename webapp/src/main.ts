@@ -4,6 +4,7 @@ import { threadsAvailable } from "./engine/transport.ts";
 import { PlayController } from "./play/controller.ts";
 import { analysisScreen } from "./screens/analysis.ts";
 import { bookScreen } from "./screens/book.ts";
+import { exploreScreen } from "./screens/explore.ts";
 import { playScreen } from "./screens/play.ts";
 import { settingsScreen } from "./screens/settings.ts";
 import { setupScreen } from "./screens/setup.ts";
@@ -32,6 +33,7 @@ startShell({
   analysis: analysisScreen(rules, controller, () => engineStatus),
   book: bookScreen(),
   settings: settingsScreen(controller),
+  explore: exploreScreen(rules, controller),
 });
 
 // The human-like opponent is downloaded when a game against it starts.
