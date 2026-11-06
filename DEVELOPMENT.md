@@ -193,6 +193,13 @@ Build 83 (net v11) against HIARCS 15.4, 400 games each, 20+0.2, 1 thread: standa
 **+298 ± 34** (+297 =84 −19), Chess960 **+361 ± 43** (+323 =65 −12),
 both matches in parallel at concurrency 8 each, openings `random8.epd` / `frc960.epd`.
 
+### What speed is worth, and the browser's cost
+
+Build 120 against itself with double the time, Chess960, 1 thread, 40+0.4 vs 20+0.2, 1,000 games:
+**+77 ± 10** (+240 =739 −21). At 70% of native speed (`webapp/DESIGN.md`) the browser is 0.5 of a
+doubling behind, so **about 40 Elo** below native at this time control. Not covered: hash size,
+longer time controls, where a doubling is usually worth less.
+
 ### Chess960 yardstick: Stockfish with time odds
 
 HIARCS is too weak to measure further Chess960 progress, so `tools/sf960.sh [engine]` plays

@@ -81,6 +81,9 @@ The work plan is in `BACKLOG.md`.
   search after loading runs at about a quarter of that speed. The app should run a short
   warm-up search after loading. 8 threads: about 20M nodes/s. Node counts are identical to
   native.
+  Longer searches (three positions, 8 s each, 256 MB hash, build 120), native vs WASM in
+  nodes/s: 1 thread 4.84M vs 3.47M (72%), 4 threads 18.87M vs 13.6M (72%), 8 threads 35.09M vs
+  24.4M (69%). A double-time match puts this at about 40 Elo (`DEVELOPMENT.md`).
 - **Memory.** Static data is 119 MB (16 search threads at most in the WASM build, the net,
   the boards), plus the hash table. To be checked on the iPhone; if it is too much, the
   thread data can be allocated on demand.
