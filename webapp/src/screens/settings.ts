@@ -148,10 +148,11 @@ export function settingsScreen(controller: PlayController): Screen {
             </label>
             <div class="book-actions">${button("start", c.code ? "Contribute again" : "Take part")}</div>`;
         } else if (c.state === "approved") {
-          const n = c.improvements ?? 0;
+          const count = (n: number) => `${n.toLocaleString("en")} ${n === 1 ? "move" : "moves"}`;
           contrib.innerHTML = `
-            <p>Contributing as <strong>${escapeHtml(c.user ?? "")}</strong>: ${n.toLocaleString("en")} ${n === 1 ? "move" : "moves"}
-              added to the master book so far.${waitingText}</p>
+            <p>Contributing as <strong>${escapeHtml(c.user ?? "")}</strong>: ${count(c.received ?? 0)} sent,
+              ${count(c.improvements ?? 0)} in the master book. Sent moves count once the master book is next
+              published.${waitingText}</p>
             <div class="book-actions">${waiting ? button("send", "Send now") : ""}${button("stop", "Stop contributing")}</div>`;
         } else if (c.state === "revoked") {
           contrib.innerHTML = `<p>The maintainer has stopped contributions from this browser.</p>`;

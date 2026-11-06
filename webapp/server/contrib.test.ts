@@ -81,6 +81,7 @@ test("register, approve, submit: only approved devices, only deep and legal move
   const approved = await status({ device });
   assert.equal(approved.user, "fred");
   assert.equal(approved.improvements, 0);
+  assert.equal(approved.received, 0);
 
   const good = entry(START, "e2e4", 60e6);
   const castle = entry(FRC, "b1h1", 80e6);
@@ -97,6 +98,7 @@ test("register, approve, submit: only approved devices, only deep and legal move
   const again = await submit({ device, entries: [good, { ...good, nodes: 90e6 }] });
   assert.equal(again.accepted, 1);
   assert.equal(store.log(device).length, 3);
+  assert.equal((await status({ device })).received, 2); // moves, not searches of them
   await rejects(submit({ device, entries: "x" }), 400);
 });
 

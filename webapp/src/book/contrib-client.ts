@@ -35,6 +35,7 @@ export interface ContribState {
   state?: DeviceState;
   user?: string;
   improvements?: number;
+  received?: number;
 }
 
 interface Queued extends BookEntry {
@@ -99,7 +100,7 @@ async function signed<T>(path: string, body: object, keepalive = false): Promise
 }
 
 function applyStatus(s: StatusReply): Promise<void> {
-  return update({ code: s.code, state: s.state, user: s.user, improvements: s.improvements });
+  return update({ code: s.code, state: s.state, user: s.user, improvements: s.improvements, received: s.received });
 }
 
 /** Turns contributing on: registers this browser (again) and returns its state. */
@@ -185,6 +186,7 @@ export async function flush(keepalive = false): Promise<void> {
   try {
     if (s.state !== "approved" && !keepalive) await refreshContribStatus();
     if (current.state !== "approved") return;
+    let accepted = 0;
     for (;;) {
       const now = Date.now();
       const settled = (await allQueued()).filter((e) => now - e.queued >= SETTLE_MS).sort((a, b) => a.queued - b.queued);
@@ -197,8 +199,10 @@ export async function flush(keepalive = false): Promise<void> {
       await removeFromOutbox(reply.taken.filter((id) => still.get(id) === sentNodes.get(id)));
       for (const f of listeners) f();
       retryMs = 0;
+      accepted += reply.accepted;
       if (reply.limited || keepalive || !reply.taken.length) break;
     }
+    if (accepted && !keepalive) await refreshContribStatus(); // the server's counts have changed
   } catch (err) {
     if (err instanceof Error && /revoked/.test(err.message)) await refreshContribStatus().catch(() => {});
     retryMs = Math.min(Math.max(60e3, retryMs * 2), 3600e3);

@@ -118,7 +118,8 @@ export function exploreScreen(rules: Rules, controller: PlayController): Screen 
         $(".ex-contrib").textContent = !c.enabled
           ? "This browser does not contribute: results stay in the book on this device. You can turn contributions on in Settings."
           : c.state === "approved"
-            ? `Results go to the master book as ${c.user}, in the background (${c.improvements ?? 0} moves added so far).`
+            ? `Contributing as ${c.user}: ${(c.received ?? 0).toLocaleString("en")} moves sent, ${(c.improvements ?? 0).toLocaleString("en")} in the master book. ` +
+              "New moves are sent in the background and count once the master book is next published."
             : "This browser is not approved yet: results wait here until it is (Settings).";
       };
 

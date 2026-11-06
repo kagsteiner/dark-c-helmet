@@ -234,7 +234,8 @@ approved devices can send, and nothing they send is searched again.
   Further devices of the same person get the same `--user`. Each browser is a device of its
   own (Safari and Chrome on one Mac are two codes); clearing the site's data loses the key,
   and the browser has to be approved again.
-- Settings shows the state: pending, "Contributing as fred" with fred's count, or revoked.
+- Settings shows the state: pending, "Contributing as fred" with how many moves fred has sent
+  and how many are in the master book, or revoked.
 - Pending registrations expire after 7 days, and at most 50 are kept, so strangers cannot
   fill the list.
 - `book-admin revoke <code>` or `book-admin revoke --user fred` stops a device or a person.

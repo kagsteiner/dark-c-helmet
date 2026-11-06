@@ -24,8 +24,10 @@ export interface StatusReply {
   state: DeviceState;
   /** Set once approved. */
   user?: string;
-  /** Moves of this user that went into the master book. */
+  /** Moves of this user that went into the master book (counted when it is published). */
   improvements?: number;
+  /** Moves of this user the server has taken, on all their devices. */
+  received?: number;
 }
 
 /** Signed: POST status with { device }, POST submit with { device, entries }. */

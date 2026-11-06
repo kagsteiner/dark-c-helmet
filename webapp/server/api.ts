@@ -117,6 +117,10 @@ export class Api {
     if (d.state === "approved" && d.user) {
       r.user = d.user;
       r.improvements = this.store.users()[d.user]?.improvements ?? 0;
+      r.received = this.store
+        .devices()
+        .filter((x) => x.user === d.user)
+        .reduce((sum, x) => sum + this.sentBy(x.code).size, 0);
     }
     return r;
   }
