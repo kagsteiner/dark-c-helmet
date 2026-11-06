@@ -30,9 +30,9 @@ export const BOOK_MAX_MOVE = 20; // positions up to move 20
 export const BOOK_SPREAD_CP = 10; // moves this close to the best are chosen at random ...
 export const BOOK_SPREAD_OPENING_CP = 30; // ... and this close up to move 5, for varied openings
 export const BOOK_SPREAD_OPENING_MOVES = 5;
-// A search with the same time does not reach exactly the same node count (speed varies by a
-// few percent), so entries count from 85% of the planned nodes on.
-export const BOOK_NODE_TOLERANCE = 0.85;
+// Entries count from half the planned nodes on: a book move is played at once, which saves the
+// whole search for later moves, and twice the nodes rarely changes the move.
+export const BOOK_NODE_TOLERANCE = 0.5;
 
 /** A move as the book writes it: castling as king takes own rook in both variants. */
 export function bookMoveName(m: LegalMove): string {

@@ -29,10 +29,12 @@ test("start positions", () => {
   assert.equal(isStartPosition(START_FEN.replace(" w ", " b ")), false);
 });
 
-test("book move needs at least the planned nodes", () => {
+test("book move needs at least half the planned nodes", () => {
   const entries = [entry("e2e4", 1_000_000, 30), entry("d2d4", 5_000_000, 25)];
-  assert.equal(chooseBookMove(entries, 2_000_000)?.move, "d2d4");
-  assert.equal(chooseBookMove(entries, 10_000_000), null);
+  assert.equal(chooseBookMove(entries, 2_000_000, 1, 0, true)?.move, "e2e4");
+  assert.equal(chooseBookMove(entries, 2_000_002, 1, 0, true)?.move, "d2d4");
+  assert.equal(chooseBookMove(entries, 10_000_000, 1, 0, true)?.move, "d2d4");
+  assert.equal(chooseBookMove(entries, 10_000_002), null);
 });
 
 test("random choice among moves within 10 cp of the best, 30 cp up to move 5", () => {
