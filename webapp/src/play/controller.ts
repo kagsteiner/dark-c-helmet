@@ -8,6 +8,7 @@ import type { Engine, SearchInfo, SearchLimits } from "../engine/engine.ts";
 import { load, save } from "../storage.ts";
 import { movesBetween } from "../ui/move-input.ts";
 import { Clocks, type ClockState, type Side, type TimeControl } from "./clocks.ts";
+import { newGameId, outcomeOf, saveRecord, type Star } from "./history.ts";
 
 export interface GameSetup {
   startFen: string;
@@ -35,7 +36,15 @@ export function opponentName(setup: GameSetup): string {
 
 export type StarLoss = "undo" | "hint" | "evaluation" | "analysis" | "time";
 
+/** Gold: no help and within the time. Silver: over the time, but no help. */
+export function starOf(loss: StarLoss | null): Star {
+  return loss === null ? "gold" : loss === "time" ? "silver" : null;
+}
+
 interface Saved {
+  /** Key of the game's record in the history (missing in games saved before it existed). */
+  id?: string;
+  started?: number;
   setup: GameSetup;
   moves: string[];
   clocks?: ClockState;
@@ -76,6 +85,9 @@ export function formatScore(info: SearchInfo, whiteToMove: boolean): string {
 }
 
 export class PlayController {
+  private id = newGameId();
+  private started = Date.now();
+  private recorded = false; // the game is in the history
   setup: GameSetup = DEFAULT_SETUP;
   game: Game;
   clocks: Clocks | null = null;
@@ -112,9 +124,12 @@ export class PlayController {
       this.start(DEFAULT_SETUP);
       return;
     }
+    this.id = saved.id ?? newGameId();
+    this.started = saved.started ?? Date.now();
     this.setup = saved.setup;
     this.game = new Game(this.rules, saved.setup.startFen, saved.setup.chess960);
     for (const m of saved.moves) this.game.play(m);
+    this.recorded = !!saved.id && (this.game.moves.length >= this.firstHumanPly() || !!saved.result);
     this.clocks = saved.setup.tc.kind === "move" ? null : new Clocks(saved.setup.tc, saved.clocks);
     this.star = saved.star;
     this.result = saved.result;
@@ -137,7 +152,10 @@ export class PlayController {
   }
 
   private persist(): void {
+    this.recordGame();
     save(SAVE_KEY, {
+      id: this.id,
+      started: this.started,
       setup: this.setup,
       moves: this.game.moves.map((m) => m.uci),
       clocks: this.clocks?.snapshot(),
@@ -145,6 +163,32 @@ export class PlayController {
       result: this.result,
       lowScores: this.lowScores,
     } satisfies Saved);
+  }
+
+  /** Writes the game to the history once the player has made a move. A game taken back to
+   *  before the player's first move keeps its record (it was played). */
+  private recordGame(): void {
+    const plies = this.game.moves.length;
+    if (!this.recorded && plies < this.firstHumanPly() && !this.result) return;
+    this.recorded = true;
+    const outcome = outcomeOf(this.result);
+    saveRecord({
+      id: this.id,
+      started: this.started,
+      chess960: this.setup.chess960,
+      position960: this.setup.position960,
+      human: this.setup.human,
+      opponent: this.setup.humanProfile ?? "engine",
+      tc: this.setup.tc,
+      outcome,
+      star: starOf(this.star),
+      plies,
+    });
+  }
+
+  /** Number of moves in the game once the player has made their first one. */
+  private firstHumanPly(): number {
+    return this.game.startFen.split(" ")[1] === this.setup.human ? 1 : 2;
   }
 
   get humanToMove(): boolean {
@@ -182,6 +226,9 @@ export class PlayController {
 
   start(setup: GameSetup): void {
     this.abandonSearch();
+    this.id = newGameId();
+    this.started = Date.now();
+    this.recorded = false;
     this.setup = setup;
     this.game = new Game(this.rules, setup.startFen, setup.chess960);
     const extra = setup.firstMoveExtra ? { side: setup.human, ms: setup.firstMoveExtra * 1000 } : undefined;
@@ -233,8 +280,10 @@ export class PlayController {
     this.evaluation = null;
   }
 
+  /** Undo, hints, evaluation and analysis put the star out. Running out of time turns it into
+   *  a silver star; help used before or after that still puts it out. */
   private loseStar(reason: StarLoss): void {
-    if (this.star) return;
+    if (this.star && (this.star !== "time" || reason === "time")) return;
     this.star = reason;
     this.persist();
     this.emit();

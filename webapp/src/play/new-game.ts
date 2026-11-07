@@ -5,7 +5,7 @@ import { load, save } from "../storage.ts";
 import type { TimeControl } from "./clocks.ts";
 import type { GameSetup } from "./controller.ts";
 
-interface Choices {
+export interface Choices {
   /** "engine" (Dark C. Helmet) or a human-like profile ("human-1300"). */
   opponent: string;
   variant: "standard" | "chess960";
@@ -50,9 +50,13 @@ function segmented(name: string, options: [string, string][], value: string): st
 }
 
 /** Shows the sheet. Resolves to the new game's setup, or null if cancelled. With `position`
- *  (from the Setup screen) the variant choice is left out. */
-export async function chooseNewGame(position?: { startFen: string; chess960: boolean }): Promise<GameSetup | null> {
-  const c: Choices = { ...DEFAULTS, ...(await load<Partial<Choices>>(PREFS_KEY)) };
+ *  (from the Setup screen) the variant choice is left out. `preset` overrides the remembered
+ *  choices (from the Progress screen). */
+export async function chooseNewGame(
+  position?: { startFen: string; chess960: boolean },
+  preset?: Partial<Choices>,
+): Promise<GameSetup | null> {
+  const c: Choices = { ...DEFAULTS, ...(await load<Partial<Choices>>(PREFS_KEY)), ...preset };
   const dialog = document.createElement("dialog");
   dialog.className = "sheet";
   dialog.setAttribute("aria-label", "New game");

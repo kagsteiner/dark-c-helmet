@@ -100,6 +100,7 @@ The work plan is in `BACKLOG.md`.
 | Play | the game in progress; new-game sheet (variant, start position, colour, time control) |
 | Setup | position editor, then "Play" or "Analyze" |
 | Analysis | endless analysis of the current position; full-game pass with eval graph |
+| Progress | the 960 Chess960 start positions with the player's games and starred wins |
 | Book | statistics, export, merge from file |
 | Settings | threads, hash, move input, theme |
 
@@ -134,11 +135,35 @@ button opens them as a list. The bottom of the phone screen belongs to the actio
 
 ### The star
 
-Lit at the start of a game. It goes out (outline only) after any of: undo, evaluation, hint,
-opening Analysis, time forfeit. It has no other effect. Clicking it shows one line:
+Gold at the start of a game. Running out of time turns it silver: nobody beats the engine at
+equal time, so a win over the clock without help still means something. It goes out (outline
+only) after any of: undo, evaluation, hint, opening Analysis, whether it was gold or silver
+then. Clicking it shows one line:
 
-- lit: "Clean game so far: no undo, no hints."
-- out: "Star lost: you used an undo." (or hint / analysis / time)
+- gold: "Clean game so far: no undo, no hints."
+- silver: "Silver star: your time ran out."
+- out: "Star lost: you took back a move." (or hint / evaluation / analysis)
+
+On the Progress screen a win counts with the gold star, and against Dark C. Helmet also with
+the silver one.
+
+### Progress
+
+Every game is written to a history in IndexedDB (`game:<id>` in the key-value store, see
+`src/play/history.ts`) once the player has made a move, and again on every save, so an
+abandoned game counts as played. A record holds the start number (Chess960), colour,
+opponent, time control, outcome and the star (gold, silver or none).
+
+The Progress screen shows the 960 start positions as tiles, 32 per row, numbered from the top
+left. The upper left half of a tile is the player as White, the lower right as Black. Empty:
+not played; grey: played without a starred win; then three shades of green for the strongest
+opponent beaten (1300, 1600, Dark C. Helmet). Only wins with a star count: that is what the
+star is for. Against the human-like players it must be gold, against Dark C. Helmet silver is
+enough. A filter shows one opponent. Tapping a tile shows the back rank, the
+games per opponent and colour, and "Play as White / Black", which opens the new-game sheet with
+the position filled in. "Play one I haven't won yet" picks a random position and colour without
+a counting win. Standard games and Chess960 positions from Setup (no number) are stored but not
+shown.
 
 ### Analysis
 

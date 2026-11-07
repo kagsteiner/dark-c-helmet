@@ -6,6 +6,7 @@ import { analysisScreen } from "./screens/analysis.ts";
 import { bookScreen } from "./screens/book.ts";
 import { exploreScreen } from "./screens/explore.ts";
 import { playScreen } from "./screens/play.ts";
+import { progressScreen } from "./screens/progress.ts";
 import { settingsScreen } from "./screens/settings.ts";
 import { setupScreen } from "./screens/setup.ts";
 import { startContributions } from "./book/contrib-client.ts";
@@ -31,6 +32,7 @@ startShell({
   play: playScreen(controller, () => engineStatus),
   setup: setupScreen(rules, controller),
   analysis: analysisScreen(rules, controller, () => engineStatus),
+  progress: progressScreen(controller),
   book: bookScreen(),
   settings: settingsScreen(controller),
   explore: exploreScreen(rules, controller),

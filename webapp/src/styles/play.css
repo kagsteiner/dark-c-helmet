@@ -202,6 +202,11 @@
   filter: drop-shadow(0 0 3px color-mix(in srgb, var(--star) 70%, transparent));
 }
 
+.star.silver .star-shape {
+  fill: var(--star-silver);
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--star-silver) 70%, transparent));
+}
+
 .star:not(.lit) {
   color: var(--muted);
 }

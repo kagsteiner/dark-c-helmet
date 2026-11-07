@@ -49,11 +49,18 @@
   --premove: rgba(110, 70, 170, 0.42);
   --arrow: rgba(47, 98, 198, 0.8);
   --star: #f2b705;
+  --star-silver: #a3a9b3;
 
   /* Move marks in the review (always shown with ?!, ?, ?? as well) */
   --mark-inaccuracy: #b98900;
   --mark-mistake: #d26a00;
   --mark-blunder: #c62f2f;
+
+  /* Progress tiles: played, then the strongest opponent beaten with the star */
+  --progress-played: #d3d1c7;
+  --progress-1: #9fe1cb;
+  --progress-2: #1d9e75;
+  --progress-3: #085041;
 }
 
 @media (min-width: 768px) {
@@ -80,6 +87,11 @@
     --mark-inaccuracy: #e0b43c;
     --mark-mistake: #f08a3c;
     --mark-blunder: #ef6b6b;
+    --star-silver: #c8cdd5;
+    --progress-played: #4a4b50;
+    --progress-1: #23624f;
+    --progress-2: #2fa37c;
+    --progress-3: #8fe6c6;
   }
 }
 
@@ -100,4 +112,9 @@
   --mark-inaccuracy: #e0b43c;
   --mark-mistake: #f08a3c;
   --mark-blunder: #ef6b6b;
+  --star-silver: #c8cdd5;
+  --progress-played: #4a4b50;
+  --progress-1: #23624f;
+  --progress-2: #2fa37c;
+  --progress-3: #8fe6c6;
 }

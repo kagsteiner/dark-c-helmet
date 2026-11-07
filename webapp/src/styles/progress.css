@@ -1,0 +1,137 @@
+.progress {
+  gap: var(--space-3);
+}
+
+.progress a {
+  color: var(--accent);
+}
+
+.pg-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-6);
+  margin: 0;
+}
+
+.pg-stats dt {
+  color: var(--muted);
+  font-size: var(--text-small);
+}
+
+.pg-stats dd {
+  margin: 0;
+}
+
+.pg-grid {
+  display: block;
+  width: 100%;
+  height: auto;
+  cursor: pointer;
+  user-select: none;
+}
+
+.pg-grid .tile {
+  fill: none;
+  stroke: var(--hairline);
+  stroke-width: 0.75;
+}
+
+.pg-grid .tile.standard {
+  stroke: var(--muted);
+  stroke-width: 1.5;
+}
+
+.pg-grid .tile.selected {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+}
+
+.lv-n { fill: transparent; }
+.lv-0 { fill: var(--progress-played); }
+.lv-1 { fill: var(--progress-1); }
+.lv-2 { fill: var(--progress-2); }
+.lv-3 { fill: var(--progress-3); }
+
+.pg-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pg-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.pg-legend i {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  border: 1px solid var(--hairline);
+  background: var(--fill);
+}
+
+.pg-legend i.lv-n { --fill: transparent; }
+.pg-legend i.lv-0 { --fill: var(--progress-played); }
+.pg-legend i.lv-1 { --fill: var(--progress-1); }
+.pg-legend i.lv-2 { --fill: var(--progress-2); }
+.pg-legend i.lv-3 { --fill: var(--progress-3); }
+
+.pg-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.pg-detail .section-title {
+  margin: var(--space-2) 0 0;
+}
+
+.pg-rank {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  max-width: 320px;
+}
+
+.pg-rank img {
+  width: 100%;
+  aspect-ratio: 1;
+  background: var(--square-light);
+}
+
+.pg-rank img:nth-child(odd) {
+  background: var(--square-dark);
+}
+
+.pg-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.pg-table th,
+.pg-table td {
+  text-align: left;
+  padding: var(--space-1) var(--space-2) var(--space-1) 0;
+  font-weight: var(--weight-regular);
+  vertical-align: top;
+}
+
+.pg-table thead th,
+.pg-table tbody th {
+  color: var(--muted);
+}
+
+.pg-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+}
+
+.pg-none {
+  margin: 0;
+}

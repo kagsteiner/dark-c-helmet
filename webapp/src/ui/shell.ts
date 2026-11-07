@@ -12,6 +12,7 @@ const ROUTES = [
   { path: "play", label: "Play" },
   { path: "setup", label: "Setup" },
   { path: "analysis", label: "Analysis" },
+  { path: "progress", label: "Progress" },
   { path: "book", label: "Book" },
   { path: "settings", label: "Settings" },
 ] as const;

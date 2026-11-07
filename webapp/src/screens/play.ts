@@ -16,7 +16,7 @@ const STAR_TEXT: Record<StarLoss | "lit", string> = {
   hint: "Star lost: you asked for a hint.",
   evaluation: "Star lost: you asked for an evaluation.",
   analysis: "Star lost: you opened the analysis.",
-  time: "Star lost: your time ran out.",
+  time: "Silver star: your time ran out.",
 };
 
 export function playScreen(controller: PlayController, engineStatus: () => string | null): Screen {
@@ -109,8 +109,10 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
         $<HTMLButtonElement>('[data-action="hint"]').disabled = !helpAllowed;
         $<HTMLButtonElement>('[data-action="evaluation"]').disabled = !helpAllowed;
         const star = $<HTMLButtonElement>('[data-action="star"]');
-        star.innerHTML = c.star ? icons.starOut : icons.starLit;
-        star.classList.toggle("lit", !c.star);
+        const silver = c.star === "time";
+        star.innerHTML = c.star && !silver ? icons.starOut : icons.starLit;
+        star.classList.toggle("lit", !c.star || silver);
+        star.classList.toggle("silver", silver);
         const tip = $<HTMLElement>(".star-tip");
         if (!tip.hidden) tip.textContent = STAR_TEXT[c.star ?? "lit"];
       };
