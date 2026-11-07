@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#fafaf8" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#18191b" media="(prefers-color-scheme: dark)" />
+    <meta name="description" content="A strong chess engine that runs in your browser, built above all for Chess960. With human-like opponents, game review and an opening book for all 960 start positions." />
+    <title>Dark C. Helmet</title>
+    <link rel="icon" href="./favicon.ico" sizes="16x16 32x32 48x48" />
+    <link rel="icon" type="image/svg+xml" href="./icons/darkhelmet.svg" sizes="any" />
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" sizes="180x180" />
+    <style>
+      /* Same colours and type as the app (src/styles/tokens.css). */
+      :root {
+        color-scheme: light dark;
+        --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        --bg: #fafaf8;
+        --surface: #ffffff;
+        --text: #1d1d1f;
+        --muted: #6b6b70;
+        --hairline: rgba(0, 0, 0, 0.1);
+        --accent: #2f62c6;
+        --accent-text: #ffffff;
+        --square-light: #eedcb9;
+        --square-dark: #b88b62;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #18191b;
+          --surface: #24262a;
+          --text: #ececec;
+          --muted: #9a9ca2;
+          --hairline: rgba(255, 255, 255, 0.12);
+          --accent: #6d9cf2;
+          --accent-text: #0e1a33;
+          --square-light: #d9c3a0;
+          --square-dark: #9c7553;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 17px/1.55 var(--font);
+      }
+      a { color: var(--accent); }
+      .page { max-width: 1000px; margin: 0 auto; padding: 0 16px 48px; }
+      header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 16px 0;
+        font-weight: 600;
+      }
+      header img { width: 32px; height: 32px; border-radius: 6px; }
+      header .button { margin-left: auto; }
+      .button {
+        display: inline-block;
+        min-height: 44px;
+        padding: 10px 18px;
+        border: 1px solid transparent;
+        border-radius: 6px;
+        background: var(--accent);
+        color: var(--accent-text);
+        font: inherit;
+        font-weight: 600;
+        text-decoration: none;
+        cursor: pointer;
+      }
+      .button.secondary {
+        background: transparent;
+        border-color: var(--hairline);
+        color: var(--text);
+      }
+      h1 { margin: 24px 0 16px; font-size: clamp(24px, 6vw, 36px); line-height: 1.1; letter-spacing: -0.02em; }
+      h2 { margin: 56px 0 12px; font-size: 18px; line-height: 1.2; }
+      h3 { margin: 28px 0 4px; font-size: 16px; }
+      p { margin: 0 0 14px; }
+      .text { max-width: 680px; }
+      .intro {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 400px);
+        gap: 40px;
+        align-items: start;
+      }
+      .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+      .small { font-size: 14px; color: var(--muted); }
+      figure { margin: 24px 0 0; }
+      .board {
+        display: grid;
+        grid-template-columns: repeat(8, 1fr);
+        grid-template-rows: repeat(8, 1fr);
+        aspect-ratio: 1;
+        overflow: hidden;
+        border-radius: 6px;
+      }
+      .board div { background: var(--square-light); }
+      .board div.dark { background: var(--square-dark); }
+      .board img { display: block; width: 100%; height: 100%; }
+      figcaption { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+      figcaption span { flex: 1 1 100%; }
+      .table { overflow-x: auto; max-width: 680px; margin: 16px 0; }
+      table { width: 100%; border-collapse: collapse; font-size: 15px; }
+      th, td { padding: 8px 12px 8px 0; border-bottom: 1px solid var(--hairline); text-align: left; white-space: nowrap; }
+      th { font-weight: 600; }
+      th { white-space: normal; vertical-align: bottom; }
+      td:first-child { white-space: normal; }
+      td.number, th.number { text-align: right; font-variant-numeric: tabular-nums; }
+      ul { margin: 0 0 14px; padding-left: 20px; }
+      li { margin-bottom: 6px; }
+      footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hairline); }
+      @media (max-width: 760px) {
+        .intro { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header>
+        <img src="./icons/darkhelmet.svg" alt="" />
+        <span>Dark C. Helmet</span>
+        <a class="button" href="./">Play</a>
+      </header>
+
+      <main>
+        <section class="intro">
+          <div>
+            <h1>A strong chess (960) engine in your browser</h1>
+            <p>I love <a href="https://en.wikipedia.org/wiki/Chess960">Chess960</a>, the variant with the shuffled back rank. Why do I love it? Because at the beginning, you have to fundamentally create a
+              little opening theory for the starting position in your mind. Which pawns are unprotected? Where do you develop your pieces? What do you attack? If
+              you fail to make a good plan at the beginning, your game will end horrible in a way standard chess games can't, once you have a clue about openings.
+              I had matches where all my pieces blocked each other behind badly placed pawns, matches where my opponent could dive into unprotected space in my
+              position.</p> 
+              
+              <p></p>Two things bothered me: few engines really take it seriously, and losing every single game to a full-strength engine gets old pretty quickly.</p>
+            <p>So now there is this app. The engine runs on your own device, you need no account, and your games stay in your browser.</p>
+            <div class="actions">
+              <a class="button" href="./">Play a game</a>
+              <a class="button secondary" href="#engine">How strong is it?</a>
+            </div>
+          </div>
+          <figure>
+            <div class="board" id="board"></div>
+            <figcaption>
+              <span id="caption" class="small">One of the 960 start positions.</span>
+              <button class="button secondary" id="another" type="button">Another one</button>
+              <a class="button secondary" id="analyze" href="./">Let the engine look at it</a>
+            </figcaption>
+          </figure>
+        </section>
+
+        <div class="text">
+          <h2>Why the strange name?</h2>
+          <p>On chess and backgammon servers I am darkhelmet, after my favorite sci-fi character. So this is the dark chess helmet. Dark C. Helmet. Sorry.</p>
+
+          <h2 id="engine">How strong is it?</h2>
+          <p>Confession: the whole thing is vibe coded. Yes, this is how you write this kind of software today, no way around it. One of the good things about
+            using Claude to write your software is its meticulousness. Where I would go "seems to be quite strong", it measures strength and error of its measurement
+            in hour-long engine matches. These are matches of the native engine on my pretty fast Mac (M5 Max), one thread each, 20 seconds per game plus 0.2 seconds per move:</p>
+        </div>
+        <div class="table">
+          <table>
+            <thead>
+              <tr><th>Opponent</th><th>Variant</th><th class="number">Games</th><th class="number">Elo difference</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>HIARCS 15.4</td><td>Chess960</td><td class="number">400</td><td class="number">+361 ± 43</td></tr>
+              <tr><td>HIARCS 15.4</td><td>Standard</td><td class="number">400</td><td class="number">+298 ± 34</td></tr>
+              <tr><td>Shredder 14</td><td>Chess960</td><td class="number">1,000</td><td class="number">+23 ± 16</td></tr>
+              <tr><td>Shredder 14</td><td>Standard</td><td class="number">1,000</td><td class="number">−45 ± 13</td></tr>
+              <tr><td>Stockfish 19 with 1/12 of the time</td><td>Chess960</td><td class="number">400</td><td class="number">+8 ± 24</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="text">
+          <p class="small">The HIARCS matches are from an older build (83). The newer engine has not played HIARCS again but should be even stronger.</p>
+          <p>So it beats HIARCS. It is slightly ahead of Shredder in Chess960 and slightly behind in standard chess. And Stockfish needs only about a twelfth of the thinking time to play even. A fine engine, then. Just not Stockfish. As a single number I would guess about 3400 Elo (?), with that question mark.</p>
+          <p>And in the browser? On my Mac it reaches about 70% of the native speed, about 24 million nodes per second with 8 threads. Double thinking time turned out to be worth +77 ± 10 Elo in 1,000 games against itself. That makes the browser version about 40 Elo weaker at this time control. I can live with that.</p>
+          <p>Mobile devices: I'm firmly in the Apple camp, I'm afraid. On my iPad I get about 8 million positions per second, on my iPhone about 2.5. That should still
+            put it into the "above 3000 ELO" range.
+          </p>
+
+          <h3>What is inside</h3>
+          <ul>
+            <li>A neural network (NNUE), trained from scratch on about 1.1 billion positions from the engine's own games.</li>
+            <li>A modern alpha-beta search with up to 16 threads in the browser.</li>
+            <li>Search constants tuned over 20,000 game pairs, half of them from Chess960 starts.</li>
+            <li>A record of what each step was worth. Search changes and new nets had to prove themselves in engine matches, and the numbers are all written down.</li>
+          </ul>
+
+          <h3>The embarrassing part</h3>
+          <p>Some years ago I wrote a chess engine on my own. It got stuck at about 2000 Elo. This one I built with Claude as a pair programmer. 
+            Nearly all the ideas came from Claude, I just made a few decisions. Then I got a bit carried away.</p>
+          <p>What I found particularly impressive: one day at 8 I had only an engine, written by Claude in C (very low-level, fast programming language). I sat
+            down and wrote a long specification that completely described how I want the web UI to look. 2 hours later it was ready. Bug-free. Needed
+            a bit of tweaking to get rid of the "this looks like an AI has designed it" look, and add a few stupid ideas only a human can have (see below).
+          </p>
+
+          <h2>What I built for Chess960</h2>
+
+          <h3>A net that knows Chess960</h3>
+          <p>My earlier nets had never seen a Chess960 opening. Adding games from random start positions was worth about +150 Elo in Chess960. For the current net, 80% of the new training games started from Chess960 positions, which brought another 30 Elo or so.</p>
+
+          <h3>All 960 start positions</h3>
+          <p>At the beginning you can pick a random one or enter its number from 0 to 959. If you wish, you can play from the same 960 position a hundred times,
+            until you get it.
+          </p>
+
+          <h3>Time to stare at the position</h3>
+          <p>This is the one thing I really wanted. I find it outright stupid that there are no special time controls for Chess960. You need some additional, initial thinking time. So here, you get extra seconds for your first move, 30 by default, whichever colour you play. They run before your clock starts. Make the first move and unused ones are gone. For me this makes a huge difference.</p>
+
+          <h3>Weaker opponents</h3>
+          <p>Next to the engine you can play a 1300 and a 1600 Elo player. They learned from real Lichess games of players around 1300 or 1600 range, and I calibrated them against how much real players lose per move. Both use their full thinking time. Lichess Chess960 ratings run lower, so 1300 and 1600 here mean the standard chess scale. I am still not 100% convinced by their playing style, but I find it better than what most engines give you - you know the "plays perfect for 20 moves then blunders a rook" kind of "1600 Elo".</p>
+          <p>BTW if you really want a great poor opponent for challenging games, try <a href="https://www.maiachess.com">Maia Chess</a>. Awesome how much
+            it feels like playing a real human. Have work to do to get there.
+          </p>
+
+          <h3>An opening book for all 960</h3>
+          <p>My Mac searched each of these positions for 100 million nodes, and every start now has book moves. As of November 2026 that means White's first moves, Black's replies and about 42% of White's second moves. Yes, that is shallow. 960 starts multiply everything.</p>
+          <p>The app asks at startup whether to merge this book into your own copy. Your copy also learns: the engine's searches on your device go into it. The engine plays a book move at once if its entry has at least half the nodes it had planned to search, which saves time for later moves.</p>
+
+          <h3>Explore</h3>
+          <p>Leave the Explore page open in a browser tab, and it searches opening positions the book does not know yet, one after the other. You can look at the list of everything it analyzed, line by line from move 1. Pure curiosity on my part, I wanted to see it.</p>
+
+          <h2>A word about the opening book</h2>
+          <p>Okay, that was probably not the most brilliant idea. I found going for an open-source opening book boring, loved the idea of an opening book
+            that learns, keeps improving, a bit like AlphaGo Zero for Chess openings. The result is, well, underwhelming. Don't expect an opponent that floods you with perfect opening theory. Right now my book contains 20,000 moves, all searched by the engine. And by now it even knows the first moves of Ruy Lopez or Italian... And sometimes makes a few book moves in 960 positions. But hey, it is exploring more as I write this. Someday it will be a real opening library, with 100% engine knowledge.
+          </p>
+
+          <h3>The star</h3>
+          <p>All the chess apps I know have tournament modes, resigning, offering draw. I don't really see the point of doing this when playing against an engine. So Dark C. Helmet has the star. At the beginning of a game, the star lights up (bottom screen area). As soon as you lose on time, undo, look for a hint, the star goes out. Some day I'll add star statistics that show you how many games you finished - maybe even won - with the star being lit.</p>
+
+          <h2>What else?</h2>
+
+          <h3>Playing</h3>
+          <ul>
+            <li>Time per engine move, minutes per game, minutes plus increment, or FIDE classical.</li>
+            <li>Click, drag, or click only the target square if just one of your pieces can go there.</li>
+            <li>One premove, undo, a hint as an arrow, and an evaluation at any time.</li>
+            <li>If you run out of time, the game goes on and your clock shows the overrun in red. A reload does not lose your game.</li>
+          </ul>
+
+          <h3>Analyzing</h3>
+          <ul>
+            <li>Endless analysis with score, depth, speed and the line in normal notation. Try your own moves on the board without touching the game.</li>
+            <li>Game review with up to 5 minutes per position, an evaluation graph, marks for ?!, ? and ?? (lichess thresholds) and a summary per side.</li>
+            <li>Setup with FEN import and export, in standard chess and Chess960.</li>
+          </ul>
+
+          <h3>The rest</h3>
+          <ul>
+            <li>Export your book to a file, or merge one from a file.</li>
+            <li>Choose threads and hash size, light or dark theme. The layout adapts to phone, tablet and desktop.</li>
+          </ul>
+
+          <h2>What is still missing</h2>
+          <p>Quite a bit, actually:</p>
+          <ul>
+            <li>PGN import and export.</li>
+            <li>A list of your past games.</li>
+            <li>More than one analysis line.</li>
+            <li>Installing the app and using it offline.</li>
+            <li>Star statistics</li>
+            <li>A 1900 player.</li>
+          </ul>
+
+          <h2>The best: truly free, respecting your privacy</h2>
+          <p>Games, book and settings are stored in your browser on this device. If you clear the site's data, they are gone. There is no account, and the app has no analytics.</p>
+          <p>The one exception is your choice: you can offer your deep searches to the master book that everybody can merge. I have to approve your browser first. It then sends its book results to my server, plus a name for the browser if you enter one. The switch is in Settings.</p>
+          <p>This topic is important to me. Too many web apps try to lure you into giving personal data away, or start flooding you with intrusive ads.
+            Dark C. Helmet doesn't do any of this. I wrote it to figure out whether you can vibe code a 3000+ chess engine. And because I like creating
+            software. It's all free, available for you, source code open for everyone on <a href="https://github.com/kagsteiner/dark-c-helmet">Github</a>. 
+            I do not keep any statistics of how much it is used, how it is used, on purpose.
+          </p>
+
+          <h2>Try it</h2>
+          <p>The first start automatically downloads about 5 MB of engine, plus 13 MB if you pick a human-like player. On a desktop it then uses all your cores but one while it thinks, might get a bit noisy. On a phone you can use it to make your hands warm in cold winter evenings, if you wish.</p>
+          <div class="actions">
+            <a class="button" href="./">Play a game</a>
+          </div>
+          <p class="small" style="margin-top: 16px">I write about this kind of experiment in <a href="https://agsteiner.neocities.org/Blog/index_en.html">my blog</a>.</p>
+        </div>
+      </main>
+
+      <footer class="small">
+        Engine and app: MIT license, © 2026 Karlheinz Agsteiner. Chess pieces by Colin M.L. Burnett
+        (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC BY-SA 3.0</a>).
+      </footer>
+    </div>
+
+    <script>
+      // The start position on the page: same numbering as src/chess/chess960.ts. The piece images
+      // are the app's (src/assets/pieces), embedded because Vite renames them in the build.
+      const PIECES = {"bB": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHN0eWxlPSJjb2xvci1zY2hlbWU6bGlnaHQgb25seSIgd2lkdGg9IjQ1IiBoZWlnaHQ9IjQ1IiB2aWV3Qm94PSIwIDAgNDUgNDUiPjxnIGZpbGw9Im5vbmUiIGZpbGwtcnVsZT0iZXZlbm9kZCIgc3Ryb2tlPSIjMDAwIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIHN0cm9rZS13aWR0aD0iMS41Ij48ZyBmaWxsPSIjMDAwIiBzdHJva2UtbGluZWNhcD0iYnV0dCI+PHBhdGggZD0iTTkgMzZjMy40LTEgMTAuMS40IDEzLjUtMiAzLjQgMi40IDEwLjEgMSAxMy41IDIgMCAwIDEuNi41IDMgMi0uNyAxLTEuNiAxLTMgLjUtMy40LTEtMTAuMS41LTEzLjUtMS0zLjQgMS41LTEwLjEgMC0xMy41IDEtMS40LjUtMi4zLjUtMy0uNSAxLjQtMiAzLTIgMy0yeiIvPjxwYXRoIGQ9Ik0xNSAzMmMyLjUgMi41IDEyLjUgMi41IDE1IDAgLjUtMS41IDAtMiAwLTIgMC0yLjUtMi41LTQtMi41LTQgNS41LTEuNSA2LTExLjUtNS0xNS41LTExIDQtMTAuNSAxNC01IDE1LjUgMCAwLTIuNSAxLjUtMi41IDQgMCAwLS41LjUgMCAyeiIvPjxwYXRoIGQ9Ik0yNSA4YTIuNSAyLjUgMCAxIDEtNSAwIDIuNSAyLjUgMCAxIDEgNSAweiIvPjwvZz48cGF0aCBzdHJva2U9IiNlY2VjZWMiIHN0cm9rZS1saW5lam9pbj0ibWl0ZXIiIGQ9Ik0xNy41IDI2aDEwTTE1IDMwaDE1bS03LjUtMTQuNXY1TTIwIDE4aDUiLz48L2c+PC9zdmc+", "bK": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHN0eWxlPSJjb2xvci1zY2hlbWU6bGlnaHQgb25seSIgdmlld0JveD0iMCAwIDQ1IDQ1Ij48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBzdHJva2Utd2lkdGg9IjEuNSI+PHBhdGggc3Ryb2tlLWxpbmVqb2luPSJtaXRlciIgZD0iTTIyLjUgMTEuNlY2Ii8+PHBhdGggZmlsbD0iIzAwMCIgc3Ryb2tlLWxpbmVjYXA9ImJ1dHQiIHN0cm9rZS1saW5lam9pbj0ibWl0ZXIiIGQ9Ik0yMi41IDI1czQuNS03LjUgMy0xMC41YzAgMC0xLTIuNS0zLTIuNXMtMyAyLjUtMyAyLjVjLTEuNSAzIDMgMTAuNSAzIDEwLjUiLz48cGF0aCBmaWxsPSIjMDAwIiBkPSJNMTEuNSAzN2EyMi4zIDIyLjMgMCAwIDAgMjEgMHYtN3M5LTQuNSA2LTEwLjVjLTQtNi41LTEzLjUtMy41LTE2IDRWMjd2LTMuNWMtMy41LTcuNS0xMy0xMC41LTE2LTQtMyA2IDUgMTAgNSAxMHoiLz48cGF0aCBzdHJva2UtbGluZWpvaW49Im1pdGVyIiBkPSJNMjAgOGg1Ii8+PHBhdGggc3Ryb2tlPSIjZWNlY2VjIiBkPSJNMzIgMjkuNXM4LjUtNCA2LTkuN0MzNC4xIDE0IDI1IDE4IDIyLjUgMjQuNnYyLjEtMi4xQzIwIDE4IDkuOSAxNCA3IDE5LjljLTIuNSA1LjYgNC44IDkgNC44IDkiLz48cGF0aCBzdHJva2U9IiNlY2VjZWMiIGQ9Ik0xMS41IDMwYzUuNS0zIDE1LjUtMyAyMSAwbS0yMSAzLjVjNS41LTMgMTUuNS0zIDIxIDBtLTIxIDMuNWM1LjUtMyAxNS41LTMgMjEgMCIvPjwvZz48L3N2Zz4=", "bN": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHN0eWxlPSJjb2xvci1zY2hlbWU6bGlnaHQgb25seSIgd2lkdGg9IjQ1IiBoZWlnaHQ9IjQ1IiB2aWV3Qm94PSIwIDAgNDUgNDUiPjxnIGZpbGw9Im5vbmUiIGZpbGwtcnVsZT0iZXZlbm9kZCIgc3Ryb2tlPSIjMDAwIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIHN0cm9rZS13aWR0aD0iMS41Ij48cGF0aCBmaWxsPSIjMDAwIiBkPSJNMjIgMTBjMTAuNSAxIDE2LjUgOCAxNiAyOUgxNWMwLTkgMTAtNi41IDgtMjEiLz48cGF0aCBmaWxsPSIjMDAwIiBkPSJNMjQgMThjLjM4IDIuOTEtNS41NSA3LjM3LTggOS0zIDItMi44MiA0LjM0LTUgNC0xLjA0LS45NCAxLjQxLTMuMDQgMC0zLTEgMCAuMTkgMS4yMy0xIDItMSAwLTQgMS00LTQgMC0yIDYtMTIgNi0xMnMxLjg5LTEuOSAyLTMuNWMtLjczLTEtLjUtMi0uNS0zIDEtMSAzIDIuNSAzIDIuNWgycy43OC0yIDIuNS0zYzEgMCAxIDMgMSAzIi8+PHBhdGggZmlsbD0iI2VjZWNlYyIgc3Ryb2tlPSIjZWNlY2VjIiBkPSJNOS41IDI1LjVhLjUuNSAwIDEgMS0xIDAgLjUuNSAwIDEgMSAxIDBtNS40My05Ljc1YS41IDEuNSAzMCAxIDEtLjg2LS41LjUgMS41IDMwIDEgMSAuODYuNSIvPjxwYXRoIGZpbGw9IiNlY2VjZWMiIHN0cm9rZT0ibm9uZSIgZD0ibTI0LjU1IDEwLjQtLjQ1IDEuNDUuNS4xNWMzLjE1IDEgNS42NSAyLjQ5IDcuOSA2Ljc1UzM1Ljc1IDI5LjA2IDM1LjI1IDM5bC0uMDUuNWgyLjI1bC4wNS0uNWMuNS0xMC4wNi0uODgtMTYuODUtMy4yNS0yMS4zNHMtNS43OS02LjY0LTkuMTktNy4xNnoiLz48L2c+PC9zdmc+", "bP": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHN0eWxlPSJjb2xvci1zY2hlbWU6bGlnaHQgb25seSIgd2lkdGg9IjQ1IiBoZWlnaHQ9IjQ1IiB2aWV3Qm94PSIwIDAgNDUgNDUiPjxwYXRoIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2Utd2lkdGg9IjEuNSIgZD0iTTIyLjUgOWE0IDQgMCAwIDAtMy4yMiA2LjM4IDYuNDggNi40OCAwIDAgMC0uODcgMTAuNjVjLTMgMS4wNi03LjQxIDUuNTUtNy40MSAxMy40N2gyM2MwLTcuOTItNC40MS0xMi40MS03LjQxLTEzLjQ3YTYuNDYgNi40NiAwIDAgMC0uODctMTAuNjVBNC4wMSA0LjAxIDAgMCAwIDIyLjUgOXoiLz48L3N2Zz4=", "bQ": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHN0eWxlPSJjb2xvci1zY2hlbWU6bGlnaHQgb25seSIgd2lkdGg9IjQ1IiBoZWlnaHQ9IjQ1IiB2aWV3Qm94PSIwIDAgNDUgNDUiPjxnIGZpbGwtcnVsZT0iZXZlbm9kZCIgc3Ryb2tlPSIjMDAwIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIHN0cm9rZS13aWR0aD0iMS41Ij48ZyBzdHJva2U9Im5vbmUiPjxjaXJjbGUgY3g9IjYiIGN5PSIxMiIgcj0iMi43NSIvPjxjaXJjbGUgY3g9IjE0IiBjeT0iOSIgcj0iMi43NSIvPjxjaXJjbGUgY3g9IjIyLjUiIGN5PSI4IiByPSIyLjc1Ii8+PGNpcmNsZSBjeD0iMzEiIGN5PSI5IiByPSIyLjc1Ii8+PGNpcmNsZSBjeD0iMzkiIGN5PSIxMiIgcj0iMi43NSIvPjwvZz48cGF0aCBzdHJva2UtbGluZWNhcD0iYnV0dCIgZD0iTTkgMjZjOC41LTEuNSAyMS0xLjUgMjcgMGwyLjUtMTIuNUwzMSAyNWwtLjMtMTQuMS01LjIgMTMuNi0zLTE0LjUtMyAxNC41LTUuMi0xMy42TDE0IDI1IDYuNSAxMy41eiIvPjxwYXRoIHN0cm9rZS1saW5lY2FwPSJidXR0IiBkPSJNOSAyNmMwIDIgMS41IDIgMi41IDQgMSAxLjUgMSAxIC41IDMuNS0xLjUgMS0xLjUgMi41LTEuNSAyLjUtMS41IDEuNS41IDIuNS41IDIuNSA2LjUgMSAxNi41IDEgMjMgMCAwIDAgMS41LTEgMC0yLjUgMCAwIC41LTEuNS0xLTIuNS0uNS0yLjUtLjUtMiAuNS0zLjUgMS0yIDIuNS0yIDIuNS00LTguNS0xLjUtMTguNS0xLjUtMjcgMHoiLz48cGF0aCBmaWxsPSJub25lIiBzdHJva2UtbGluZWNhcD0iYnV0dCIgZD0iTTExIDM4LjVhMzUgMzUgMSAwIDAgMjMgMCIvPjxwYXRoIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2VjZWNlYyIgZD0iTTExIDI5YTM1IDM1IDEgMCAxIDIzIDBtLTIxLjUgMi41aDIwbS0yMSAzYTM1IDM1IDEgMCAwIDIyIDBtLTIzIDNhMzUgMzUgMSAwIDAgMjQgMCIvPjwvZz48L3N2Zz4=", "bR": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHN0eWxlPSJjb2xvci1zY2hlbWU6bGlnaHQgb25seSIgd2lkdGg9IjQ1IiBoZWlnaHQ9IjQ1IiB2aWV3Qm94PSIwIDAgNDUgNDUiPjxnIGZpbGwtcnVsZT0iZXZlbm9kZCIgc3Ryb2tlPSIjMDAwIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIHN0cm9rZS13aWR0aD0iMS41Ij48cGF0aCBzdHJva2UtbGluZWNhcD0iYnV0dCIgZD0iTTkgMzloMjd2LTNIOXptMy41LTcgMS41LTIuNWgxN2wxLjUgMi41em0tLjUgNHYtNGgyMXY0eiIvPjxwYXRoIHN0cm9rZS1saW5lY2FwPSJidXR0IiBzdHJva2UtbGluZWpvaW49Im1pdGVyIiBkPSJNMTQgMjkuNXYtMTNoMTd2MTN6Ii8+PHBhdGggc3Ryb2tlLWxpbmVjYXA9ImJ1dHQiIGQ9Ik0xNCAxNi41IDExIDE0aDIzbC0zIDIuNXpNMTEgMTRWOWg0djJoNVY5aDV2Mmg1VjloNHY1eiIvPjxwYXRoIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2VjZWNlYyIgc3Ryb2tlLWxpbmVqb2luPSJtaXRlciIgc3Ryb2tlLXdpZHRoPSIxIiBkPSJNMTIgMzUuNWgyMW0tMjAtNGgxOW0tMTgtMmgxN20tMTctMTNoMTdNMTEgMTRoMjMiLz48L2c+PC9zdmc+", "wB": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHN0eWxlPSJjb2xvci1zY2hlbWU6bGlnaHQgb25seSIgd2lkdGg9IjQ1IiBoZWlnaHQ9IjQ1IiB2aWV3Qm94PSIwIDAgNDUgNDUiPjxnIGZpbGw9Im5vbmUiIGZpbGwtcnVsZT0iZXZlbm9kZCIgc3Ryb2tlPSIjMDAwIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIHN0cm9rZS13aWR0aD0iMS41Ij48ZyBmaWxsPSIjZmZmIiBzdHJva2UtbGluZWNhcD0iYnV0dCI+PHBhdGggZD0iTTkgMzZjMy4zOS0uOTcgMTAuMTEuNDMgMTMuNS0yIDMuMzkgMi40MyAxMC4xMSAxLjAzIDEzLjUgMiAwIDAgMS42NS41NCAzIDItLjY4Ljk3LTEuNjUuOTktMyAuNS0zLjM5LS45Ny0xMC4xMS40Ni0xMy41LTEtMy4zOSAxLjQ2LTEwLjExLjAzLTEzLjUgMS0xLjM1LjQ5LTIuMzIuNDctMy0uNSAxLjM1LTEuOTQgMy0yIDMtMnoiLz48cGF0aCBkPSJNMTUgMzJjMi41IDIuNSAxMi41IDIuNSAxNSAwIC41LTEuNSAwLTIgMC0yIDAtMi41LTIuNS00LTIuNS00IDUuNS0xLjUgNi0xMS41LTUtMTUuNS0xMSA0LTEwLjUgMTQtNSAxNS41IDAgMC0yLjUgMS41LTIuNSA0IDAgMC0uNS41IDAgMnoiLz48cGF0aCBkPSJNMjUgOGEyLjUgMi41IDAgMSAxLTUgMCAyLjUgMi41IDAgMSAxIDUgMHoiLz48L2c+PHBhdGggc3Ryb2tlLWxpbmVqb2luPSJtaXRlciIgZD0iTTE3LjUgMjZoMTBNMTUgMzBoMTVtLTcuNS0xNC41djVNMjAgMThoNSIvPjwvZz48L3N2Zz4=", "wK": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHN0eWxlPSJjb2xvci1zY2hlbWU6bGlnaHQgb25seSIgdmlld0JveD0iMCAwIDQ1IDQ1Ij48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBzdHJva2Utd2lkdGg9IjEuNSI+PHBhdGggc3Ryb2tlLWxpbmVqb2luPSJtaXRlciIgZD0iTTIyLjUgMTEuNjNWNk0yMCA4aDUiLz48cGF0aCBmaWxsPSIjZmZmIiBzdHJva2UtbGluZWNhcD0iYnV0dCIgc3Ryb2tlLWxpbmVqb2luPSJtaXRlciIgZD0iTTIyLjUgMjVzNC41LTcuNSAzLTEwLjVjMCAwLTEtMi41LTMtMi41cy0zIDIuNS0zIDIuNWMtMS41IDMgMyAxMC41IDMgMTAuNSIvPjxwYXRoIGZpbGw9IiNmZmYiIGQ9Ik0xMS41IDM3YzUuNSAzLjUgMTUuNSAzLjUgMjEgMHYtN3M5LTQuNSA2LTEwLjVjLTQtNi41LTEzLjUtMy41LTE2IDRWMjd2LTMuNWMtMy41LTcuNS0xMy0xMC41LTE2LTQtMyA2IDUgMTAgNSAxMHoiLz48cGF0aCBkPSJNMTEuNSAzMGM1LjUtMyAxNS41LTMgMjEgMG0tMjEgMy41YzUuNS0zIDE1LjUtMyAyMSAwbS0yMSAzLjVjNS41LTMgMTUuNS0zIDIxIDAiLz48L2c+PC9zdmc+", "wN": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHN0eWxlPSJjb2xvci1zY2hlbWU6bGlnaHQgb25seSIgd2lkdGg9IjQ1IiBoZWlnaHQ9IjQ1IiB2aWV3Qm94PSIwIDAgNDUgNDUiPjxnIGZpbGw9Im5vbmUiIGZpbGwtcnVsZT0iZXZlbm9kZCIgc3Ryb2tlPSIjMDAwIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIHN0cm9rZS13aWR0aD0iMS41Ij48cGF0aCBmaWxsPSIjZmZmIiBkPSJNMjIgMTBjMTAuNSAxIDE2LjUgOCAxNiAyOUgxNWMwLTkgMTAtNi41IDgtMjEiLz48cGF0aCBmaWxsPSIjZmZmIiBkPSJNMjQgMThjLjM4IDIuOTEtNS41NSA3LjM3LTggOS0zIDItMi44MiA0LjM0LTUgNC0xLjA0Mi0uOTQgMS40MS0zLjA0IDAtMy0xIDAgLjE5IDEuMjMtMSAyLTEgMC00LjAwMyAxLTQtNCAwLTIgNi0xMiA2LTEyczEuODktMS45IDItMy41Yy0uNzMtLjk5NC0uNS0yLS41LTMgMS0xIDMgMi41IDMgMi41aDJzLjc4LTEuOTkyIDIuNS0zYzEgMCAxIDMgMSAzIi8+PHBhdGggZmlsbD0iIzAwMCIgZD0iTTkuNSAyNS41YS41LjUgMCAxIDEtMSAwIC41LjUgMCAxIDEgMSAwbTUuNDMzLTkuNzVhLjUgMS41IDMwIDEgMS0uODY2LS41LjUgMS41IDMwIDEgMSAuODY2LjUiLz48L2c+PC9zdmc+", "wP": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHN0eWxlPSJjb2xvci1zY2hlbWU6bGlnaHQgb25seSIgd2lkdGg9IjQ1IiBoZWlnaHQ9IjQ1IiB2aWV3Qm94PSIwIDAgNDUgNDUiPjxwYXRoIGZpbGw9IiNmZmYiIHN0cm9rZT0iIzAwMCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2Utd2lkdGg9IjEuNSIgZD0iTTIyLjUgOWMtMi4yMSAwLTQgMS43OS00IDQgMCAuODkuMjkgMS43MS43OCAyLjM4QzE3LjMzIDE2LjUgMTYgMTguNTkgMTYgMjFjMCAyLjAzLjk0IDMuODQgMi40MSA1LjAzLTMgMS4wNi03LjQxIDUuNTUtNy40MSAxMy40N2gyM2MwLTcuOTItNC40MS0xMi40MS03LjQxLTEzLjQ3IDEuNDctMS4xOSAyLjQxLTMgMi40MS01LjAzIDAtMi40MS0xLjMzLTQuNS0zLjI4LTUuNjIuNDktLjY3Ljc4LTEuNDkuNzgtMi4zOCAwLTIuMjEtMS43OS00LTQtNHoiLz48L3N2Zz4=", "wQ": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHN0eWxlPSJjb2xvci1zY2hlbWU6bGlnaHQgb25seSIgd2lkdGg9IjQ1IiBoZWlnaHQ9IjQ1IiB2aWV3Qm94PSIwIDAgNDUgNDUiPjxnIGZpbGw9IiNmZmYiIGZpbGwtcnVsZT0iZXZlbm9kZCIgc3Ryb2tlPSIjMDAwIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIHN0cm9rZS13aWR0aD0iMS41Ij48cGF0aCBkPSJNOCAxMmEyIDIgMCAxIDEtNCAwIDIgMiAwIDEgMSA0IDBtMTYuNS00LjVhMiAyIDAgMSAxLTQgMCAyIDIgMCAxIDEgNCAwTTQxIDEyYTIgMiAwIDEgMS00IDAgMiAyIDAgMSAxIDQgME0xNiA4LjVhMiAyIDAgMSAxLTQgMCAyIDIgMCAxIDEgNCAwTTMzIDlhMiAyIDAgMSAxLTQgMCAyIDIgMCAxIDEgNCAwIi8+PHBhdGggc3Ryb2tlLWxpbmVjYXA9ImJ1dHQiIGQ9Ik05IDI2YzguNS0xLjUgMjEtMS41IDI3IDBsMi0xMi03IDExVjExbC01LjUgMTMuNS0zLTE1LTMgMTUtNS41LTE0VjI1TDcgMTR6Ii8+PHBhdGggc3Ryb2tlLWxpbmVjYXA9ImJ1dHQiIGQ9Ik05IDI2YzAgMiAxLjUgMiAyLjUgNCAxIDEuNSAxIDEgLjUgMy41LTEuNSAxLTEuNSAyLjUtMS41IDIuNS0xLjUgMS41LjUgMi41LjUgMi41IDYuNSAxIDE2LjUgMSAyMyAwIDAgMCAxLjUtMSAwLTIuNSAwIDAgLjUtMS41LTEtMi41LS41LTIuNS0uNS0yIC41LTMuNSAxLTIgMi41LTIgMi41LTQtOC41LTEuNS0xOC41LTEuNS0yNyAweiIvPjxwYXRoIGZpbGw9Im5vbmUiIGQ9Ik0xMS41IDMwYzMuNS0xIDE4LjUtMSAyMiAwTTEyIDMzLjVjNi0xIDE1LTEgMjEgMCIvPjwvZz48L3N2Zz4=", "wR": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHN0eWxlPSJjb2xvci1zY2hlbWU6bGlnaHQgb25seSIgd2lkdGg9IjQ1IiBoZWlnaHQ9IjQ1IiB2aWV3Qm94PSIwIDAgNDUgNDUiPjxnIGZpbGw9IiNmZmYiIGZpbGwtcnVsZT0iZXZlbm9kZCIgc3Ryb2tlPSIjMDAwIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIHN0cm9rZS13aWR0aD0iMS41Ij48cGF0aCBzdHJva2UtbGluZWNhcD0iYnV0dCIgZD0iTTkgMzloMjd2LTNIOXptMy0zdi00aDIxdjR6bS0xLTIyVjloNHYyaDVWOWg1djJoNVY5aDR2NSIvPjxwYXRoIGQ9Im0zNCAxNC0zIDNIMTRsLTMtMyIvPjxwYXRoIHN0cm9rZS1saW5lY2FwPSJidXR0IiBzdHJva2UtbGluZWpvaW49Im1pdGVyIiBkPSJNMzEgMTd2MTIuNUgxNFYxNyIvPjxwYXRoIGQ9Im0zMSAyOS41IDEuNSAyLjVoLTIwbDEuNS0yLjUiLz48cGF0aCBmaWxsPSJub25lIiBzdHJva2UtbGluZWpvaW49Im1pdGVyIiBkPSJNMTEgMTRoMjMiLz48L2c+PC9zdmc+"};
+      const KNIGHTS = ["NN---", "N-N--", "N--N-", "N---N", "-NN--", "-N-N-", "-N--N", "--NN-", "--N-N", "---NN"];
+
+      function backRank(n) {
+        const rank = new Array(8).fill("");
+        rank[[1, 3, 5, 7][n % 4]] = "B";
+        n = Math.floor(n / 4);
+        rank[[0, 2, 4, 6][n % 4]] = "B";
+        n = Math.floor(n / 4);
+        const empty = () => rank.flatMap((p, i) => (p ? [] : [i]));
+        rank[empty()[n % 6]] = "Q";
+        n = Math.floor(n / 6);
+        const free = empty();
+        [...KNIGHTS[n]].forEach((c, i) => {
+          if (c === "N") rank[free[i]] = "N";
+        });
+        const [r1, k, r2] = empty();
+        rank[r1] = "R";
+        rank[k] = "K";
+        rank[r2] = "R";
+        return { rank, r1, r2 };
+      }
+
+      function show() {
+        const n = Math.floor(Math.random() * 960);
+        const { rank, r1, r2 } = backRank(n);
+        const white = rank.join("");
+        const files = "abcdefgh";
+        const rights = files[r2].toUpperCase() + files[r1].toUpperCase() + files[r2] + files[r1];
+        const fen = `${white.toLowerCase()}/pppppppp/8/8/8/8/PPPPPPPP/${white} w ${rights} - 0 1`;
+        const rows = [rank.map((p) => "b" + p), new Array(8).fill("bP"), ...new Array(4).fill(new Array(8).fill("")), new Array(8).fill("wP"), rank.map((p) => "w" + p)];
+        const board = document.getElementById("board");
+        board.setAttribute("role", "img");
+        board.setAttribute("aria-label", `Chess960 start position ${n}: ${white}`);
+        board.innerHTML = rows
+          .flatMap((row, y) => row.map((p, x) => `<div${(x + y) % 2 ? ' class="dark"' : ""}>${p ? `<img alt="" src="${PIECES[p]}">` : ""}</div>`))
+          .join("");
+        document.getElementById("caption").textContent = `Start position ${n} of 960.`;
+        document.getElementById("analyze").href = `./#/analysis?fen=${encodeURIComponent(fen)}&chess960=1`;
+      }
+
+      document.getElementById("another").onclick = show;
+      show();
+    </script>
+  </body>
+</html>
