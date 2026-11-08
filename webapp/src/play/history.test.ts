@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { countsAsWin, level, outcomeOf, progressByPosition, type GameRecord } from "./history.ts";
+import { allWonAgainstEngine, countsAsWin, level, outcomeOf, progressByPosition, type GameRecord } from "./history.ts";
 
 function rec(r: Partial<GameRecord>): GameRecord {
   return {
@@ -52,6 +52,15 @@ test("a silver star is enough against the engine only", () => {
   ]).get(7);
   assert.equal(level(p, "w", "1600"), 0);
   assert.equal(level(p, "w", null), 3);
+});
+
+test("all 960 positions won against the engine, with either colour", () => {
+  const all = Array.from({ length: 960 }, (_, n) =>
+    rec({ position960: n, human: n % 2 ? "b" : "w", opponent: "engine", outcome: "win", star: "silver" }),
+  );
+  assert.equal(allWonAgainstEngine(progressByPosition(all)), true);
+  all[500] = rec({ position960: 500, opponent: "1600", outcome: "win", star: "gold" });
+  assert.equal(allWonAgainstEngine(progressByPosition(all)), false);
 });
 
 test("standard games and positions without a number are left out", () => {

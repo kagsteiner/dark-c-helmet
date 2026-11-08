@@ -96,6 +96,15 @@ export function progressByPosition(records: GameRecord[]): Map<number, PositionP
   return map;
 }
 
+/** Every one of the 960 start positions won against Dark C. Helmet, with either colour. */
+export function allWonAgainstEngine(progress: Map<number, PositionProgress>): boolean {
+  for (let n = 0; n < 960; n++) {
+    const p = progress.get(n);
+    if (!p?.games.w.engine?.wins && !p?.games.b.engine?.wins) return false;
+  }
+  return true;
+}
+
 /** The tile level of one side, over all opponents (filter null) or one. */
 export function level(p: PositionProgress | undefined, side: Side, filter: OpponentKey | null): Level {
   if (!p) return -1;

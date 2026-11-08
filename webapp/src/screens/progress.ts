@@ -6,6 +6,7 @@ import type { PieceCode } from "../chess/fen.ts";
 import type { Side } from "../play/clocks.ts";
 import type { PlayController } from "../play/controller.ts";
 import {
+  allWonAgainstEngine,
   level,
   loadRecords,
   OPPONENT_NAMES,
@@ -17,6 +18,7 @@ import {
 import { chooseNewGame, type Choices } from "../play/new-game.ts";
 import { pieceUrl } from "../ui/board.ts";
 import type { Screen } from "../ui/shell.ts";
+import { fischerEggOnce } from "./fischer-egg.ts";
 import "../styles/progress.css";
 
 const COLS = 32;
@@ -180,6 +182,7 @@ export function progressScreen(controller: PlayController): Screen {
         if (!alive) return;
         progress = progressByPosition(records);
         render();
+        if (allWonAgainstEngine(progress)) void fischerEggOnce(svg);
       });
       return () => {
         alive = false;

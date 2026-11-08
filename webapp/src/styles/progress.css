@@ -135,3 +135,43 @@
 .pg-none {
   margin: 0;
 }
+
+/* The easter egg (fischer-egg.ts): the tiles fly apart and a portrait appears. */
+.pg-grid path {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.pg-grid.blasting {
+  overflow: visible;
+  pointer-events: none;
+}
+
+.fischer-egg {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  background: rgb(10 12 20 / 0.72);
+  color: #f2ead8;
+  cursor: pointer;
+  outline: none;
+}
+
+.fischer-egg img {
+  max-width: min(92vw, 640px);
+  max-height: calc(100dvh - 7rem);
+  border-radius: 6px;
+  box-shadow: 0 24px 80px rgb(0 0 0 / 0.6);
+}
+
+.fischer-egg p {
+  margin: 0;
+  text-align: center;
+  opacity: 0.85;
+}

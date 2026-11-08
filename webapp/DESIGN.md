@@ -165,6 +165,11 @@ the position filled in. "Play one I haven't won yet" picks a random position and
 a counting win. Standard games and Chess960 positions from Setup (no number) are stored but not
 shown.
 
+Easter egg (`src/screens/fischer-egg.ts`): once all 960 positions are won against Dark C.
+Helmet (either colour), the triangles blast apart and a portrait of Bobby Fischer appears. A
+click or Escape flies them home. It plays exactly once per device (`egg:fischer` in the
+key-value store), and with reduced motion the tiles only fade.
+
 ### Analysis
 
 - Endless analysis of the current position: depth, nodes, score, PV (in SAN). One line in
