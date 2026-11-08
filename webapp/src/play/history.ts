@@ -1,6 +1,7 @@
 // The games played on this device: one record per game, written whenever the game is saved
 // (so an abandoned game counts as played). The Progress screen shows the Chess960 ones.
 import { loadAll, save } from "../storage.ts";
+import { notifyLocalChange } from "../sync/changes.ts";
 import type { Side, TimeControl } from "./clocks.ts";
 
 export type Outcome = "win" | "loss" | "draw" | "unfinished";
@@ -43,8 +44,14 @@ export function outcomeOf(result: string | null): Outcome {
   return "loss";
 }
 
-export function saveRecord(r: GameRecord): Promise<void> {
-  return save(PREFIX + r.id, r);
+export async function saveRecord(r: GameRecord): Promise<void> {
+  await save(PREFIX + r.id, r);
+  if (r.outcome !== "unfinished") notifyLocalChange(); // a game in progress syncs at the next start
+}
+
+/** Stores records that came from the player's other devices. */
+export async function storeRecords(records: GameRecord[]): Promise<void> {
+  for (const r of records) await save(PREFIX + r.id, r);
 }
 
 export function loadRecords(): Promise<GameRecord[]> {

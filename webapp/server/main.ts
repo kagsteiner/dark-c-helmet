@@ -10,13 +10,15 @@ import { SIGNATURE_HEADER } from "../src/book/contrib.ts";
 import { Api, ApiError } from "./api.ts";
 import { loadRules } from "./rules-node.ts";
 import { Store } from "./store.ts";
+import { SyncApi } from "./sync.ts";
 
 const PORT = Number(process.env.PORT ?? 3060);
-const MAX_BODY = 1 << 20; // 500 entries are about 150 KB
+const MAX_BODY = 3 << 19; // 1.5 MB: 500 book entries are about 150 KB, a full sync file about 1 MB
 
 // Bundled: the rules module lies in rules/ next to server.mjs. From the sources: public/engine/.
 const rulesDir = process.env.RULES_DIR ? pathToFileURL(process.env.RULES_DIR.replace(/\/?$/, "/")) : new URL("./rules/", import.meta.url);
 const api = new Api(new Store(), await loadRules(rulesDir));
+const sync = new SyncApi();
 
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -48,6 +50,9 @@ createServer(async (req, res) => {
     if (path === "/register") return send(200, await api.register(body));
     if (path === "/status") return send(200, await api.status(body, signature));
     if (path === "/submit") return send(200, await api.submit(body, signature));
+    if (path === "/sync") return send(200, sync.sync(body));
+    if (path === "/sync/peek") return send(200, sync.peek(body));
+    if (path === "/sync/delete") return send(200, sync.remove(body));
     throw new ApiError(404, "no such endpoint");
   } catch (err) {
     if (err instanceof ApiError) return send(err.status, { error: err.message });

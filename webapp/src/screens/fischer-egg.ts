@@ -1,15 +1,16 @@
 // The easter egg of the Progress screen: once every Chess960 start position has been won
 // against Dark C. Helmet, the tiles blast apart and reveal a portrait of Bobby Fischer, the
-// inventor of Chess960. A click puts the tiles back. It is shown exactly once per device.
+// inventor of Chess960. A click puts the tiles back. It is shown exactly once per device, or once
+// per sync code when the devices are linked.
 import fischerUrl from "../assets/fischer.webp";
 import { load, save } from "../storage.ts";
+import { EGG_KEY, notifyLocalChange } from "../sync/changes.ts";
 
-const SHOWN_KEY = "egg:fischer";
-
-/** Plays the egg if it has not been shown on this device; otherwise does nothing. */
+/** Plays the egg if it has not been shown yet; otherwise does nothing. */
 export async function fischerEggOnce(grid: SVGSVGElement): Promise<void> {
-  if (await load<boolean>(SHOWN_KEY)) return;
-  await save(SHOWN_KEY, true); // before showing, so it stays exactly once
+  if (await load<boolean>(EGG_KEY)) return;
+  await save(EGG_KEY, true); // before showing, so it stays exactly once
+  notifyLocalChange();
   await playFischerEgg(grid);
 }
 

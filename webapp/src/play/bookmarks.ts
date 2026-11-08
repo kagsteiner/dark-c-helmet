@@ -1,14 +1,20 @@
-// Bookmarked start positions: Chess960 (white === black) and Chess 960² pairs, kept on this
-// device so a start the player liked can be played again without typing numbers.
+// Bookmarked start positions: Chess960 (white === black) and Chess 960² pairs, so a start the
+// player liked can be played again without typing numbers. Kept on this device and, with sync on,
+// on the player's other devices.
 import { load, save } from "../storage.ts";
+import { notifyLocalChange } from "../sync/changes.ts";
 
 export interface Bookmark {
   white: number;
   black: number;
   /** When it was bookmarked (ms since 1970). */
   added: number;
+  /** Last change (ms since 1970); the newest change wins between devices. Older ones have none. */
+  changed?: number;
   /** The player's own words about this start. */
   note?: string;
+  /** Removed: kept as a marker so the removal reaches the player's other devices. */
+  deleted?: true;
 }
 
 const KEY = "bookmarks";
@@ -34,33 +40,55 @@ export function bookmarkDate(added: number): string {
   });
 }
 
+/** Everything stored, with the markers of removed bookmarks. */
+export async function loadBookmarkEntries(): Promise<Bookmark[]> {
+  return (await load<Bookmark[]>(KEY)) ?? [];
+}
+
+export function storeBookmarkEntries(entries: Bookmark[]): Promise<void> {
+  return save(KEY, entries);
+}
+
+async function storeChanged(entries: Bookmark[]): Promise<void> {
+  await save(KEY, entries);
+  notifyLocalChange();
+}
+
 /** Newest first. */
 export async function loadBookmarks(): Promise<Bookmark[]> {
-  return ((await load<Bookmark[]>(KEY)) ?? []).sort((a, b) => b.added - a.added);
+  return (await loadBookmarkEntries()).filter((b) => !b.deleted).sort((a, b) => b.added - a.added);
 }
 
 export async function isBookmarked(white: number, black: number): Promise<boolean> {
   return (await loadBookmarks()).some((b) => sameStart(b, { white, black }));
 }
 
+/** A removed bookmark: the marker keeps only what merging needs. */
+function removed(white: number, black: number, added: number): Bookmark {
+  return { white, black, added, changed: Date.now(), deleted: true };
+}
+
 /** Adds or removes the bookmark. Returns whether it is bookmarked now. */
 export async function toggleBookmark(white: number, black: number): Promise<boolean> {
-  const all = await loadBookmarks();
-  const kept = all.filter((b) => !sameStart(b, { white, black }));
-  const on = kept.length === all.length;
-  if (on) kept.unshift({ white, black, added: Date.now() });
-  await save(KEY, kept);
+  const all = await loadBookmarkEntries();
+  const old = all.find((b) => sameStart(b, { white, black }));
+  const on = !old || !!old.deleted;
+  const now = Date.now();
+  const entry = on ? { white, black, added: now, changed: now } : removed(white, black, old.added);
+  await storeChanged([entry, ...all.filter((b) => b !== old)]);
   return on;
 }
 
 export async function setBookmarkNote(white: number, black: number, note: string): Promise<void> {
-  const all = await loadBookmarks();
-  const mark = all.find((b) => sameStart(b, { white, black }));
+  const all = await loadBookmarkEntries();
+  const mark = all.find((b) => sameStart(b, { white, black }) && !b.deleted);
   if (!mark) return;
   mark.note = note.trim() || undefined;
-  await save(KEY, all);
+  mark.changed = Date.now();
+  await storeChanged(all);
 }
 
 export async function removeBookmark(white: number, black: number): Promise<void> {
-  await save(KEY, (await loadBookmarks()).filter((b) => !sameStart(b, { white, black })));
+  const all = await loadBookmarkEntries();
+  await storeChanged(all.map((b) => (sameStart(b, { white, black }) && !b.deleted ? removed(white, black, b.added) : b)));
 }

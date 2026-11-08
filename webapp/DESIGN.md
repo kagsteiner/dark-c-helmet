@@ -391,6 +391,17 @@ default 70%, because Chess960 comes first for this app).
   depth and nodes, in the key-value store under `explore-log/`. Newest first, 300 rows until
   "Show all".
 
+## Sync
+
+Keeps results, the 960 progress and bookmarks the same on a player's devices. Off until the player turns it on in Settings. There are no accounts.
+
+- **Code:** five words from the BIP-39 English list (2,048 words, 55 bits), created on the first device. Typing accepts any separators and the first four letters of a word, and offers completions. A link `#/settings?sync=words` (also shown as a QR code) fills in the code; linking always shows what will be merged first.
+- **What syncs:** game records (never moves), bookmarks and the flag that the Fischer egg has been shown, so it plays once per code. Games in progress and settings stay on each device.
+- **When:** at app start, 2 s after a finished game or a bookmark change, and when the app comes back to the foreground after a minute. Failures wait for the next chance.
+- **Merging** (`src/sync/merge.ts`, shared with the server): the union of game records by id, keeping the finished or longest version; for bookmarks the newest change wins, and a removed bookmark stays as a marker.
+- **Server** (`server/sync.ts`, `POST /chess/api/sync`, `/sync/peek`, `/sync/delete`): one JSON file per code in `~/chess-data/sync/`, named by the SHA-256 of the code. Unencrypted, with exactly the fields `cleanData` keeps. At most 4,000 results and 1,000 bookmarks per code and 5,000 codes. The app server sees no client addresses, so its limits are global: 30 lookups of unknown codes per minute, 30 new codes per hour. nginx keeps its usual access log.
+- **Deleting:** removes the file. Each device keeps its copy, and other devices turn sync off at their next sync (a sync never recreates a code unless it is creating one).
+
 ## UI conventions
 
 The rules every screen follows. Exact values live as CSS variables in one file

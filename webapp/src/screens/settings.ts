@@ -15,6 +15,7 @@ import { threadsAvailable } from "../engine/transport.ts";
 import type { PlayController } from "../play/controller.ts";
 import { settings, updateSettings, type Theme } from "../settings.ts";
 import type { Screen } from "../ui/shell.ts";
+import { mountSyncSection } from "./sync-section.ts";
 import "../styles/settings.css";
 
 const HASH_SIZES = [16, 32, 64, 128, 256, 512];
@@ -66,6 +67,9 @@ export function settingsScreen(controller: PlayController): Screen {
 
           <p class="settings-status small muted" aria-live="polite"></p>
 
+          <h2 class="section-title">Sync my devices</h2>
+          <div class="sync"></div>
+
           <h2 class="section-title">Opening book contributions</h2>
           <p class="small muted">Deep searches from this browser (at least 50 million nodes, from games and
             analysis) can go into the master opening book that everyone can merge. Only browsers that the
@@ -78,7 +82,7 @@ export function settingsScreen(controller: PlayController): Screen {
 
           <h2 class="section-title">About</h2>
           <dl class="about numeric"></dl>
-          <p class="small muted">Games, the opening book and settings are stored in this browser on this device only.</p>
+          <p class="small muted">Games, the opening book and settings are stored in this browser on this device. With sync on, your results and bookmarks are also stored on the server under your code.</p>
           <p class="small muted">Engine and app: MIT license, © 2026 Karlheinz Agsteiner. Chess pieces by Colin M.L. Burnett
             (<a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank" rel="noopener">CC BY-SA 3.0</a>).</p>
         </section>`;
@@ -195,10 +199,13 @@ export function settingsScreen(controller: PlayController): Screen {
       });
       const unsubscribeContrib = onContribChange(renderContrib);
 
+      const unmountSync = mountSyncSection($<HTMLElement>(".sync"));
+
       renderAbout();
       const unsubscribe = controller.subscribe(renderAbout);
       return () => {
         unsubscribe();
+        unmountSync();
         unsubscribeContrib();
       };
     },

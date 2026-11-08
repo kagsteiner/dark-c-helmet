@@ -12,6 +12,7 @@ import { setupScreen } from "./screens/setup.ts";
 import { startContributions } from "./book/contrib-client.ts";
 import { checkMasterAtStartup } from "./book/master.ts";
 import { loadSettings } from "./settings.ts";
+import { startSync } from "./sync/client.ts";
 import { startShell } from "./ui/shell.ts";
 import "./styles/tokens.css";
 import "./styles/base.css";
@@ -46,6 +47,7 @@ checkMasterAtStartup(() => window.dispatchEvent(new Event("book-changed")));
 
 // Deep searches waiting to go to the master book (if this browser contributes).
 startContributions();
+startSync();
 
 // The threaded engine first; if it does not start (seen on an iPad after hours in the
 // background, until the browser was restarted), the single-threaded one.
