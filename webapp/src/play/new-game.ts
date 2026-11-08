@@ -1,9 +1,12 @@
 // The new-game sheet: opponent, variant, colour, time control. The last choices are remembered.
-import { chess960SquaredFen, randomChess960 } from "../chess/chess960.ts";
+import { backRank, chess960SquaredFen, randomChess960 } from "../chess/chess960.ts";
+import type { PieceCode } from "../chess/fen.ts";
 import { START_FEN } from "../chess/game.ts";
 import { load, save } from "../storage.ts";
+import { pieceUrl } from "../ui/board.ts";
+import { icons } from "../ui/icons.ts";
 import { randomBalancedPair } from "./balanced.ts";
-import { loadBookmarks, startName } from "./bookmarks.ts";
+import { bookmarkDate, loadBookmarks, removeBookmark, setBookmarkNote, startName, type Bookmark } from "./bookmarks.ts";
 import type { TimeControl } from "./clocks.ts";
 import type { GameSetup } from "./controller.ts";
 
@@ -51,6 +54,27 @@ const DEFAULTS: Choices = {
 
 const PREFS_KEY = "new-game-choices";
 
+/** A back rank as piece images: White's, or Black's when `black`. */
+function rankImages(n: number, black: boolean): string {
+  const rank = black ? backRank(n).toLowerCase() : backRank(n);
+  return `<span class="bm-rank">${[...rank].map((p) => `<img src="${pieceUrl(p as PieceCode)}" alt="">`).join("")}</span>`;
+}
+
+/** One row of the bookmark list; the note is filled in afterwards, as plain text. */
+function bookmarkRow(b: Bookmark, selected: string): string {
+  const v = `${b.white}-${b.black}`;
+  const name = startName(b.white, b.black);
+  return `<div class="bm-row" data-start="${v}" data-squared="${b.white !== b.black ? 1 : 0}">
+      <label class="bm-pick">
+        <input type="radio" name="bookmark" value="${v}"${v === selected ? " checked" : ""}>
+        <span class="bm-ranks">${b.white !== b.black ? rankImages(b.black, true) : ""}${rankImages(b.white, false)}</span>
+        <span class="bm-text"><span>${name}</span><span class="small muted">${bookmarkDate(b.added)}</span></span>
+      </label>
+      <button type="button" class="btn-icon bm-delete" aria-label="Delete bookmark ${name}" title="Delete bookmark">${icons.close}</button>
+      <input class="bm-note" type="text" maxlength="100" placeholder="Add a note" aria-label="Note for ${name}">
+    </div>`;
+}
+
 function segmented(name: string, options: [string, string][], value: string): string {
   return `<div class="segmented" role="radiogroup">${options
     .map(
@@ -69,14 +93,6 @@ export async function chooseNewGame(
 ): Promise<GameSetup | null> {
   const c: Choices = { ...DEFAULTS, ...(await load<Partial<Choices>>(PREFS_KEY)), ...preset };
   const bookmarks = await loadBookmarks();
-  const bookmarkOptions = (squared: boolean) =>
-    bookmarks
-      .filter((b) => (b.white !== b.black) === squared)
-      .map((b) => {
-        const v = `${b.white}-${b.black}`;
-        return `<option value="${v}"${v === c.bookmark ? " selected" : ""}>${startName(b.white, b.black)}</option>`;
-      })
-      .join("");
   const dialog = document.createElement("dialog");
   dialog.className = "sheet";
   dialog.setAttribute("aria-label", "New game");
@@ -111,14 +127,11 @@ export async function chooseNewGame(
           <input type="number" name="blackNumber" min="0" max="959" value="${c.blackNumber}">
         </label>
       </div>
-      <label class="field" data-show="bookmark960">
+      <div class="field" data-show="bookmarks">
         <span class="field-label">Bookmark</span>
-        <select name="bookmark960" data-bookmarks>${bookmarkOptions(false) || "<option value=\"\" disabled selected>No Chess960 bookmarks yet</option>"}</select>
-      </label>
-      <label class="field" data-show="bookmark960sq">
-        <span class="field-label">Bookmark</span>
-        <select name="bookmark960sq" data-bookmarks>${bookmarkOptions(true) || "<option value=\"\" disabled selected>No Chess 960² bookmarks yet</option>"}</select>
-      </label>
+        <div class="bm-list">${bookmarks.map((b) => bookmarkRow(b, c.bookmark)).join("")}</div>
+        <p class="small muted bm-empty" hidden></p>
+      </div>
       <div class="field">
         <span class="field-label">You play</span>
         ${segmented("color", [["w", "White"], ["random", "Random"], ["b", "Black"]], c.color)}
@@ -182,7 +195,7 @@ export async function chooseNewGame(
       number960: n("number960", 0, 959),
       whiteNumber: n("whiteNumber", 0, 959),
       blackNumber: n("blackNumber", 0, 959),
-      bookmark: String(d.get(variant === "chess960sq" ? "bookmark960sq" : "bookmark960") ?? ""),
+      bookmark: String(d.get("bookmark") ?? ""),
       color: d.get("color") as Choices["color"],
       openings: (d.get("openings") ?? "varied") as Choices["openings"],
       tcKind: d.get("tcKind") as Choices["tcKind"],
@@ -193,7 +206,24 @@ export async function chooseNewGame(
       extraSeconds: n("extraSeconds", 0, 600),
     };
   };
+  // The list shows the bookmarks of the chosen variant, always with one of them selected.
+  const updateBookmarks = (squared: boolean): number => {
+    const rows = [...form.querySelectorAll<HTMLElement>(".bm-row")];
+    const visible = rows.filter((row) => {
+      row.hidden = (row.dataset.squared === "1") !== squared;
+      return !row.hidden;
+    });
+    for (const row of rows) if (row.hidden) row.querySelector<HTMLInputElement>("input[type=radio]")!.checked = false;
+    if (visible.length && !visible.some((row) => row.querySelector<HTMLInputElement>("input[type=radio]")!.checked))
+      visible[0].querySelector<HTMLInputElement>("input[type=radio]")!.checked = true;
+    const empty = form.querySelector<HTMLElement>(".bm-empty")!;
+    empty.hidden = visible.length > 0;
+    empty.textContent = `No ${squared ? "Chess 960²" : "Chess960"} bookmarks yet. The bookmark button next to the star adds one during a game.`;
+    return visible.length;
+  };
   const update = () => {
+    const squared = new FormData(form).get("variant") === "chess960sq";
+    const bookmarkCount = updateBookmarks(squared);
     const r = read();
     // The human-like player has no opening book.
     const human = r.opponent !== "engine";
@@ -206,8 +236,7 @@ export async function chooseNewGame(
       squaredInfo: !position && r.variant === "chess960sq",
       number960: r.variant === "chess960" && r.start960 === "number",
       numbers960sq: !position && r.variant === "chess960sq" && r.start960 === "number",
-      bookmark960: !position && r.variant === "chess960" && r.start960 === "bookmark",
-      bookmark960sq: !position && r.variant === "chess960sq" && r.start960 === "bookmark",
+      bookmarks: !position && r.variant !== "standard" && r.start960 === "bookmark",
       move: r.tcKind === "move",
       game: r.tcKind === "game",
       increment: r.tcKind === "increment",
@@ -216,7 +245,25 @@ export async function chooseNewGame(
       extra: (position ? position.chess960 : r.variant !== "standard") && r.tcKind !== "move",
     };
     for (const el of form.querySelectorAll<HTMLElement>("[data-show]")) el.hidden = !visible[el.dataset.show!];
+    form.querySelector<HTMLButtonElement>('[value="start"]')!.disabled = visible.bookmarks && !bookmarkCount;
   };
+  bookmarks.forEach((b) => {
+    const row = form.querySelector<HTMLElement>(`.bm-row[data-start="${b.white}-${b.black}"]`)!;
+    const note = row.querySelector<HTMLInputElement>(".bm-note")!;
+    note.value = b.note ?? "";
+    note.addEventListener("input", () => void setBookmarkNote(b.white, b.black, note.value));
+    note.addEventListener("focus", () => (row.querySelector<HTMLInputElement>("input[type=radio]")!.checked = true));
+    note.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      e.preventDefault(); // Enter ends the note and does not start the game
+      note.blur();
+    });
+    row.querySelector(".bm-delete")!.addEventListener("click", () => {
+      void removeBookmark(b.white, b.black);
+      row.remove();
+      update();
+    });
+  });
   form.addEventListener("change", update);
   update();
 
@@ -259,7 +306,7 @@ export async function chooseNewGame(
         else if (squared && r.start960 === "number") start(r.whiteNumber, r.blackNumber);
         else if (squared) pending = randomBalancedPair().then(([w, b]) => start(w, b));
         else {
-          const n = r.start960 === "random" ? randomChess960() : r.number960;
+          const n = r.start960 === "number" ? r.number960 : randomChess960();
           start(n, n);
         }
       } else {

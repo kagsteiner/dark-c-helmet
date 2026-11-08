@@ -7,6 +7,8 @@ export interface Bookmark {
   black: number;
   /** When it was bookmarked (ms since 1970). */
   added: number;
+  /** The player's own words about this start. */
+  note?: string;
 }
 
 const KEY = "bookmarks";
@@ -18,6 +20,18 @@ export function sameStart(a: { white: number; black: number }, b: { white: numbe
 /** "No. 104" for Chess960, "White 518 · Black 104" for Chess 960². */
 export function startName(white: number, black: number): string {
   return white === black ? `No. ${white}` : `White ${white} · Black ${black}`;
+}
+
+/** E.g. "Sun, Nov 8, 2026, 8:30 AM", in the device's own format. */
+export function bookmarkDate(added: number): string {
+  return new Date(added).toLocaleString(undefined, {
+    weekday: "short",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 /** Newest first. */
@@ -37,4 +51,16 @@ export async function toggleBookmark(white: number, black: number): Promise<bool
   if (on) kept.unshift({ white, black, added: Date.now() });
   await save(KEY, kept);
   return on;
+}
+
+export async function setBookmarkNote(white: number, black: number, note: string): Promise<void> {
+  const all = await loadBookmarks();
+  const mark = all.find((b) => sameStart(b, { white, black }));
+  if (!mark) return;
+  mark.note = note.trim() || undefined;
+  await save(KEY, all);
+}
+
+export async function removeBookmark(white: number, black: number): Promise<void> {
+  await save(KEY, (await loadBookmarks()).filter((b) => !sameStart(b, { white, black })));
 }

@@ -2,7 +2,7 @@
 import { placementFromFen } from "../chess/fen.ts";
 import { describeTimeControl, formatClock, type Side } from "../play/clocks.ts";
 import { opponentName, type PlayController, type StarLoss } from "../play/controller.ts";
-import { isBookmarked, startName, toggleBookmark } from "../play/bookmarks.ts";
+import { isBookmarked, setBookmarkNote, startName, toggleBookmark } from "../play/bookmarks.ts";
 import { chooseNewGame } from "../play/new-game.ts";
 import { Board } from "../ui/board.ts";
 import { icons } from "../ui/icons.ts";
@@ -44,6 +44,7 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
             <button class="btn-icon" data-action="bookmark" aria-label="Bookmark this start position" title="Bookmark this start position" aria-pressed="false" hidden></button>
             <span class="spacer"></span>
             <button class="btn-secondary" data-action="new">New game</button>
+            <input class="bookmark-note" type="text" maxlength="100" placeholder="Add a note to this bookmark" aria-label="Note for this bookmark" hidden>
             <p class="star-tip small" role="status" hidden></p>
           </div>
         </section>`;
@@ -138,6 +139,18 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
         btn.setAttribute("aria-pressed", String(bookmarked));
         btn.title = bookmarked ? "Bookmarked: tap to remove" : "Bookmark this start position";
       };
+      const note = $<HTMLInputElement>(".bookmark-note");
+      const hideNote = () => {
+        note.hidden = true;
+        note.value = "";
+      };
+      note.addEventListener("input", () => {
+        const start = startOf();
+        if (start) void setBookmarkNote(start.white, start.black, note.value);
+      });
+      note.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") note.blur();
+      });
       const renderBookmark = () => {
         const start = startOf();
         const btn = $<HTMLButtonElement>('[data-action="bookmark"]');
@@ -146,6 +159,7 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
         if (!start || key === bookmarkFor) return;
         bookmarkFor = key;
         bookmarked = false;
+        hideNote();
         paintBookmark();
         isBookmarked(start.white, start.black).then((on) => {
           if (bookmarkFor !== key) return;
@@ -220,6 +234,9 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
           if (start) {
             bookmarked = await toggleBookmark(start.white, start.black);
             paintBookmark();
+            // Saved already; the note is optional, and can also be edited in the new-game sheet.
+            hideNote();
+            note.hidden = !bookmarked;
           }
         }
         else if (action === "star") {

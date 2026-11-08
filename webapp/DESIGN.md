@@ -118,7 +118,9 @@ button opens them as a list. The bottom of the phone screen belongs to the actio
   `tools/eval-960sq.ts`); without that file any pair can come up. The book is not used, and
   the games are recorded but not shown on the Progress screen.
 - **Bookmarks.** The bookmark button on the Play screen keeps the start of a Chess960 or
-  Chess 960² game (key `bookmarks`), to play it again from the new-game sheet.
+  Chess 960² game (key `bookmarks`) and offers an optional note. The new-game sheet lists them
+  with the back ranks as pieces, date and note; the note can be edited and a bookmark deleted
+  there.
 - **Colour.** White, black, random.
 - **Time controls.**
   - seconds per move (engine only; the human has no clock)
