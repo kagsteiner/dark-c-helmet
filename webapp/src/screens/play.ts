@@ -2,6 +2,7 @@
 import { placementFromFen } from "../chess/fen.ts";
 import { describeTimeControl, formatClock, type Side } from "../play/clocks.ts";
 import { opponentName, type PlayController, type StarLoss } from "../play/controller.ts";
+import { isBookmarked, startName, toggleBookmark } from "../play/bookmarks.ts";
 import { chooseNewGame } from "../play/new-game.ts";
 import { Board } from "../ui/board.ts";
 import { icons } from "../ui/icons.ts";
@@ -40,6 +41,7 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
             <button class="btn-icon" data-action="hint" aria-label="Hint" title="Hint">${icons.hint}</button>
             <button class="btn-icon" data-action="evaluation" aria-label="Evaluation" title="Evaluation">${icons.evaluation}</button>
             <button class="btn-icon star" data-action="star" aria-label="Star" title="Star"></button>
+            <button class="btn-icon" data-action="bookmark" aria-label="Bookmark this start position" title="Bookmark this start position" aria-pressed="false" hidden></button>
             <span class="spacer"></span>
             <button class="btn-secondary" data-action="new">New game</button>
             <p class="star-tip small" role="status" hidden></p>
@@ -79,12 +81,18 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
         $(".play-top .player-name").textContent = opponentName(c.setup);
         $(".play-bottom .player-name").textContent = human === "w" ? "You (White)" : "You (Black)";
         const tc = describeTimeControl(c.setup.tc);
+        const { position960: wNo, black960: bNo } = c.setup;
         $(".play-meta").textContent =
-          (c.setup.chess960 ? `Chess960 no. ${c.setup.position960 ?? "?"} · ` : "") +
+          (bNo !== undefined && wNo !== undefined
+            ? `Chess 960² · ${startName(wNo, bNo)} · `
+            : c.setup.chess960
+              ? `Chess960 no. ${wNo ?? "?"} · `
+              : "") +
           tc +
           (c.setup.strongestOpenings ? " · strongest openings" : "");
         renderMoves();
         renderClocks();
+        renderBookmark();
 
         $(".play-status").textContent =
           engineStatus() ??
@@ -115,6 +123,35 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
         star.classList.toggle("silver", silver);
         const tip = $<HTMLElement>(".star-tip");
         if (!tip.hidden) tip.textContent = STAR_TEXT[c.star ?? "lit"];
+      };
+
+      // The bookmark button: Chess960 and Chess 960² games from a numbered start.
+      let bookmarkFor = "";
+      let bookmarked = false;
+      const startOf = () => {
+        const { chess960, position960: w, black960: b } = controller.setup;
+        return chess960 && w !== undefined ? { white: w, black: b ?? w } : null;
+      };
+      const paintBookmark = () => {
+        const btn = $<HTMLButtonElement>('[data-action="bookmark"]');
+        btn.innerHTML = bookmarked ? icons.bookmarked : icons.bookmark;
+        btn.setAttribute("aria-pressed", String(bookmarked));
+        btn.title = bookmarked ? "Bookmarked: tap to remove" : "Bookmark this start position";
+      };
+      const renderBookmark = () => {
+        const start = startOf();
+        const btn = $<HTMLButtonElement>('[data-action="bookmark"]');
+        btn.hidden = !start;
+        const key = start ? `${start.white}-${start.black}` : "";
+        if (!start || key === bookmarkFor) return;
+        bookmarkFor = key;
+        bookmarked = false;
+        paintBookmark();
+        isBookmarked(start.white, start.black).then((on) => {
+          if (bookmarkFor !== key) return;
+          bookmarked = on;
+          paintBookmark();
+        });
       };
 
       const renderMoves = () => {
@@ -178,6 +215,13 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
         if (action === "undo") controller.undo();
         else if (action === "hint") controller.requestHint();
         else if (action === "evaluation") controller.requestEvaluation();
+        else if (action === "bookmark") {
+          const start = startOf();
+          if (start) {
+            bookmarked = await toggleBookmark(start.white, start.black);
+            paintBookmark();
+          }
+        }
         else if (action === "star") {
           tip.hidden = !tip.hidden;
           render();

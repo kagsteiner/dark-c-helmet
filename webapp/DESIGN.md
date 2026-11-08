@@ -109,7 +109,16 @@ button opens them as a list. The bottom of the phone screen belongs to the actio
 
 ### Play
 
-- **Variants.** Standard and Chess960. Chess960 start: random, by number (0–959), or from Setup.
+- **Variants.** Standard, Chess960 and Chess 960². Chess960 start: random, by number (0–959),
+  from a bookmark, or from Setup.
+- **Chess 960².** White and Black each get their own Chess960 back rank (960 × 960 starts),
+  named "White 518 · Black 104". Castling as in Chess960, each side with its own rooks. Start:
+  random, by the two numbers, or from a bookmark. Random picks from the starts the engine
+  rates within ±0.5 pawns (`public/960sq/balanced.bin`, one bit per pair, made by
+  `tools/eval-960sq.ts`); without that file any pair can come up. The book is not used, and
+  the games are recorded but not shown on the Progress screen.
+- **Bookmarks.** The bookmark button on the Play screen keeps the start of a Chess960 or
+  Chess 960² game (key `bookmarks`), to play it again from the new-game sheet.
 - **Colour.** White, black, random.
 - **Time controls.**
   - seconds per move (engine only; the human has no clock)

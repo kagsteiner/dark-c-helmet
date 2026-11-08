@@ -64,7 +64,11 @@ test("all 960 positions won against the engine, with either colour", () => {
 });
 
 test("standard games and positions without a number are left out", () => {
-  const m = progressByPosition([rec({ chess960: false, position960: undefined }), rec({ position960: undefined })]);
+  const m = progressByPosition([
+    rec({ chess960: false, position960: undefined }),
+    rec({ position960: undefined }),
+    rec({ position960: 518, black960: 104 }), // Chess 960²
+  ]);
   assert.equal(m.size, 0);
   assert.equal(level(undefined, "w", null), -1);
 });

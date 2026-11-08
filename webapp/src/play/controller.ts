@@ -15,6 +15,8 @@ export interface GameSetup {
   chess960: boolean;
   /** Chess960 starting position number, if the game started from one. */
   position960?: number;
+  /** Chess 960²: Black's starting position number (position960 is White's). */
+  black960?: number;
   human: Side;
   tc: TimeControl;
   /** Extra seconds for the player's first move (Chess960 with a clock). */
@@ -177,6 +179,7 @@ export class PlayController {
       started: this.started,
       chess960: this.setup.chess960,
       position960: this.setup.position960,
+      black960: this.setup.black960,
       human: this.setup.human,
       opponent: this.setup.humanProfile ?? "engine",
       tc: this.setup.tc,

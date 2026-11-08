@@ -18,6 +18,8 @@ export interface GameRecord {
   started: number;
   chess960: boolean;
   position960?: number;
+  /** Chess 960²: Black's starting position (position960 is White's). Not on the Progress screen. */
+  black960?: number;
   human: Side;
   opponent: OpponentKey;
   tc: TimeControl;
@@ -84,6 +86,7 @@ export function progressByPosition(records: GameRecord[]): Map<number, PositionP
   const map = new Map<number, PositionProgress>();
   for (const r of records) {
     if (!r.chess960 || r.position960 === undefined) continue;
+    if (r.black960 !== undefined && r.black960 !== r.position960) continue; // Chess 960²
     let p = map.get(r.position960);
     if (!p) {
       p = { games: { w: {}, b: {} } };

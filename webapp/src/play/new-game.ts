@@ -1,16 +1,24 @@
 // The new-game sheet: opponent, variant, colour, time control. The last choices are remembered.
-import { chess960Fen, randomChess960 } from "../chess/chess960.ts";
+import { chess960SquaredFen, randomChess960 } from "../chess/chess960.ts";
 import { START_FEN } from "../chess/game.ts";
 import { load, save } from "../storage.ts";
+import { randomBalancedPair } from "./balanced.ts";
+import { loadBookmarks, startName } from "./bookmarks.ts";
 import type { TimeControl } from "./clocks.ts";
 import type { GameSetup } from "./controller.ts";
 
 export interface Choices {
   /** "engine" (Dark C. Helmet) or a human-like profile ("human-1300"). */
   opponent: string;
-  variant: "standard" | "chess960";
-  start960: "random" | "number";
+  /** "chess960sq": Chess 960², each side its own back rank. */
+  variant: "standard" | "chess960" | "chess960sq";
+  start960: "random" | "number" | "bookmark";
   number960: number;
+  /** Chess 960² by number. */
+  whiteNumber: number;
+  blackNumber: number;
+  /** The chosen bookmark as "white-black". */
+  bookmark: string;
   color: "w" | "random" | "b";
   /** Standard chess: the engine's book moves varied, or always the strongest. */
   openings: "varied" | "strongest";
@@ -28,6 +36,9 @@ const DEFAULTS: Choices = {
   variant: "standard",
   start960: "random",
   number960: 518,
+  whiteNumber: 518,
+  blackNumber: 518,
+  bookmark: "",
   color: "w",
   openings: "varied",
   tcKind: "increment",
@@ -57,6 +68,15 @@ export async function chooseNewGame(
   preset?: Partial<Choices>,
 ): Promise<GameSetup | null> {
   const c: Choices = { ...DEFAULTS, ...(await load<Partial<Choices>>(PREFS_KEY)), ...preset };
+  const bookmarks = await loadBookmarks();
+  const bookmarkOptions = (squared: boolean) =>
+    bookmarks
+      .filter((b) => (b.white !== b.black) === squared)
+      .map((b) => {
+        const v = `${b.white}-${b.black}`;
+        return `<option value="${v}"${v === c.bookmark ? " selected" : ""}>${startName(b.white, b.black)}</option>`;
+      })
+      .join("");
   const dialog = document.createElement("dialog");
   dialog.className = "sheet";
   dialog.setAttribute("aria-label", "New game");
@@ -69,18 +89,36 @@ export async function chooseNewGame(
       </div>
       <div class="field" data-show="variant">
         <span class="field-label">Variant</span>
-        ${segmented("variant", [["standard", "Standard"], ["chess960", "Chess960"]], c.variant)}
+        ${segmented("variant", [["standard", "Standard"], ["chess960", "Chess960"], ["chess960sq", "960²"]], c.variant)}
       </div>
-      <div class="field-row" data-show="chess960">
-        <div class="field">
-          <span class="field-label">Start position</span>
-          ${segmented("start960", [["random", "Random"], ["number", "Number"]], c.start960)}
-        </div>
-        <label class="field" data-show="number960">
-          <span class="field-label">Number (0–959)</span>
-          <input type="number" name="number960" min="0" max="959" value="${c.number960}">
+      <p class="small muted" data-show="squaredInfo">Chess 960²: White and Black each start from their own Chess960
+        position. Castling works as in Chess960, with each side's own rooks.</p>
+      <div class="field" data-show="startChoice">
+        <span class="field-label">Start position</span>
+        ${segmented("start960", [["random", "Random"], ["number", "Number"], ["bookmark", "Bookmark"]], c.start960)}
+      </div>
+      <label class="field" data-show="number960">
+        <span class="field-label">Number (0–959)</span>
+        <input type="number" name="number960" min="0" max="959" value="${c.number960}">
+      </label>
+      <div class="field-row" data-show="numbers960sq">
+        <label class="field">
+          <span class="field-label">White's number</span>
+          <input type="number" name="whiteNumber" min="0" max="959" value="${c.whiteNumber}">
+        </label>
+        <label class="field">
+          <span class="field-label">Black's number</span>
+          <input type="number" name="blackNumber" min="0" max="959" value="${c.blackNumber}">
         </label>
       </div>
+      <label class="field" data-show="bookmark960">
+        <span class="field-label">Bookmark</span>
+        <select name="bookmark960" data-bookmarks>${bookmarkOptions(false) || "<option value=\"\" disabled selected>No Chess960 bookmarks yet</option>"}</select>
+      </label>
+      <label class="field" data-show="bookmark960sq">
+        <span class="field-label">Bookmark</span>
+        <select name="bookmark960sq" data-bookmarks>${bookmarkOptions(true) || "<option value=\"\" disabled selected>No Chess 960² bookmarks yet</option>"}</select>
+      </label>
       <div class="field">
         <span class="field-label">You play</span>
         ${segmented("color", [["w", "White"], ["random", "Random"], ["b", "Black"]], c.color)}
@@ -136,11 +174,15 @@ export async function chooseNewGame(
       const v = Math.round(Number(d.get(k)));
       return Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : (DEFAULTS[k] as number);
     };
+    const variant = (d.get("variant") ?? c.variant) as Choices["variant"];
     return {
       opponent: (d.get("opponent") ?? "engine") as string,
-      variant: d.get("variant") as Choices["variant"],
+      variant,
       start960: d.get("start960") as Choices["start960"],
       number960: n("number960", 0, 959),
+      whiteNumber: n("whiteNumber", 0, 959),
+      blackNumber: n("blackNumber", 0, 959),
+      bookmark: String(d.get(variant === "chess960sq" ? "bookmark960sq" : "bookmark960") ?? ""),
       color: d.get("color") as Choices["color"],
       openings: (d.get("openings") ?? "varied") as Choices["openings"],
       tcKind: d.get("tcKind") as Choices["tcKind"],
@@ -160,14 +202,18 @@ export async function chooseNewGame(
       variant: !position,
       // The book's choice matters in standard chess; Chess960 games are out of book at once.
       openings: !position && !human && r.variant === "standard",
-      chess960: !position && r.variant === "chess960",
-      number960: r.start960 === "number",
+      startChoice: !position && r.variant !== "standard",
+      squaredInfo: !position && r.variant === "chess960sq",
+      number960: r.variant === "chess960" && r.start960 === "number",
+      numbers960sq: !position && r.variant === "chess960sq" && r.start960 === "number",
+      bookmark960: !position && r.variant === "chess960" && r.start960 === "bookmark",
+      bookmark960sq: !position && r.variant === "chess960sq" && r.start960 === "bookmark",
       move: r.tcKind === "move",
       game: r.tcKind === "game",
       increment: r.tcKind === "increment",
       classical: r.tcKind === "classical",
       // Chess960 with a clock: time to look at the starting position.
-      extra: (position ? position.chess960 : r.variant === "chess960") && r.tcKind !== "move",
+      extra: (position ? position.chess960 : r.variant !== "standard") && r.tcKind !== "move",
     };
     for (const el of form.querySelectorAll<HTMLElement>("[data-show]")) el.hidden = !visible[el.dataset.show!];
   };
@@ -176,6 +222,7 @@ export async function chooseNewGame(
 
   return new Promise((resolve) => {
     let result: GameSetup | null = null;
+    let pending: Promise<void> | null = null;
     form.querySelector<HTMLButtonElement>('[value="cancel"]')!.addEventListener("click", () => dialog.close());
     form.addEventListener("submit", () => {
       const r = read();
@@ -192,16 +239,36 @@ export async function chooseNewGame(
       const humanProfile = r.opponent.startsWith("human-") ? r.opponent.slice(6) : undefined;
       if (position) {
         result = { ...position, human, tc, humanProfile, firstMoveExtra: position.chess960 && tc.kind !== "move" ? r.extraSeconds : 0 };
-      } else if (r.variant === "chess960") {
-        const n = r.start960 === "random" ? randomChess960() : r.number960;
+      } else if (r.variant !== "standard") {
+        const squared = r.variant === "chess960sq";
         const firstMoveExtra = tc.kind !== "move" ? r.extraSeconds : 0;
-        result = { startFen: chess960Fen(n), chess960: true, position960: n, human, tc, humanProfile, firstMoveExtra };
+        const start = (white: number, black: number) => {
+          result = {
+            startFen: chess960SquaredFen(white, black),
+            chess960: true,
+            position960: white,
+            ...(squared ? { black960: black } : {}),
+            human,
+            tc,
+            humanProfile,
+            firstMoveExtra,
+          };
+        };
+        const marked = r.bookmark.split("-").map(Number);
+        if (r.start960 === "bookmark" && marked.length === 2 && marked.every(Number.isInteger)) start(marked[0], marked[1]);
+        else if (squared && r.start960 === "number") start(r.whiteNumber, r.blackNumber);
+        else if (squared) pending = randomBalancedPair().then(([w, b]) => start(w, b));
+        else {
+          const n = r.start960 === "random" ? randomChess960() : r.number960;
+          start(n, n);
+        }
       } else {
         result = { startFen: START_FEN, chess960: false, human, tc, humanProfile, strongestOpenings: !humanProfile && r.openings === "strongest" };
       }
     });
-    dialog.addEventListener("close", () => {
+    dialog.addEventListener("close", async () => {
       dialog.remove();
+      if (pending) await pending;
       resolve(result);
     });
     dialog.showModal();

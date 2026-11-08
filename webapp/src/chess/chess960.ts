@@ -1,8 +1,11 @@
-// Chess960 starting positions by number (0-959, Scharnagl numbering; 518 is the standard one).
+// Chess960 starting positions by number (0-959, Scharnagl numbering; 518 is the standard one),
+// and Chess 960²: White and Black each get their own back rank (960 × 960 starts).
 
 const KNIGHTS = ["NN---", "N-N--", "N--N-", "N---N", "-NN--", "-N-N-", "-N--N", "--NN-", "--N-N", "---NN"];
+const FILES = "abcdefgh";
 
-export function chess960Fen(n: number): string {
+/** White's back rank of start position n, from a1 to h1 (e.g. "RNBQKBNR" for 518). */
+export function backRank(n: number): string {
   const rank: string[] = new Array(8).fill("");
   rank[[1, 3, 5, 7][n % 4]] = "B";
   n = Math.floor(n / 4);
@@ -19,11 +22,24 @@ export function chess960Fen(n: number): string {
   rank[r1] = "R";
   rank[k] = "K";
   rank[r2] = "R";
-  const files = "abcdefgh";
-  // Castling rights as rook files (Shredder-FEN), e.g. "HAha" for the standard position.
-  const rights = files[r2].toUpperCase() + files[r1].toUpperCase() + files[r2] + files[r1];
-  const white = rank.join("");
-  return `${white.toLowerCase()}/pppppppp/8/8/8/8/PPPPPPPP/${white} w ${rights} - 0 1`;
+  return rank.join("");
+}
+
+/** Castling rights of one back rank as rook files (Shredder-FEN): kingside rook, then queenside. */
+function rookFiles(rank: string): string {
+  return FILES[rank.lastIndexOf("R")] + FILES[rank.indexOf("R")];
+}
+
+export function chess960Fen(n: number): string {
+  return chess960SquaredFen(n, n);
+}
+
+/** Chess 960²: White starts from position `white`, Black from position `black` (its pieces on the
+ *  same files as White's would be in position `black`). Equal numbers give plain Chess960. */
+export function chess960SquaredFen(white: number, black: number): string {
+  const w = backRank(white), b = backRank(black);
+  const rights = rookFiles(w).toUpperCase() + rookFiles(b);
+  return `${b.toLowerCase()}/pppppppp/8/8/8/8/PPPPPPPP/${w} w ${rights} - 0 1`;
 }
 
 export function randomChess960(): number {
