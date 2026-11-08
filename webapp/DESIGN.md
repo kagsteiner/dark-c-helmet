@@ -395,7 +395,7 @@ default 70%, because Chess960 comes first for this app).
 
 Keeps results, the 960 progress and bookmarks the same on a player's devices. Off until the player turns it on in Settings. There are no accounts.
 
-- **Code:** five words from the BIP-39 English list (2,048 words, 55 bits), created on the first device. Typing accepts any separators and the first four letters of a word, and offers completions. A link `#/settings?sync=words` (also shown as a QR code) fills in the code; linking always shows what will be merged first.
+- **Code:** five words from the BIP-39 English list (2,048 words, 55 bits), created on the first device. Typing accepts any separators and the first four letters of a word, and offers completions. Linking always shows what will be merged first. Each browser and home-screen app has its own storage and is linked on its own, which is why there is no QR code or link: a scan would link whichever copy the phone happens to open.
 - **What syncs:** game records (never moves), bookmarks and the flag that the Fischer egg has been shown, so it plays once per code. Games in progress and settings stay on each device.
 - **When:** at app start, 2 s after a finished game or a bookmark change, and when the app comes back to the foreground after a minute. Failures wait for the next chance.
 - **Merging** (`src/sync/merge.ts`, shared with the server): the union of game records by id, keeping the finished or longest version; for bookmarks the newest change wins, and a removed bookmark stays as a marker.

@@ -1,6 +1,5 @@
 // The "Sync my devices" part of the Settings screen: off → create a code or enter one → confirm
-// what will be merged → on (the code, a QR code and link for the next device, stop, delete).
-import qrcode from "qrcode-generator";
+// what will be merged → on (the code, stop, delete).
 import { completeWord, parseCode, suggestWords } from "../sync/code.ts";
 import {
   createSyncCode,
@@ -16,7 +15,7 @@ import {
   type Counts,
 } from "../sync/client.ts";
 
-type Mode = { name: "main" } | { name: "enter" } | { name: "confirm"; code: string; text: string } | { name: "delete" } | { name: "qr" };
+type Mode = { name: "main" } | { name: "enter" } | { name: "confirm"; code: string; text: string } | { name: "delete" };
 
 const plural = (n: number, one: string) => `${n.toLocaleString("en")} ${one}${n === 1 ? "" : "s"}`;
 const describe = (c: Counts) =>
@@ -28,17 +27,6 @@ function mergeText(local: Counts, remote: Counts): string {
   if (isEmpty(local)) return `The ${describe(remote)} under this code will be added to this device.`;
   if (isEmpty(remote)) return `This device's ${describe(local)} will be stored under this code.`;
   return `This device's ${describe(local)} will be added to the ${describe(remote)} under this code.`;
-}
-
-function linkFor(code: string): string {
-  return new URL(`#/settings?sync=${code}`, new URL(import.meta.env.BASE_URL, location.href)).href;
-}
-
-function qrSvg(text: string): string {
-  const qr = qrcode(0, "M");
-  qr.addData(text);
-  qr.make();
-  return qr.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
 }
 
 export function mountSyncSection(root: HTMLElement): () => void {
@@ -55,7 +43,7 @@ export function mountSyncSection(root: HTMLElement): () => void {
 
   const render = () => {
     const s = syncState();
-    if (!s.code && (mode.name === "main" || mode.name === "qr" || mode.name === "delete")) {
+    if (!s.code && (mode.name === "main" || mode.name === "delete")) {
       root.innerHTML = `
         <p class="small muted">Keep your results, your 960 progress and your bookmarks the same on all your devices.
           A code of five words links them, and you need no account. The server stores your results and bookmarks
@@ -85,19 +73,14 @@ export function mountSyncSection(root: HTMLElement): () => void {
         <div class="book-actions">${button("delete-yes", "Delete from the server")}${button("back", "Cancel")}</div>
         ${statusLine}`;
     } else {
-      const showQr = mode.name === "qr";
       const last = s.last ? `Last synced ${new Date(s.last).toLocaleString()}.` : "";
       root.innerHTML = `
         <p>Your code: <strong class="sync-code">${s.code!.replaceAll("-", " ")}</strong></p>
-        <p class="small muted">To add a device, choose “I have a code” there and type these words. Keep them
-          to yourself: they give access to your results and bookmarks.</p>
-        ${showQr ? `<div class="sync-qr" role="img" aria-label="QR code that links a phone">${qrSvg(linkFor(s.code!))}</div>
-          <p class="small muted">Scan this with the phone's camera. On an iPhone, the app added to the home screen
-            keeps its own data, so type the words there.</p>` : ""}
+        <p class="small muted">To add a device, choose “I have a code” there and type these words. Each browser
+          keeps its own data, and so does an app added to the home screen, so link each one you use. Keep the
+          words to yourself: they give access to your results and bookmarks.</p>
         <p class="small muted">${last}</p>
-        <div class="book-actions">
-          ${button("now", "Sync now")}${button(showQr ? "back" : "qr", showQr ? "Hide QR code" : "Show QR code")}${button("copy", "Copy link")}
-        </div>
+        <div class="book-actions">${button("now", "Sync now")}${button("copy", "Copy code")}</div>
         <div class="book-actions">${button("stop", "Stop syncing on this device")}${button("delete", "Delete my data from the server")}</div>
         ${statusLine}`;
     }
@@ -150,10 +133,9 @@ export function mountSyncSection(root: HTMLElement): () => void {
       } else if (action === "now") {
         await syncNow();
         status("Synced.");
-      } else if (action === "qr") go({ name: "qr" });
-      else if (action === "copy") {
-        await navigator.clipboard.writeText(linkFor(syncState().code!));
-        status("Link copied. It gives access to your results and bookmarks, so send it only to yourself.");
+      } else if (action === "copy") {
+        await navigator.clipboard.writeText(syncState().code!.replaceAll("-", " "));
+        status("Code copied.");
       } else if (action === "stop") {
         await stopSync();
         go({ name: "main" });
@@ -186,23 +168,13 @@ export function mountSyncSection(root: HTMLElement): () => void {
   root.addEventListener("input", onInput);
   root.addEventListener("keydown", onKey);
   const unsubscribe = onSyncChange(() => {
-    if (mode.name === "main" || mode.name === "qr") {
+    if (mode.name === "main") {
       const message = root.querySelector(".sync-status")?.textContent ?? "";
       render();
       status(message);
     }
   });
   render();
-
-  // A device arriving through the link or QR code: confirm first, like typed words.
-  const match = location.hash.match(/[?&]sync=([a-z-]+)/);
-  if (match) {
-    history.replaceState(null, "", location.pathname + location.search + "#/settings");
-    const parsed = parseCode(match[1]);
-    if (syncState().code) status("This device is already linked to a code.");
-    else if ("error" in parsed) status("This link does not contain a valid code.", true);
-    else prepareLink(parsed.code).catch((err) => status(err instanceof SyncError && err.status === 404 ? notFound : (err as Error).message, true));
-  }
 
   return () => {
     unsubscribe();
