@@ -61,13 +61,16 @@
   min-width: 4ch;
 }
 
+/* Always three lines high, so the moves below stay put while the main line changes length. */
 .an-pv {
+  height: 3lh;
   padding-left: var(--space-2);
   overflow-wrap: anywhere;
-}
-
-.an-pv:empty {
-  display: none;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
 }
 
 .an-moves .move {
