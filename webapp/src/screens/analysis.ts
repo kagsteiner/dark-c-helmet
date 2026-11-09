@@ -99,7 +99,10 @@ export function analysisScreen(rules: Rules, controller: PlayController, engineS
                 <span class="an-score numeric"></span>
                 <span class="an-details small muted numeric"></span>
               </div>
-              <p class="an-pv small"></p>
+              <div class="an-pv-wrap">
+                <p class="an-pv small"></p>
+                <p class="an-pv-full small" hidden></p>
+              </div>
             </div>
             <ol class="move-list an-moves numeric" aria-label="Moves"></ol>
             <div class="an-graph"></div>
@@ -205,6 +208,7 @@ export function analysisScreen(rules: Rules, controller: PlayController, engineS
       };
 
       const positionChanged = () => {
+        setPvOpen(false);
         render();
         if (analyzing) engineSearch();
       };
@@ -216,6 +220,32 @@ export function analysisScreen(rules: Rules, controller: PlayController, engineS
         positionChanged();
       };
 
+      // The main line: three lines high; when it is cut off, a tap shows all of it in a panel
+      // floating above the moves. The panel closes with the position or a tap anywhere.
+      const setPvOpen = (open: boolean) => {
+        $<HTMLElement>(".an-pv-full").hidden = !open;
+        $(".an-pv").setAttribute("aria-expanded", String(open));
+      };
+      const setPv = (text: string) => {
+        const pv = $<HTMLElement>(".an-pv");
+        pv.textContent = text;
+        $(".an-pv-full").textContent = text;
+        if (!text) setPvOpen(false);
+        const cutOff = pv.scrollHeight > pv.clientHeight + 1;
+        pv.classList.toggle("can-open", cutOff);
+        if (cutOff) {
+          pv.tabIndex = 0;
+          pv.setAttribute("role", "button");
+        } else {
+          pv.removeAttribute("tabindex");
+          pv.removeAttribute("role");
+        }
+      };
+      const closePvOutside = (e: PointerEvent) => {
+        if (!(e.target as Element).closest?.(".an-pv-full")) setPvOpen(false);
+      };
+      document.addEventListener("pointerdown", closePvOutside, true);
+
       const renderEngine = () => {
         const engine = controller.engine;
         const toggle = $<HTMLButtonElement>('[data-action="toggle"]');
@@ -226,7 +256,7 @@ export function analysisScreen(rules: Rules, controller: PlayController, engineS
         if (!engine) {
           $(".an-score").textContent = "";
           $(".an-details").textContent = engineStatus() ?? "The engine is loading…";
-          $(".an-pv").textContent = "";
+          setPv("");
           return;
         }
         if (!analyzing || !lastInfo) {
@@ -236,7 +266,7 @@ export function analysisScreen(rules: Rules, controller: PlayController, engineS
             : terminal !== "ongoing"
               ? "The game is over in this position."
               : "Press play to analyze this position.";
-          $(".an-pv").textContent = "";
+          setPv("");
           return;
         }
         const info = lastInfo;
@@ -257,7 +287,7 @@ export function analysisScreen(rules: Rules, controller: PlayController, engineS
           if (!white) number++;
           white = !white;
         }
-        $(".an-pv").textContent = parts.join(" ");
+        setPv(parts.join(" "));
       };
 
       const renderMoves = () => {
@@ -391,7 +421,9 @@ export function analysisScreen(rules: Rules, controller: PlayController, engineS
         const nav = t.closest<HTMLElement>("[data-nav]")?.dataset.nav;
         const ply = t.closest<HTMLElement>("[data-ply]")?.dataset.ply;
         const action = t.closest<HTMLElement>("[data-action]")?.dataset.action;
-        if (nav === "first") goTo(0);
+        if (t.closest(".an-pv.can-open")) setPvOpen(true);
+        else if (t.closest(".an-pv-full")) setPvOpen(false);
+        else if (nav === "first") goTo(0);
         else if (nav === "prev") goTo(cursor - 1);
         else if (nav === "next") goTo(cursor + 1);
         else if (nav === "last") goTo(played.length);
@@ -421,7 +453,9 @@ export function analysisScreen(rules: Rules, controller: PlayController, engineS
       });
       const onKey = (e: KeyboardEvent) => {
         if (e.target instanceof Element && e.target.closest("input, select, textarea")) return;
-        if (e.key === "ArrowLeft") goTo(cursor - 1);
+        if (e.key === "Escape") setPvOpen(false);
+        else if ((e.key === "Enter" || e.key === " ") && e.target instanceof Element && e.target.closest(".an-pv.can-open")) setPvOpen(true);
+        else if (e.key === "ArrowLeft") goTo(cursor - 1);
         else if (e.key === "ArrowRight") goTo(cursor + 1);
         else if (e.key === "Home") goTo(0);
         else if (e.key === "End") goTo(played.length);
@@ -440,6 +474,7 @@ export function analysisScreen(rules: Rules, controller: PlayController, engineS
         reviewing = null;
         controller.engine?.stop();
         document.removeEventListener("keydown", onKey);
+        document.removeEventListener("pointerdown", closePvOutside, true);
         unsubscribe();
       };
     },

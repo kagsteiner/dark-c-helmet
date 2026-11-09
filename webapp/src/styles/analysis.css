@@ -73,6 +73,32 @@
   overflow: hidden;
 }
 
+.an-pv-wrap {
+  position: relative;
+}
+
+.an-pv.can-open {
+  cursor: pointer;
+}
+
+/* The whole main line, above the moves, so opening it moves nothing. */
+.an-pv-full {
+  position: absolute;
+  z-index: 2;
+  top: calc(-1 * var(--space-2));
+  left: 0;
+  right: calc(-1 * var(--space-2));
+  margin: 0;
+  padding: var(--space-2);
+  max-height: min(50dvh, 20em);
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
 .an-moves .move {
   font: inherit;
   border-radius: 3px;

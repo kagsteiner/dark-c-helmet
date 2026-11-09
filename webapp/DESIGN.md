@@ -184,7 +184,9 @@ key-value store), and with reduced motion the tiles only fade.
 ### Analysis
 
 - Endless analysis of the current position: depth, nodes, score, PV (in SAN). One line in
-  the MVP; MultiPV comes later (needs an engine change).
+  the MVP; MultiPV comes later (needs an engine change). The PV always takes three lines, so
+  the moves below stay put. When it is cut off, a tap shows all of it in a panel floating above
+  the moves, updated live; the panel closes when the position changes or at the next tap.
 - Full-game pass: a fixed time per position; result is an eval graph and marks for
   inaccuracy / mistake / blunder. A move is judged by how much it lowers the mover's winning
   chances (from the centipawn score, as on lichess): 5 / 10 / 15 percentage points.
