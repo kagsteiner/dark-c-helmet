@@ -32,8 +32,9 @@ int g_move_overhead = 20;
 #define CORR_GRAIN 256
 #define CORR_LIMIT (CORR_GRAIN * corr_limit)
 
-// History indexed by [piece][to-square] of a follow-up move.
-typedef int PieceToHistory[12][64];
+// History indexed by [piece][to-square] of a follow-up move. History values stay within
+// +-HISTORY_MAX (see history_update), so int16 is enough and halves the tables' cache footprint.
+typedef int16_t PieceToHistory[12][64];
 
 typedef struct {
     int static_eval;
@@ -70,10 +71,10 @@ typedef struct SearchThread {
     SearchResult result;
 
     // History tables survive between moves of the same game.
-    int history[2][64][64];
+    int16_t history[2][64][64];
     Move countermoves[12][64];
     PieceToHistory cont_history[12][64];  // [previous piece][previous to]
-    int capture_history[12][64][6];       // [moving piece][to][captured piece type]
+    int16_t capture_history[12][64][6];   // [moving piece][to][captured piece type]
     int correction[2][CORR_SIZE];         // [side to move][pawn key]
 } SearchThread;
 
@@ -351,8 +352,8 @@ static Move picker_next(MovePicker* mp, SearchThread* t, int ply, int skip_quiet
     }
 }
 
-static inline void history_update(int* entry, int bonus) {
-    *entry += bonus - *entry * abs(bonus) / HISTORY_MAX;
+static inline void history_update(int16_t* entry, int bonus) {
+    *entry = (int16_t)(*entry + bonus - *entry * abs(bonus) / HISTORY_MAX);
 }
 
 static void update_quiet_heuristics(SearchThread* t, int ply, int depth, Move best, const Move* quiets, int quiet_count) {
@@ -865,9 +866,7 @@ SearchResult search_run(const Position* pos, const SearchLimits* limits, int sil
 
     for (int i = 0; i < thread_count; ++i) {
         SearchThread* t = &threads[i];
-        // Copy the position including its state history (needed for repetition detection).
-        memcpy(&t->pos, pos, sizeof(Position));
-        t->pos.st = t->pos.states + (pos->st - pos->states);
+        pos_copy_for_search(&t->pos, pos);
         memset(t->stack, 0, sizeof(t->stack));
         for (int j = 0; j < MAX_PLY + 8; ++j) {
             t->stack[j].static_eval = VALUE_NONE;

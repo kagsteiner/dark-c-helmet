@@ -201,6 +201,8 @@ static void refresh(const Position* pos, Accumulator* acc, int p) {
 }
 #endif
 
+static const _Alignas(64) int16_t zero_row[NNUE_HIDDEN];  // stands in for a missing row in fused passes
+
 // Refresh through the accumulator cache: start from the accumulator last computed with the
 // same king view and apply only the pieces that differ. int16 addition wraps, so the order
 // of additions does not matter and the result equals refresh() exactly.
@@ -215,31 +217,43 @@ static void refresh_cached(Position* pos, Accumulator* acc, int p) {
     }
     KingView kv = king_view(p, king_square(pos, p));
     AccumulatorCacheEntry* e = &pos->acc_cache[p][(kv.offset / INPUTS) * 2 + ((kv.flip & 7) != 0)];
-    int16_t* v = e->values;
+    // Collect the rows to add and subtract (at most 32 pieces on the board, 32 in the entry).
+    const int16_t* add[32];
+    const int16_t* sub[32];
+    int na = 0, ns = 0;
     for (int pc = 0; pc < 12; ++pc) {
         Bitboard now = pos->pieces[pc], before = e->pieces[pc];
         Bitboard added = now & ~before, removed = before & ~now;
-        while (added) {
-            int sq = pop_lsb(&added);
-            const int16_t* w = ft_weights[feature(p, kv, pc, sq)];
-#ifdef VLANES
-            for (int h = 0; h < NNUE_HIDDEN; h += VLANES) VSTORE(v + h, VADD(VLOAD(v + h), VLOAD(w + h)));
-#else
-            for (int h = 0; h < NNUE_HIDDEN; ++h) v[h] += w[h];
-#endif
-        }
-        while (removed) {
-            int sq = pop_lsb(&removed);
-            const int16_t* w = ft_weights[feature(p, kv, pc, sq)];
-#ifdef VLANES
-            for (int h = 0; h < NNUE_HIDDEN; h += VLANES) VSTORE(v + h, VSUB(VLOAD(v + h), VLOAD(w + h)));
-#else
-            for (int h = 0; h < NNUE_HIDDEN; ++h) v[h] -= w[h];
-#endif
-        }
+        while (added) add[na++] = ft_weights[feature(p, kv, pc, pop_lsb(&added))];
+        while (removed) sub[ns++] = ft_weights[feature(p, kv, pc, pop_lsb(&removed))];
         e->pieces[pc] = now;
     }
-    memcpy(acc->values[p], v, sizeof(acc->values[p]));
+    // Apply them two additions and two subtractions per pass (missing ones read zero_row). The
+    // last pass also writes the result to the accumulator, which saves a separate copy.
+    int16_t* restrict v = e->values;
+    int16_t* restrict out = acc->values[p];
+    int passes = ((na > ns ? na : ns) + 1) / 2;
+    if (passes == 0) memcpy(out, v, sizeof(acc->values[p]));
+    for (int i = 0; i < passes; ++i) {
+        const int16_t* a0 = 2 * i < na ? add[2 * i] : zero_row;
+        const int16_t* a1 = 2 * i + 1 < na ? add[2 * i + 1] : zero_row;
+        const int16_t* s0 = 2 * i < ns ? sub[2 * i] : zero_row;
+        const int16_t* s1 = 2 * i + 1 < ns ? sub[2 * i + 1] : zero_row;
+        int last = i == passes - 1;
+#ifdef VLANES
+        for (int h = 0; h < NNUE_HIDDEN; h += VLANES) {
+            vi16 x = VSUB(VSUB(VADD(VADD(VLOAD(v + h), VLOAD(a0 + h)), VLOAD(a1 + h)), VLOAD(s0 + h)), VLOAD(s1 + h));
+            VSTORE(v + h, x);
+            if (last) VSTORE(out + h, x);
+        }
+#else
+        if (last) {
+            for (int h = 0; h < NNUE_HIDDEN; ++h) out[h] = v[h] = (int16_t)(v[h] + a0[h] + a1[h] - s0[h] - s1[h]);
+        } else {
+            for (int h = 0; h < NNUE_HIDDEN; ++h) v[h] = (int16_t)(v[h] + a0[h] + a1[h] - s0[h] - s1[h]);
+        }
+#endif
+    }
     acc->computed[p] = 1;
 }
 
@@ -307,7 +321,7 @@ static void make_current(Position* pos, int p) {
     int idx = (int)(pos->st - pos->states);
     int k = idx;
     while (!pos->acc[k].computed[p]) {
-        if (k == 0 || king_view_changed(&pos->states[k], p)) {
+        if (k <= pos->acc_root || king_view_changed(&pos->states[k], p)) {
             refresh_cached(pos, &pos->acc[idx], p);
             return;
         }

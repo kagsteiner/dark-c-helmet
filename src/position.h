@@ -63,6 +63,7 @@ typedef struct {
     Accumulator acc[MAX_GAME_PLY + MAX_PLY + 8];  // acc[i] belongs to states[i]
     AccumulatorCacheEntry acc_cache[2][NNUE_CACHE_VIEWS];
     int acc_cache_net;   // network the cache was built for (see nnue.c); 0 = never built
+    int acc_root;        // accumulators below this state index are not valid (see pos_copy_for_search)
 
     // Castling, set up from the FEN so that Chess960 starting positions work too. Indexed by
     // castle_index(): 0 = white O-O, 1 = white O-O-O, 2 = black O-O, 3 = black O-O-O. The king
@@ -99,6 +100,9 @@ void position_init(void);
 int pos_set_fen(Position* pos, const char* fen);
 void pos_to_fen(const Position* pos, char* out, size_t size);
 void pos_print(const Position* pos);
+// Copies what a search needs: board, castling setup and the state history up to the current
+// state (for repetition detection), but not the accumulators (2.4 MB).
+void pos_copy_for_search(Position* dst, const Position* src);
 
 void pos_make_move(Position* pos, Move m);
 void pos_unmake_move(Position* pos, Move m);

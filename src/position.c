@@ -274,6 +274,23 @@ void pos_print(const Position* pos) {
     fflush(stdout);
 }
 
+// A plain memcpy of a Position costs 2.6 MB per search and thread, nearly all of it
+// accumulators the search never reads. The copy's accumulators start empty instead: acc_root
+// makes the first evaluation rebuild them from the board. The copy keeps its own accumulator
+// cache from earlier searches; each entry is consistent on its own, so it stays valid.
+void pos_copy_for_search(Position* dst, const Position* src) {
+    size_t idx = (size_t)(src->st - src->states);
+    memcpy(dst, src, offsetof(Position, states));
+    memcpy(dst->states, src->states, (idx + 1) * sizeof(State));
+    dst->st = dst->states + idx;
+    memcpy(dst->castle_rook, src->castle_rook, sizeof(src->castle_rook));
+    memcpy(dst->castle_empty, src->castle_empty, sizeof(src->castle_empty));
+    memcpy(dst->castle_transit, src->castle_transit, sizeof(src->castle_transit));
+    memcpy(dst->castle_mask, src->castle_mask, sizeof(src->castle_mask));
+    dst->acc_root = (int)idx;
+    dst->acc[idx].computed[WHITE] = dst->acc[idx].computed[BLACK] = 0;
+}
+
 // ---------------------------------------------------------------------------
 // Make / unmake
 // ---------------------------------------------------------------------------
