@@ -1,0 +1,34 @@
+<!doctype html>
+<!-- Source of public/og-image.png, the preview picture for shared links (1200 × 630). Render with:
+     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless --hide-scrollbars \
+       --window-size=1200,630 --screenshot=public/og-image.png tools/og-image.html   (from webapp/) -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      html, body { margin: 0; width: 1200px; height: 630px; overflow: hidden; }
+      body {
+        display: flex;
+        align-items: center;
+        gap: 64px;
+        padding: 0 96px;
+        box-sizing: border-box;
+        background: #f8f5eb;
+        color: #171816;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      }
+      img { width: 340px; height: 340px; flex: none; }
+      h1 { margin: 0 0 24px; font-size: 76px; line-height: 1.05; letter-spacing: -1px; }
+      p { margin: 0; font-size: 38px; line-height: 1.3; color: #3c3c3a; }
+      .site { margin-top: 36px; font-size: 30px; color: #2f62c6; font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <img src="../public/icons/darkhelmet.svg" alt="" />
+    <div>
+      <h1>Dark C. Helmet</h1>
+      <p>A strong Chess960 engine that runs in your browser</p>
+      <p class="site">darkhelmet.eu</p>
+    </div>
+  </body>
+</html>

@@ -5,16 +5,56 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#fafaf8" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#18191b" media="(prefers-color-scheme: dark)" />
-    <title>Dark C. Helmet</title>
+    <title>Dark C. Helmet · Chess960 and chess against a strong engine in your browser</title>
+    <meta name="description" content="Play Chess960 and standard chess against a strong engine that runs in your browser. Human-like opponents, game review, analysis and an opening book. Free and open source." />
+    <link rel="canonical" href="https://darkhelmet.eu/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Dark C. Helmet" />
+    <meta property="og:title" content="Dark C. Helmet" />
+    <meta property="og:description" content="Play Chess960 and standard chess against a strong engine that runs in your browser." />
+    <meta property="og:url" content="https://darkhelmet.eu/" />
+    <meta property="og:image" content="https://darkhelmet.eu/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
     <link rel="icon" href="./favicon.ico" sizes="16x16 32x32 48x48" />
     <link rel="icon" type="image/svg+xml" href="./icons/darkhelmet.svg" sizes="any" />
     <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" sizes="180x180" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <meta name="apple-mobile-web-app-title" content="Dark Helmet" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Dark C. Helmet",
+        "url": "https://darkhelmet.eu/",
+        "description": "A strong chess engine that runs in your browser, built above all for Chess960. With human-like opponents, game review, analysis and an opening book.",
+        "applicationCategory": "GameApplication",
+        "operatingSystem": "Any (web browser)",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
+        "isAccessibleForFree": true,
+        "codeRepository": "https://github.com/kagsteiner/dark-c-helmet"
+      }
+    </script>
+    <style>
+      /* Shown only until the app starts (it replaces #app); search engines and AI crawlers read it. */
+      .static-intro { max-width: 34em; margin: 18vh auto 0; padding: 0 16px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #6b6b70; text-align: center; line-height: 1.5; }
+      .static-intro h1 { font-size: 1.4em; color: inherit; }
+      .static-intro a { color: inherit; }
+      @media (prefers-color-scheme: dark) { html { background: #18191b; } .static-intro { color: #9a9ca2; } }
+    </style>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <div class="static-intro">
+        <h1>Dark C. Helmet</h1>
+        <p>A strong chess engine that runs in your browser, built above all for Chess960. Play Chess960 or
+          standard chess against the engine or against human-like opponents, review your games, analyze
+          positions, and explore an opening book for all 960 start positions. Free, with no account, and open source.</p>
+        <p><a href="./about.html">About Dark C. Helmet</a> · <a href="https://github.com/kagsteiner/dark-c-helmet">Source code on GitHub</a></p>
+      </div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

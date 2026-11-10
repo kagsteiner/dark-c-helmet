@@ -1,0 +1,6 @@
+# Search engines and AI crawlers are welcome. The API only serves the app.
+User-agent: *
+Allow: /
+Disallow: /api/
+
+Sitemap: https://darkhelmet.eu/sitemap.xml
