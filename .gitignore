@@ -53,3 +53,21 @@ data/
 
 # fastchess writes its state here when run from the project root
 /config.json
+
+# macOS and Emacs leftovers
+.DS_Store
+\#*#
+.#*
+
+# Old local files, kept out of the repository
+/output/
+/human/calib_fresh_tmp.py
+/engine_c.c
+/BUILD_C.md
+/build_c.bat
+/darkengine_c.bat
+/CppProperties.json
+/uci_nps_suite.ps1
+/uci_nps_test.ps1
+/engine-interface.txt
+/about.md
