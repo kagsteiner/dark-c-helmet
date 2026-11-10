@@ -120,6 +120,10 @@
       td.number, th.number { text-align: right; font-variant-numeric: tabular-nums; }
       ul { margin: 0 0 14px; padding-left: 20px; }
       li { margin-bottom: 6px; }
+      /* Screenshots of the app (made by tools/screenshots.ts). */
+      .shot { margin: 16px 0 24px; }
+      .shot img { display: block; width: 100%; height: auto; border: 1px solid var(--hairline); border-radius: 6px; }
+      .shot.narrow { max-width: 360px; }
       footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hairline); }
       @media (max-width: 760px) {
         .intro { grid-template-columns: minmax(0, 1fr); gap: 8px; }
@@ -137,7 +141,7 @@
       <main>
         <section class="intro">
           <div>
-            <h1>A strong chess (960) engine in your browser</h1>
+            <h1>A strong chess (and chess960) engine in your browser</h1>
             <p>I love <a href="https://en.wikipedia.org/wiki/Chess960">Chess960</a>, the variant with the shuffled back rank. Why do I love it? Because at the beginning, you have to fundamentally create a
               little opening theory for the starting position in your mind. Which pawns are unprotected? Where do you develop your pieces? What do you attack? If
               you fail to make a good plan at the beginning, your game will end horrible in a way standard chess games can't, once you have a clue about openings.
@@ -226,12 +230,20 @@
           <h3>A nice progress view</h3>
           <p>A square of triangles shows you which of the 960 variations you have won, as white, as black, against 1300, 1600, full engine. And maybe something special happens if you beat the full engine in all 960 variations? Who knows?</p>
           <p>Hint: You only need a "silver star" to gain an entry. No undo, no hint, but if you give the engine only very little time, and take all the time you want, a victory will count. Still, the engine at 1 minute per game is still tough to beat.</p>
+          <figure class="shot">
+            <img src="./screenshots/progress.webp" width="1376" height="1867" loading="lazy"
+              alt="The Chess960 progress screen: a grid of 960 tiles, each split into a White and a Black triangle, coloured by the strongest opponent beaten in that start position." />
+          </figure>
 
           <h3>An opening book for all 960</h3>
           <p>The app's little opening book doesn't only include openings for standard chess, but also thousands of Chess 960. Of course, thousands of moves for 960 different positions is only a few moves per position. It still gives the engine a head start - often the first two moves decide on the structure of your setup.</p>
 
           <h3>Bookmarks</h3>
           <p>When you enjoyed a particular Chess 960 match, and want to play it again, just bookmark it, and use that bookmark the next time you start a new game.</p>
+          <figure class="shot narrow">
+            <img src="./screenshots/new-game-bookmarks.webp" width="880" height="2043" loading="lazy"
+              alt="The New game dialog with Chess960 and Bookmark selected: a list of bookmarked start positions with their back rank, number, date and a note." />
+          </figure>
 
 
           <h3>Chess 960²</h3>
