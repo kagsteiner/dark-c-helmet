@@ -26,8 +26,9 @@ int g_move_overhead = 20;
 
 #define HISTORY_MAX 16384
 
-// Correction history: per pawn structure, how far the static eval tends to be from the search
-// result. Stored in units of 1/CORR_GRAIN centipawn, indexed by side to move and pawn key.
+// Correction history: per pawn structure and per arrangement of each side's non-pawn pieces,
+// how far the static eval tends to be from the search result. Stored in units of 1/CORR_GRAIN
+// centipawn, indexed by side to move and the key.
 #define CORR_SIZE 16384
 #define CORR_GRAIN 256
 #define CORR_LIMIT (CORR_GRAIN * corr_limit)
@@ -79,6 +80,7 @@ typedef struct SearchThread {
     // Continuation history used after null moves and at the root (ply 0 and 1): acts as an
     // extra piece-to history for those nodes. Per thread, cleared with the other tables.
     PieceToHistory cont_sentinel;
+    int nonpawn_correction[2][2][CORR_SIZE];  // [side to move][piece colour][non-pawn key]
 } SearchThread;
 
 static int lmr_table[64][64];
@@ -107,6 +109,7 @@ void search_clear(void) {
         memset(t->capture_history, 0, sizeof(t->capture_history));
         memset(t->correction, 0, sizeof(t->correction));
         memset(t->cont_sentinel, 0, sizeof(t->cont_sentinel));
+        memset(t->nonpawn_correction, 0, sizeof(t->nonpawn_correction));
     }
 }
 
@@ -397,22 +400,34 @@ static void update_capture_history(SearchThread* t, int depth, Move best, const 
     }
 }
 
-static inline int* correction_entry(SearchThread* t) {
-    return &t->correction[t->pos.side][t->pos.st->pawn_key & (CORR_SIZE - 1)];
+// The correction tables that apply to the current position, and their weights (/ 128).
+enum { CORR_TABLES = 3 };
+static inline void correction_entries(SearchThread* t, int* entries[CORR_TABLES]) {
+    const State* st = t->pos.st;
+    int side = t->pos.side;
+    entries[0] = &t->correction[side][st->pawn_key & (CORR_SIZE - 1)];
+    entries[1] = &t->nonpawn_correction[side][WHITE][st->nonpawn_key[WHITE] & (CORR_SIZE - 1)];
+    entries[2] = &t->nonpawn_correction[side][BLACK][st->nonpawn_key[BLACK] & (CORR_SIZE - 1)];
 }
 
-// Static evaluation adjusted by the learned correction for this pawn structure.
+// Static evaluation adjusted by the learned corrections for this position.
 static inline int corrected_eval(SearchThread* t, int raw) {
-    int v = raw + *correction_entry(t) / CORR_GRAIN;
+    int* e[CORR_TABLES];
+    correction_entries(t, e);
+    int sum = *e[0] * corr_pawn_w + (*e[1] + *e[2]) * corr_nonpawn_w;
+    int v = raw + sum / (128 * CORR_GRAIN);
     return v >= VALUE_MATE_IN_MAX ? VALUE_MATE_IN_MAX - 1 : v <= -VALUE_MATE_IN_MAX ? -VALUE_MATE_IN_MAX + 1 : v;
 }
 
-// Move the correction towards (search result - static eval), weighted by depth.
+// Move each correction towards (search result - static eval), weighted by depth.
 static void update_correction(SearchThread* t, int depth, int diff) {
-    int* e = correction_entry(t);
+    int* e[CORR_TABLES];
+    correction_entries(t, e);
     int weight = depth + 1 < corr_weight_max ? depth + 1 : corr_weight_max;
-    int v = (*e * (256 - weight) + diff * CORR_GRAIN * weight) / 256;
-    *e = v > CORR_LIMIT ? CORR_LIMIT : v < -CORR_LIMIT ? -CORR_LIMIT : v;
+    for (int i = 0; i < CORR_TABLES; ++i) {
+        int v = (*e[i] * (256 - weight) + diff * CORR_GRAIN * weight) / 256;
+        *e[i] = v > CORR_LIMIT ? CORR_LIMIT : v < -CORR_LIMIT ? -CORR_LIMIT : v;
+    }
 }
 
 // ---------------------------------------------------------------------------

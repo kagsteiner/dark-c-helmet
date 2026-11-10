@@ -36,6 +36,7 @@ typedef struct {
 typedef struct {
     uint64_t key;
     uint64_t pawn_key;
+    uint64_t nonpawn_key[2];  // non-pawn pieces (king included) of each colour
     int castling;
     int ep_sq;           // NO_SQ if none; only set when an en-passant capture is actually possible
     int rule50;

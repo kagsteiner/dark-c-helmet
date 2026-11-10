@@ -108,6 +108,7 @@ static inline void state_add(State* st, int pc, int sq) {
     st->psq_eg += PSQ_EG[pc][sq];
     st->phase += PHASE_WEIGHT[piece_type(pc)];
     if (piece_type(pc) == PAWN) st->pawn_key ^= ZOBRIST_PIECE[pc][sq];
+    else st->nonpawn_key[piece_color(pc)] ^= ZOBRIST_PIECE[pc][sq];
 }
 
 static inline void add_dirty(State* st, int pc, int from, int to) {
@@ -124,6 +125,7 @@ static inline void state_remove(State* st, int pc, int sq) {
     st->psq_eg -= PSQ_EG[pc][sq];
     st->phase -= PHASE_WEIGHT[piece_type(pc)];
     if (piece_type(pc) == PAWN) st->pawn_key ^= ZOBRIST_PIECE[pc][sq];
+    else st->nonpawn_key[piece_color(pc)] ^= ZOBRIST_PIECE[pc][sq];
 }
 
 static void set_pinned(Position* pos) {
@@ -207,6 +209,7 @@ int pos_set_fen(Position* pos, const char* fen) {
 
     st->key = 0;
     st->pawn_key = 0;
+    st->nonpawn_key[WHITE] = st->nonpawn_key[BLACK] = 0;
     st->psq_mg = st->psq_eg = st->phase = 0;
     for (int sq = 0; sq < 64; ++sq)
         if (pos->board[sq] != NO_PIECE) state_add(st, pos->board[sq], sq);

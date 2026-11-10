@@ -35,7 +35,9 @@
     X(lmr_min_depth, 3, 2, 6)             \
     X(se_tt_depth, 3, 1, 6)               \
     X(corr_weight_max, 15, 4, 40)         \
-    X(corr_limit, 64, 16, 160)  /* cp */
+    X(corr_limit, 64, 16, 160)  /* cp */ \
+    X(corr_pawn_w, 128, 0, 256)  /* / 128 */ \
+    X(corr_nonpawn_w, 96, 0, 256)  /* / 128 */
 
 #ifdef SPSA
 #define TUNE_DECLARE(name, def, lo, hi) extern int name;

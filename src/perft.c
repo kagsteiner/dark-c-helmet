@@ -13,6 +13,8 @@ static int verify_state(const Position* pos) {
     pos_to_fen(pos, fen, sizeof(fen));
     pos_set_fen(&copy, fen);
     return copy.st->key == pos->st->key && copy.st->pawn_key == pos->st->pawn_key &&
+           copy.st->nonpawn_key[WHITE] == pos->st->nonpawn_key[WHITE] &&
+           copy.st->nonpawn_key[BLACK] == pos->st->nonpawn_key[BLACK] &&
            copy.st->psq_mg == pos->st->psq_mg && copy.st->psq_eg == pos->st->psq_eg &&
            copy.st->phase == pos->st->phase;
 }
