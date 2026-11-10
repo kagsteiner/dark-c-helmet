@@ -479,6 +479,7 @@ static int qsearch(SearchThread* t, int alpha, int beta, int ply) {
         ss->piece = moved_piece(pos, m);
         ss->cont = &t->cont_history[ss->piece][move_to(m)];
         pos_make_move(pos, m);
+        tt_prefetch(pos->st->key);
         nnue_prefetch(pos);
         int score = -qsearch(t, -beta, -alpha, ply + 1);
         pos_unmake_move(pos, m);

@@ -1,14 +1,41 @@
+#if !defined(_MSC_VER) && !defined(_POSIX_C_SOURCE)
+#define _POSIX_C_SOURCE 200112L  // posix_memalign under -std=c11
+#endif
 #include "tt.h"
 
+#include <assert.h>
+#include <stdint.h>
 #include <stdlib.h>
+#if defined(_MSC_VER)
+#include <malloc.h>
+#endif
 #include <string.h>
 
 static TTBucket* table = NULL;
 static size_t bucket_count = 0;
 static uint8_t generation = 0;  // advances by 4 so the low 2 bits stay free for the bound
 
+// A bucket is one 64-byte cache line, so the table must start on a line boundary
+// (calloc only guarantees 16 bytes on Linux and Windows).
+static void* aligned_alloc64(size_t size) {
+#if defined(_MSC_VER)
+    return _aligned_malloc(size, 64);
+#else
+    void* p = NULL;
+    return posix_memalign(&p, 64, size) == 0 ? p : NULL;
+#endif
+}
+
+static void aligned_free64(void* p) {
+#if defined(_MSC_VER)
+    _aligned_free(p);
+#else
+    free(p);
+#endif
+}
+
 void tt_free(void) {
-    free(table);
+    aligned_free64(table);
     table = NULL;
     bucket_count = 0;
 }
@@ -17,8 +44,10 @@ void tt_resize(size_t mb) {
     if (mb < 1) mb = 1;
     tt_free();
     bucket_count = mb * 1024 * 1024 / sizeof(TTBucket);
-    table = (TTBucket*)calloc(bucket_count, sizeof(TTBucket));
-    if (!table) bucket_count = 0;
+    table = (TTBucket*)aligned_alloc64(bucket_count * sizeof(TTBucket));
+    if (table) memset(table, 0, bucket_count * sizeof(TTBucket));
+    else bucket_count = 0;
+    assert(((uintptr_t)table % 64) == 0);
 }
 
 void tt_clear(void) {

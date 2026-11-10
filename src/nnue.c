@@ -343,6 +343,7 @@ void nnue_prefetch(const Position* pos) {
     if (!g_use_nnue) return;
     const DirtyPieces* d = &pos->st->dirty;
     for (int p = 0; p < 2; ++p) {
+        if (king_view_changed(pos->st, p)) continue;  // rebuilt via the cache, rows not read
         KingView kv = king_view(p, king_square(pos, p));
         for (int i = 0; i < d->count; ++i) {
             if (d->to[i] != NO_SQ) {

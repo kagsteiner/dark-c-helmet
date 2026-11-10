@@ -126,12 +126,10 @@ static inline void state_remove(State* st, int pc, int sq) {
     if (piece_type(pc) == PAWN) st->pawn_key ^= ZOBRIST_PIECE[pc][sq];
 }
 
-static void set_check_info(Position* pos) {
+static void set_pinned(Position* pos) {
     State* st = pos->st;
     int us = pos->side, them = us ^ 1;
     int ksq = king_square(pos, us);
-    st->checkers = attackers_to(pos, ksq, pos->occupied) & pos->by_color[them];
-
     Bitboard snipers = (rook_attacks(ksq, 0) & (pieces_of(pos, them, ROOK) | pieces_of(pos, them, QUEEN))) |
                        (bishop_attacks(ksq, 0) & (pieces_of(pos, them, BISHOP) | pieces_of(pos, them, QUEEN)));
     st->pinned = 0;
@@ -140,6 +138,12 @@ static void set_check_info(Position* pos) {
         Bitboard between = BETWEEN_BB[ksq][s] & pos->occupied;
         if (between && !more_than_one(between) && (between & pos->by_color[us])) st->pinned |= between;
     }
+}
+
+static void set_check_info(Position* pos) {
+    int us = pos->side;
+    pos->st->checkers = attackers_to(pos, king_square(pos, us), pos->occupied) & pos->by_color[us ^ 1];
+    set_pinned(pos);
 }
 
 // ---------------------------------------------------------------------------
@@ -427,7 +431,10 @@ void pos_make_null(Position* pos) {
     pos->side ^= 1;
     pos->game_ply++;
     pos->acc[pos->game_ply].computed[WHITE] = pos->acc[pos->game_ply].computed[BLACK] = 0;
-    set_check_info(pos);
+    // Null moves are only made when not in check, so the new side to move is not in check
+    // either; only its pinned pieces need computing.
+    st->checkers = 0;
+    set_pinned(pos);
 }
 
 void pos_unmake_null(Position* pos) {
