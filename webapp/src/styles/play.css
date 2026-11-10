@@ -183,6 +183,10 @@
   margin-bottom: var(--space-1);
 }
 
+.play-balance {
+  margin: 0 0 var(--space-1);
+}
+
 .play-help {
   color: var(--accent);
   font-weight: var(--weight-strong);

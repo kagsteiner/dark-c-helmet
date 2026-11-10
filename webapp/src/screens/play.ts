@@ -4,6 +4,7 @@ import { describeTimeControl, formatClock, type Side } from "../play/clocks.ts";
 import { opponentName, type PlayController, type StarLoss } from "../play/controller.ts";
 import { isBookmarked, setBookmarkNote, startName, toggleBookmark } from "../play/bookmarks.ts";
 import { chooseNewGame } from "../play/new-game.ts";
+import { balanceOf, formatPawns, STANDARD_START_CP, startScore } from "../play/start-balance.ts";
 import { Board } from "../ui/board.ts";
 import { openBoardThemePicker, openPickerIfRequested } from "../ui/board-theme-picker.ts";
 import { icons } from "../ui/icons.ts";
@@ -33,6 +34,7 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
           <div class="play-player play-bottom"><span class="player-name"></span><span class="clock numeric"></span></div>
           <div class="play-moves">
             <p class="play-meta small muted"></p>
+            <p class="play-balance small" hidden></p>
             <ol class="move-list numeric" aria-label="Moves"></ol>
             <p class="play-status small muted" aria-live="polite"></p>
             <p class="play-help small" aria-live="polite"></p>
@@ -96,6 +98,7 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
         renderMoves();
         renderClocks();
         renderBookmark();
+        renderBalance();
 
         $(".play-status").textContent =
           engineStatus() ??
@@ -126,6 +129,25 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
         star.classList.toggle("silver", silver);
         const tip = $<HTMLElement>(".star-tip");
         if (!tip.hidden) tip.textContent = STAR_TEXT[c.star ?? "lit"];
+      };
+
+      // Chess 960² only: one sentence on how balanced the start is, compared with normal chess.
+      let balanceFor = "";
+      const renderBalance = () => {
+        const { position960: w, black960: b } = controller.setup;
+        const key = w !== undefined && b !== undefined ? `${w}-${b}` : "";
+        if (key === balanceFor) return;
+        balanceFor = key;
+        const line = $<HTMLElement>(".play-balance");
+        line.hidden = true;
+        line.title = "";
+        if (!key) return;
+        startScore(w!, b!).then((cp) => {
+          if (balanceFor !== key || cp === null) return;
+          line.textContent = balanceOf(cp).sentence;
+          line.title = `Engine score of this start: ${formatPawns(cp)} (normal chess: ${formatPawns(STANDARD_START_CP)})`;
+          line.hidden = false;
+        });
       };
 
       // The bookmark button: Chess960 and Chess 960² games from a numbered start.
