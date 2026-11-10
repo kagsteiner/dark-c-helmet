@@ -131,11 +131,13 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
         if (!tip.hidden) tip.textContent = STAR_TEXT[c.star ?? "lit"];
       };
 
-      // Chess 960² only: one sentence on how balanced the start is, compared with normal chess.
+      // Chess960 and Chess 960²: one sentence on how balanced the start is, compared with normal
+      // chess. A Chess960 start is the 960² pair with the same number on both sides.
       let balanceFor = "";
       const renderBalance = () => {
-        const { position960: w, black960: b } = controller.setup;
-        const key = w !== undefined && b !== undefined ? `${w}-${b}` : "";
+        const { chess960, position960: w } = controller.setup;
+        const b = controller.setup.black960 ?? w;
+        const key = chess960 && w !== undefined && b !== undefined ? `${w}-${b}` : "";
         if (key === balanceFor) return;
         balanceFor = key;
         const line = $<HTMLElement>(".play-balance");

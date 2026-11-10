@@ -1,8 +1,8 @@
-// How balanced a Chess 960² start is, in one plain sentence. The engine's score of every pair
-// (centipawns for White, one signed byte per pair at White's number × 960 + Black's, clamped to
-// ±127) is in public/960sq/scores.i8, made by tools/eval-960sq.ts --export-scores. The app asks
-// for the one byte it needs (an HTTP range request); a server without ranges sends the whole
-// file, which is then kept.
+// How balanced a Chess960 or Chess 960² start is, in one plain sentence (Chess960 start X is the
+// 960² pair X/X). The engine's score of every pair (centipawns for White, one signed byte per
+// pair at White's number × 960 + Black's, clamped to ±127) is in public/960sq/scores.i8, made
+// by tools/eval-960sq.ts --export-scores. The app asks for the one byte it needs (an HTTP range
+// request); a server without ranges sends the whole file, which is then kept.
 //
 // The yardstick is the normal chess start, not 0.00: players know it as fair, and the engine
 // gives it +0.15 (pair 518 × 518 in the same file, same search). So a 960² start at +0.15 reads
