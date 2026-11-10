@@ -182,7 +182,9 @@
             put it into the "above 3000 ELO" range.
           </p>
 
-          <h3>What is inside</h3>
+          <h3>Technical details</h3>
+
+          How the engine works/was built:
           <ul>
             <li>A neural network (NNUE), trained from scratch on about 1.1 billion positions from the engine's own games.</li>
             <li>A modern alpha-beta search with up to 16 threads in the browser.</li>
@@ -211,15 +213,36 @@
           <h3>Time to stare at the position</h3>
           <p>This is the one thing I really wanted. I find it outright stupid that there are no special time controls for Chess960. You need some additional, initial thinking time. So here, you get extra seconds for your first move, 30 by default, whichever colour you play. They run before your clock starts. Make the first move and unused ones are gone. For me this makes a huge difference.</p>
 
+          <h3>A nice progress view</h3>
+          <p>A square of triangles shows you which of the 960 variations you have won, as white, as black, against 1300, 1600, full engine. And maybe something special happens if you beat the full engine in all 960 variations? Who knows?</p>
+          <p>Hint: You only need a "silver star" to gain an entry. No undo, no hint, but if you give the engine only very little time, and take all the time you want, a victory will count. Still, the engine at 1 minute per game is still tough to beat.</p>
+
+          <h3>An opening book for all 960</h3>
+          <p>The app's little opening book doesn't only include openings for standard chess, but also thousands of Chess 960. Of course, thousands of moves for 960 different positions is only a few moves per position. It still gives the engine a head start - often the first two moves decide on the structure of your setup.</p>
+
+          <h3>Bookmarks</h3>
+          <p>When you enjoyed a particular Chess 960 match, and want to play it again, just bookmark it, and use that bookmark the next time you start a new game.</p>
+
+
+          <h3>Chess 960²</h3>
+          <p>For those who want even more variation, the app supports Chess 960² - a variation also known as "Fischer Double Random Chess". As this variation can lead to severely unfair starting positions, the engine has pre-computed the winning chances of every variation (yes, the whole million), and will serve only variations with an evaluation in the range of -0.5 to +0.5.</p>
+
+          <p>You can bookmark Chess 960² starting positions like in normal Chess960. As Chess 960² is so random, the opening book is disabled.</p>
+      
+          <h2>Other features</h2>
+
+
+          <h3>The star</h3>
+          <p>All the chess apps I know have tournament modes, resigning, offering draw. I don't really see the point of doing this when playing against an engine. So Dark C. Helmet has the star. At the beginning of a game, the star lights up (bottom screen area). As soon as you hit undo or look for a hint, the star goes out. If you lose on time, the golden star turns silver. Only "starry" games count for progress of 960 games. Some day I'll add star statistics that show you how many games you finished - maybe even won - with the star being lit.</p>
+
           <h3>Weaker opponents</h3>
           <p>Next to the engine you can play a 1300 and a 1600 Elo player. They learned from real Lichess games of players around 1300 or 1600 range, and I calibrated them against how much real players lose per move. Both use their full thinking time. Lichess Chess960 ratings run lower, so 1300 and 1600 here mean the standard chess scale. I am still not 100% convinced by their playing style, but I find it better than what most engines give you - you know the "plays perfect for 20 moves then blunders a rook" kind of "1600 Elo".</p>
           <p>BTW if you really want a great poor opponent for challenging games, try <a href="https://www.maiachess.com">Maia Chess</a>. Awesome how much
             it feels like playing a real human. Have work to do to get there.
           </p>
 
-          <h3>An opening book for all 960</h3>
-          <p>My Mac searched each of these positions for 100 million nodes, and every start now has book moves. As of November 2026 that means White's first moves, Black's replies and about 42% of White's second moves. Yes, that is shallow. 960 starts multiply everything.</p>
-          <p>The app asks at startup whether to merge this book into your own copy. Your copy also learns: the engine's searches on your device go into it. The engine plays a book move at once if its entry has at least half the nodes it had planned to search, which saves time for later moves.</p>
+          <h3>Optional cross-device sync</h3>
+          <p>You want your Chess960 progress to be your progress, synced between all devices. Likewise, you want to have the same bookmarks on all devices. The app supports this with a simple and anonymous device sync: on your first device you create a code, which are five words, separated by a "-" symbol. The server will then create a storage that can be accessed by every device with that code. On your other devices, use "I have a code", enter the same code, and from that moment on, the devices will sync your 960 progress and your bookmarks across all your devices. You don't need to set this up. It is entirely up to you.</p>
 
           <h3>Explore</h3>
           <p>Leave the Explore page open in a browser tab, and it searches opening positions the book does not know yet, one after the other. You can look at the list of everything it analyzed, line by line from move 1. Pure curiosity on my part, I wanted to see it.</p>
@@ -228,9 +251,6 @@
           <p>Okay, that was probably not the most brilliant idea. I found going for an open-source opening book boring, loved the idea of an opening book
             that learns, keeps improving, a bit like AlphaGo Zero for Chess openings. The result is, well, underwhelming. Don't expect an opponent that floods you with perfect opening theory. Right now my book contains 20,000 moves, all searched by the engine. And by now it even knows the first moves of Ruy Lopez or Italian... And sometimes makes a few book moves in 960 positions. But hey, it is exploring more as I write this. Someday it will be a real opening library, with 100% engine knowledge.
           </p>
-
-          <h3>The star</h3>
-          <p>All the chess apps I know have tournament modes, resigning, offering draw. I don't really see the point of doing this when playing against an engine. So Dark C. Helmet has the star. At the beginning of a game, the star lights up (bottom screen area). As soon as you lose on time, undo, look for a hint, the star goes out. Some day I'll add star statistics that show you how many games you finished - maybe even won - with the star being lit.</p>
 
           <h2>What else?</h2>
 
