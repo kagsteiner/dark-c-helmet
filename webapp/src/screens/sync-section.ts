@@ -45,9 +45,9 @@ export function mountSyncSection(root: HTMLElement): () => void {
     const s = syncState();
     if (!s.code && (mode.name === "main" || mode.name === "delete")) {
       root.innerHTML = `
-        <p class="small muted">Keep your results, your 960 progress and your bookmarks the same on all your devices.
-          A code of five words links them, and you need no account. The server stores your results and bookmarks
-          under that code. Games in progress and settings stay on each device.</p>
+        <p class="small muted">Keep your results, your 960 progress, your bookmarks and your board colours the same on
+          all your devices. A code of five words links them, and you need no account. The server stores your results,
+          bookmarks and board colours under that code. Games in progress and the other settings stay on each device.</p>
         ${s.deletedElsewhere ? `<p class="small">Sync stopped on this device because the data for its code was deleted from the server.</p>` : ""}
         <div class="book-actions">${button("create", "Create a code")}${button("enter", "I have a code")}</div>
         ${statusLine}`;

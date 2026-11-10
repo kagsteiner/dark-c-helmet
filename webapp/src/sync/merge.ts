@@ -10,6 +10,16 @@ export interface SyncData {
   bookmarks: Bookmark[];
   /** The Fischer easter egg has been shown. */
   egg: boolean;
+  /** Board colours (settings boardTheme, boardColor); the newest choice wins. Missing from
+   *  older app versions and from players who never chose. */
+  board?: BoardChoice;
+}
+
+export interface BoardChoice {
+  theme: string;
+  color: string;
+  /** When it was chosen (ms since 1970). */
+  changed: number;
 }
 
 export const MAX_RESULTS = 4000;
@@ -37,7 +47,10 @@ export function mergeData(a: SyncData, b: SyncData): SyncData {
     const other = bookmarks.get(key(m));
     if (!other || bookmarkChanged(m) > bookmarkChanged(other)) bookmarks.set(key(m), m);
   }
-  return { results: [...results.values()], bookmarks: [...bookmarks.values()], egg: a.egg || b.egg };
+  const merged: SyncData = { results: [...results.values()], bookmarks: [...bookmarks.values()], egg: a.egg || b.egg };
+  const board = !a.board ? b.board : !b.board ? a.board : b.board.changed > a.board.changed ? b.board : a.board;
+  if (board) merged.board = board;
+  return merged;
 }
 
 export class InvalidData extends Error {}
@@ -110,7 +123,18 @@ export function cleanData(v: unknown): SyncData {
   need(Array.isArray(d.results) && d.results.length <= MAX_RESULTS);
   need(Array.isArray(d.bookmarks) && d.bookmarks.length <= MAX_BOOKMARKS);
   need(typeof d.egg === "boolean");
-  return { results: (d.results as unknown[]).map(cleanResult), bookmarks: (d.bookmarks as unknown[]).map(cleanBookmark), egg: d.egg as boolean };
+  const clean: SyncData = { results: (d.results as unknown[]).map(cleanResult), bookmarks: (d.bookmarks as unknown[]).map(cleanBookmark), egg: d.egg as boolean };
+  if (d.board !== undefined) clean.board = cleanBoard(d.board);
+  return clean;
+}
+
+function cleanBoard(v: unknown): BoardChoice {
+  need(typeof v === "object" && v !== null);
+  const b = v as Record<string, unknown>;
+  need(typeof b.theme === "string" && /^[a-z]{1,20}$/.test(b.theme));
+  need(typeof b.color === "string" && /^#[0-9a-f]{6}$/i.test(b.color));
+  need(isTime(b.changed));
+  return { theme: b.theme as string, color: b.color as string, changed: b.changed as number };
 }
 
 export const countLiveBookmarks = (data: Pick<SyncData, "bookmarks">): number => data.bookmarks.filter((m) => !m.deleted).length;

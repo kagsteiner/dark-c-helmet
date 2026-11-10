@@ -56,6 +56,22 @@ test("merge: the newest bookmark change wins, deletions included, in either orde
   }
 });
 
+test("merge: the newest board colours win, and a device without them keeps them", () => {
+  const old = { theme: "ice", color: "#5b8fb0", changed: 5 };
+  const fresh = { theme: "custom", color: "#c0392b", changed: 9 };
+  for (const m of [mergeData(data({ board: old }), data({ board: fresh })), mergeData(data({ board: fresh }), data({ board: old }))]) {
+    assert.deepEqual(m.board, fresh);
+  }
+  assert.deepEqual(mergeData(data({ board: old }), data()).board, old); // an older app version
+  assert.equal("board" in mergeData(data(), data()), false);
+});
+
+test("cleanData checks the board colours", () => {
+  assert.deepEqual(cleanData(data({ board: { theme: "ice", color: "#5B8FB0", changed: 1 } })).board, { theme: "ice", color: "#5B8FB0", changed: 1 });
+  assert.throws(() => cleanData(data({ board: { theme: "ice", color: "red", changed: 1 } })));
+  assert.throws(() => cleanData(data({ board: { theme: "<b>", color: "#000000", changed: 1 } })));
+});
+
 test("cleanData keeps only known fields and rejects bad ones", () => {
   const clean = cleanData(data({ results: [{ ...rec("a"), moves: "e4 e5" } as GameRecord] }));
   assert.equal("moves" in clean.results[0], false);

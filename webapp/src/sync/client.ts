@@ -2,6 +2,7 @@
 // server merges; this module sends what the device has and stores what comes back.
 import { loadBookmarkEntries, storeBookmarkEntries } from "../play/bookmarks.ts";
 import { loadRecords, storeRecords } from "../play/history.ts";
+import { settings, updateSettings } from "../settings.ts";
 import { load, save } from "../storage.ts";
 import { EGG_KEY, onLocalChange } from "./changes.ts";
 import { generateCode } from "./code.ts";
@@ -64,7 +65,10 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 }
 
 async function readLocal(): Promise<SyncData> {
-  return { results: await loadRecords(), bookmarks: await loadBookmarkEntries(), egg: !!(await load<boolean>(EGG_KEY)) };
+  const data: SyncData = { results: await loadRecords(), bookmarks: await loadBookmarkEntries(), egg: !!(await load<boolean>(EGG_KEY)) };
+  const s = settings();
+  if (s.boardChanged) data.board = { theme: s.boardTheme, color: s.boardColor, changed: s.boardChanged };
+  return data;
 }
 
 export async function localCounts(): Promise<Counts> {
@@ -82,6 +86,8 @@ async function exchange(code: string, create: boolean): Promise<void> {
   await storeRecords(merged.results.filter((r) => r !== before.get(r.id)));
   await storeBookmarkEntries(merged.bookmarks);
   if (merged.egg && !local.egg) await save(EGG_KEY, true);
+  const b = merged.board;
+  if (b && b.changed > (local.board?.changed ?? 0)) updateSettings({ boardTheme: b.theme, boardColor: b.color, boardChanged: b.changed });
 }
 
 /** Turns sync on with a new code. */

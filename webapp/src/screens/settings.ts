@@ -13,7 +13,9 @@ import {
 import { defaultEngineOptions } from "../engine/engine.ts";
 import { threadsAvailable } from "../engine/transport.ts";
 import type { PlayController } from "../play/controller.ts";
+import { findTheme } from "../board-themes.ts";
 import { settings, updateSettings, type Theme } from "../settings.ts";
+import { pickBoardColorsOnPlay } from "../ui/board-theme-picker.ts";
 import type { Screen } from "../ui/shell.ts";
 import { mountSyncSection } from "./sync-section.ts";
 import "../styles/settings.css";
@@ -64,6 +66,10 @@ export function settingsScreen(controller: PlayController): Screen {
               .map((t) => `<label><input type="radio" name="theme" value="${t}"${t === s.theme ? " checked" : ""}>${t[0].toUpperCase() + t.slice(1)}</label>`)
               .join("")}
           </div>
+          <div class="board-colors-row">
+            <span>Board colours: <strong>${findTheme(s.boardTheme, s.boardColor).name}</strong></span>
+            <button class="btn-secondary" type="button" data-action="board-colors">Change</button>
+          </div>
 
           <p class="settings-status small muted" aria-live="polite"></p>
 
@@ -108,6 +114,9 @@ export function settingsScreen(controller: PlayController): Screen {
         $(".settings-status").textContent = "Saved.";
         renderAbout();
       };
+
+      // The picker opens over the Play screen, so the colours are seen on the real board.
+      $(`[data-action="board-colors"]`).addEventListener("click", pickBoardColorsOnPlay);
 
       section.addEventListener("change", (ev) => {
         const t = ev.target as HTMLInputElement;

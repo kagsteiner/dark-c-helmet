@@ -5,6 +5,7 @@ import { opponentName, type PlayController, type StarLoss } from "../play/contro
 import { isBookmarked, setBookmarkNote, startName, toggleBookmark } from "../play/bookmarks.ts";
 import { chooseNewGame } from "../play/new-game.ts";
 import { Board } from "../ui/board.ts";
+import { openBoardThemePicker, openPickerIfRequested } from "../ui/board-theme-picker.ts";
 import { icons } from "../ui/icons.ts";
 import { MoveInput } from "../ui/move-input.ts";
 import { settings } from "../settings.ts";
@@ -42,6 +43,7 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
             <button class="btn-icon" data-action="evaluation" aria-label="Evaluation" title="Evaluation">${icons.evaluation}</button>
             <button class="btn-icon star" data-action="star" aria-label="Star" title="Star"></button>
             <button class="btn-icon" data-action="bookmark" aria-label="Bookmark this start position" title="Bookmark this start position" aria-pressed="false" hidden></button>
+            <button class="btn-icon" data-action="colors" aria-label="Board colours" title="Board colours">${icons.palette}</button>
             <span class="spacer"></span>
             <button class="btn-secondary" data-action="new">New game</button>
             <input class="bookmark-note" type="text" maxlength="100" placeholder="Add a note to this bookmark" aria-label="Note for this bookmark" hidden>
@@ -229,6 +231,7 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
         if (action === "undo") controller.undo();
         else if (action === "hint") controller.requestHint();
         else if (action === "evaluation") controller.requestEvaluation();
+        else if (action === "colors") openBoardThemePicker();
         else if (action === "bookmark") {
           const start = startOf();
           if (start) {
@@ -258,6 +261,7 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
         renderClocks();
       }, 100);
       controller.activate();
+      openPickerIfRequested();
       render();
 
       return () => {

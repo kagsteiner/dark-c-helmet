@@ -398,9 +398,9 @@ default 70%, because Chess960 comes first for this app).
 Keeps results, the 960 progress and bookmarks the same on a player's devices. Off until the player turns it on in Settings. There are no accounts.
 
 - **Code:** five words from the BIP-39 English list (2,048 words, 55 bits), created on the first device. Typing accepts any separators and the first four letters of a word, and offers completions. Linking always shows what will be merged first. Each browser and home-screen app has its own storage and is linked on its own, which is why there is no QR code or link: a scan would link whichever copy the phone happens to open.
-- **What syncs:** game records (never moves), bookmarks and the flag that the Fischer egg has been shown, so it plays once per code. Games in progress and settings stay on each device.
+- **What syncs:** game records (never moves), bookmarks, the board colours and the flag that the Fischer egg has been shown, so it plays once per code. Games in progress and the other settings stay on each device.
 - **When:** at app start, 2 s after a finished game or a bookmark change, and when the app comes back to the foreground after a minute. Failures wait for the next chance.
-- **Merging** (`src/sync/merge.ts`, shared with the server): the union of game records by id, keeping the finished or longest version; for bookmarks the newest change wins, and a removed bookmark stays as a marker.
+- **Merging** (`src/sync/merge.ts`, shared with the server): the union of game records by id, keeping the finished or longest version; for bookmarks the newest change wins, and a removed bookmark stays as a marker. Board colours: the newest choice wins; app versions without the field leave it alone.
 - **Server** (`server/sync.ts`, `POST /chess/api/sync`, `/sync/peek`, `/sync/delete`): one JSON file per code in `~/chess-data/sync/`, named by the SHA-256 of the code. Unencrypted, with exactly the fields `cleanData` keeps. At most 4,000 results and 1,000 bookmarks per code and 5,000 codes. The app server sees no client addresses, so its limits are global: 30 lookups of unknown codes per minute, 30 new codes per hour. nginx keeps its usual access log.
 - **Deleting:** removes the file. Each device keeps its copy, and other devices turn sync off at their next sync (a sync never recreates a code unless it is creating one).
 
@@ -423,6 +423,12 @@ The rules every screen follows. Exact values live as CSS variables in one file
 - **Colours:** background, text, muted text, hairline, accent, danger (red clock), and the
   board set (light square, dark square, last move, selection, legal-move dot, premove, arrow).
   Light and dark theme follow the system.
+- **Board colours** (`src/board-themes.ts`): colours only, no textures, the pieces never change.
+  Nine themes plus "Your own", which derives both squares from one picked colour. A theme is
+  two square colours; dark mode, coordinates and highlights follow from them. Picked in a panel
+  docked at the bottom with no scrim (`src/ui/board-theme-picker.ts`), so the real board
+  recolours as you swipe, tap a swatch or press the arrow keys. Opened from the palette button
+  on the Play screen, or from Settings, which switches to Play first.
 - **Pieces:** cburnett SVG set (CC BY-SA 3.0; attribution in the About text).
 - **Motion:** pieces slide 150 ms; nothing else animates.
 - **English only. No sounds.**

@@ -19,5 +19,6 @@ export const icons = {
   bookmark: svg('<path d="M6 3h12v18l-6-4.5L6 21z"/>'),
   bookmarked: `<svg viewBox="0 0 24 24" aria-hidden="true"><path class="bookmark-shape" d="M6 3h12v18l-6-4.5L6 21z"/></svg>`,
   starLit:`<svg viewBox="0 0 24 24" aria-hidden="true"><path class="star-shape" d="M12 2.8l2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17.2l-5.7 3.1 1.2-6.4-4.7-4.4 6.4-.8z"/></svg>`,
+  palette: svg('<path d="M12 3a9 9 0 1 0 0 18c.9 0 1.5-.7 1.5-1.5 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.8.7-1.5 1.5-1.5H16a5 5 0 0 0 5-5c0-4.3-4-7.8-9-7.8z"/><circle cx="7.5" cy="11" r="1.2"/><circle cx="10.5" cy="7.2" r="1.2"/><circle cx="15.2" cy="7.8" r="1.2"/>'),
   starOut: svg('<path d="M12 2.8l2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17.2l-5.7 3.1 1.2-6.4-4.7-4.4 6.4-.8z"/>'),
 };
