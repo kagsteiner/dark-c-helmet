@@ -76,9 +76,11 @@ typedef struct SearchThread {
     PieceToHistory cont_history[12][64];  // [previous piece][previous to]
     int16_t capture_history[12][64][6];   // [moving piece][to][captured piece type]
     int correction[2][CORR_SIZE];         // [side to move][pawn key]
+    // Continuation history used after null moves and at the root (ply 0 and 1): acts as an
+    // extra piece-to history for those nodes. Per thread, cleared with the other tables.
+    PieceToHistory cont_sentinel;
 } SearchThread;
 
-static PieceToHistory cont_sentinel;  // used after null moves and at the root (never updated)
 static int lmr_table[64][64];
 
 // Static rather than heap: see the note on g_pos in uci.c. Untouched threads cost no memory.
@@ -104,6 +106,7 @@ void search_clear(void) {
         memset(t->cont_history, 0, sizeof(t->cont_history));
         memset(t->capture_history, 0, sizeof(t->capture_history));
         memset(t->correction, 0, sizeof(t->correction));
+        memset(t->cont_sentinel, 0, sizeof(t->cont_sentinel));
     }
 }
 
@@ -573,7 +576,7 @@ static int search(SearchThread* t, int alpha, int beta, int depth, int ply) {
             int r = nmp_base + depth / nmp_depth_div + ((eval - beta) / nmp_eval_div < nmp_eval_cap ? (eval - beta) / nmp_eval_div : nmp_eval_cap);
             ss->move = MOVE_NONE;
             ss->piece = NO_PIECE;
-            ss->cont = &cont_sentinel;
+            ss->cont = &t->cont_sentinel;
             pos_make_null(pos);
             int score = -search(t, -beta, -beta + 1, depth - r, ply + 1);
             pos_unmake_null(pos);
@@ -871,7 +874,7 @@ SearchResult search_run(const Position* pos, const SearchLimits* limits, int sil
         memset(t->stack, 0, sizeof(t->stack));
         for (int j = 0; j < MAX_PLY + 8; ++j) {
             t->stack[j].static_eval = VALUE_NONE;
-            t->stack[j].cont = &cont_sentinel;
+            t->stack[j].cont = &t->cont_sentinel;
         }
         t->id = i;
         t->nodes = 0;
