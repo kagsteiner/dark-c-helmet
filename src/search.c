@@ -172,10 +172,11 @@ enum {
     SCORE_BAD_NOISY = -(1 << 28),
 };
 
-// Combined quiet-move history: butterfly + 1-ply and 2-ply continuation history.
+// Combined quiet-move history: butterfly + 1-, 2- and 4-ply continuation history.
 static inline int quiet_history(SearchThread* t, const StackEntry* ss, int side, int piece, Move m) {
     int to = move_to(m);
-    return t->history[side][move_from(m)][to] + (*ss[-1].cont)[piece][to] + (*ss[-2].cont)[piece][to];
+    return t->history[side][move_from(m)][to] + (*ss[-1].cont)[piece][to] + (*ss[-2].cont)[piece][to] +
+           (*ss[-4].cont)[piece][to];
 }
 
 // Type of the captured piece, or -1 for non-captures.
@@ -379,6 +380,7 @@ static void update_quiet_heuristics(SearchThread* t, int ply, int depth, Move be
         history_update(&t->history[side][move_from(m)][to], b);
         history_update(&(*ss[-1].cont)[pc][to], b);
         history_update(&(*ss[-2].cont)[pc][to], b);
+        history_update(&(*ss[-4].cont)[pc][to], b);
     }
 }
 
