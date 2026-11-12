@@ -53,10 +53,14 @@ for branch in "$@"; do
 
   frc=""
   if [[ "$FRC_GAMES" != "0" ]]; then
-    VARIANT=fischerandom BOOK=tools/books/frc960.epd GAMES="$FRC_GAMES" TC=8+0.08 CONCURRENCY=16 \
+    VARIANT=fischerandom BOOK="$ROOT/tools/books/frc960.epd" GAMES="$FRC_GAMES" TC=8+0.08 CONCURRENCY=16 \
       tools/match.sh bin/queue-cand bin/queue-base > "data/frc_$name.log" 2>&1
     frc=$(grep -aE 'Elo:' "data/frc_$name.log" | tail -1)
     log "Chess960 ($FRC_GAMES games): $frc"
+    if [[ -z "$frc" ]]; then
+      log "Chess960 check did not run (see data/frc_$name.log), not merged"
+      continue
+    fi
     if awk -v l="$frc" 'BEGIN { split(l, a, " "); exit !(a[2] + a[4] < -10) }'; then
       log "Chess960 clear loss, not merged"
       continue
