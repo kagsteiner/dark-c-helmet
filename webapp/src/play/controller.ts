@@ -65,7 +65,7 @@ export const DEFAULT_SETUP: GameSetup = {
   startFen: START_FEN,
   chess960: false,
   human: "w",
-  tc: { kind: "game", minutes: 10, increment: 5 },
+  tc: { kind: "game", minutes: 5, increment: 0 },
 };
 
 const DRAW_TEXT: Partial<Record<GameState, string>> = {

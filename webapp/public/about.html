@@ -135,7 +135,7 @@
       <header>
         <img src="./icons/darkhelmet.svg" alt="" />
         <span>Dark C. Helmet</span>
-        <a class="button" href="./">Play</a>
+        <a class="button" href="./play.html">Play</a>
       </header>
 
       <main>
@@ -151,7 +151,7 @@
               <p></p>Two things bothered me: few engines really take it seriously, and losing every single game to a full-strength engine gets old pretty quickly.</p>
             <p>So now there is this app. The engine runs on your own device, you need no account, and your games stay in your browser.</p>
             <div class="actions">
-              <a class="button" href="./">Play a game</a>
+              <a class="button" href="./play.html">Play a game</a>
               <a class="button secondary" href="#engine">How strong is it?</a>
             </div>
           </div>
@@ -160,7 +160,7 @@
             <figcaption>
               <span id="caption" class="small">One of the 960 start positions.</span>
               <button class="button secondary" id="another" type="button">Another one</button>
-              <a class="button secondary" id="analyze" href="./">Let the engine look at it</a>
+              <a class="button secondary" id="analyze" href="./play.html">Let the engine look at it</a>
             </figcaption>
           </figure>
         </section>
@@ -321,7 +321,7 @@
           <h2>Try it</h2>
           <p>The first start automatically downloads about 5 MB of engine, plus 13 MB if you pick a human-like player. On a desktop it then uses all your cores but one while it thinks, might get a bit noisy. On a phone you can use it to make your hands warm in cold winter evenings, if you wish.</p>
           <div class="actions">
-            <a class="button" href="./">Play a game</a>
+            <a class="button" href="./play.html">Play a game</a>
           </div>
           <p class="small" style="margin-top: 16px">I write about this kind of experiment in <a href="https://agsteiner.neocities.org/Blog/index_en.html">my blog</a>.</p>
         </div>
@@ -374,7 +374,7 @@
           .flatMap((row, y) => row.map((p, x) => `<div${(x + y) % 2 ? ' class="dark"' : ""}>${p ? `<img alt="" src="${PIECES[p]}">` : ""}</div>`))
           .join("");
         document.getElementById("caption").textContent = `Start position ${n} of 960.`;
-        document.getElementById("analyze").href = `./#/analysis?fen=${encodeURIComponent(fen)}&chess960=1`;
+        document.getElementById("analyze").href = `./play.html#/analysis?fen=${encodeURIComponent(fen)}&chess960=1`;
       }
 
       document.getElementById("another").onclick = show;

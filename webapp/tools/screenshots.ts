@@ -178,7 +178,7 @@ function seedScript(): string {
 const SHOTS: Record<string, (page: Page) => Promise<void>> = {
   async progress(page) {
     await page.viewport(1000, 1180);
-    await page.go(URL_BASE + "#/progress");
+    await page.go(URL_BASE + "play.html#/progress");
     await page.waitFor(`/[1-9]\\d* played/.test(document.querySelector(".pg-stats")?.textContent ?? "")`, "the demo results");
     // The progress section with a small margin.
     await page.shoot("progress", `(() => { const r = document.querySelector(".progress").getBoundingClientRect();
@@ -187,7 +187,7 @@ const SHOTS: Record<string, (page: Page) => Promise<void>> = {
 
   async "new-game-bookmarks"(page) {
     await page.viewport(1000, 1500);
-    await page.go(URL_BASE + "#/play");
+    await page.go(URL_BASE + "play.html#/play");
     await page.waitFor(`[...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "New game")`, "the New game button");
     await page.eval(`[...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "New game").click()`);
     await page.waitFor(`document.querySelector(".bm-list .bm-text")`, "the bookmark list");
@@ -227,7 +227,7 @@ try {
 
   // First visit creates the database; then the demo data goes in.
   await page.viewport(1000, 900);
-  await page.go(URL_BASE + "#/progress");
+  await page.go(URL_BASE + "play.html#/progress");
   await page.eval(seedScript());
 
   for (const [name, shot] of Object.entries(SHOTS)) {

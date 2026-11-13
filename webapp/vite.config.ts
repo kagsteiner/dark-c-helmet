@@ -18,7 +18,7 @@ export default defineConfig({
   worker: { format: "es" },
   build: {
     rollupOptions: {
-      input: { main: "index.html", "engine-test": "engine-test.html" },
+      input: { index: "index.html", play: "play.html", "engine-test": "engine-test.html" },
     },
   },
 });

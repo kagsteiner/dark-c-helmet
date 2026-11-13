@@ -3,7 +3,7 @@
   "short_name": "Dark Helmet",
   "description": "Play chess with Dark C. Helmet.",
   "id": "./",
-  "start_url": "./",
+  "start_url": "./play.html",
   "scope": "./",
   "display": "standalone",
   "background_color": "#fafaf8",

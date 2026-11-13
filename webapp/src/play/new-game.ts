@@ -44,7 +44,7 @@ const DEFAULTS: Choices = {
   bookmark: "",
   color: "w",
   openings: "varied",
-  tcKind: "increment",
+  tcKind: "game",
   seconds: 10,
   minutes: 5,
   incMinutes: 10,
