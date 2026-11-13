@@ -117,6 +117,13 @@ button opens them as a list. The bottom of the phone screen belongs to the actio
   rates within ±0.5 pawns (`public/960sq/balanced.bin`, one bit per pair, made by
   `tools/eval-960sq.ts`); without that file any pair can come up. The book is not used, and
   the games are recorded but not shown on the Progress screen.
+- **Balance of a Chess960 or 960² start.** Under the game line the Play screen says in one
+  sentence how balanced the start is (Chess960 start X is the 960² pair X/X), measured against the normal chess start (which the engine rates
+  +0.15), not against 0.00: within ±0.15 of it "about as balanced as the normal chess start",
+  then "a little better for White / Black than the normal chess start" (to ±0.40), beyond that
+  "a clear edge for White" or "Black is better off". The score is in the tooltip. Scores:
+  `public/960sq/scores.i8` (one signed byte per pair, centipawns for White, made by
+  `tools/eval-960sq.ts --export-scores`), read one byte per game with a range request.
 - **Bookmarks.** The bookmark button on the Play screen keeps the start of a Chess960 or
   Chess 960² game (key `bookmarks`) and offers an optional note. The new-game sheet lists them
   with the back ranks as pieces, date and note; the note can be edited and a bookmark deleted

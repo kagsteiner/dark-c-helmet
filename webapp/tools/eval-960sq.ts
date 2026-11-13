@@ -15,6 +15,7 @@
 //   node tools/eval-960sq.ts --data ~/chess-data/960sq --pass shallow --hours 6
 //   node tools/eval-960sq.ts --data ~/chess-data/960sq --pass deep --hours 8
 //   node tools/eval-960sq.ts --data ~/chess-data/960sq --export public/960sq/balanced.bin
+//   node tools/eval-960sq.ts --data ~/chess-data/960sq --export-scores public/960sq/scores.i8
 //   node tools/eval-960sq.ts --data ~/chess-data/960sq --stats
 // Options:
 //   --data DIR       scores (shallow.i16, deep.i16: centipawns for White, one per pair); resumed
@@ -27,6 +28,9 @@
 //   --engine PATH    native engine (default ../bin/darkhelmet)
 //   --hours H        stop by itself after H hours
 //   --export FILE    write the balanced bitmap (deep score where there is one, else shallow)
+//   --export-scores FILE  write every pair's score as one signed byte (centipawns for White,
+//                    clamped to ±127, deep where there is one, else shallow; see
+//                    src/play/start-balance.ts)
 //   --stats          print how the scores are spread
 // Ctrl-C once: finish the running searches, save, stop. Twice: save and stop at once.
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
@@ -136,6 +140,20 @@ if (args.has("export")) {
     `${balanced.toLocaleString("en")} of ${PAIRS.toLocaleString("en")} starts balanced (within ±${opts.limit} cp)` +
       `${missing ? `, ${missing.toLocaleString("en")} not searched yet` : ""}. Written to ${file}.`,
   );
+  process.exit(0);
+}
+
+if (args.has("export-scores")) {
+  const file = args.get("export-scores")!;
+  const bytes = new Int8Array(PAIRS);
+  for (let i = 0; i < PAIRS; i++) {
+    const s = best(i);
+    if (s === NONE) throw new Error("not every pair has a score yet: run --pass shallow first");
+    bytes[i] = Math.max(-127, Math.min(127, s));
+  }
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, bytes);
+  console.log(`Scores of ${PAIRS.toLocaleString("en")} starts written to ${file}. Standard start: ${bytes[518 * 960 + 518]} cp.`);
   process.exit(0);
 }
 
