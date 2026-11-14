@@ -223,9 +223,16 @@ analysis there). Code: `src/grid/` (`grid-app.ts` builds the screen), `src/scree
   move with the player's move mark, the player's position mark, the extra material, the
   engine eval and a comment sign. Red means weakness or danger, green strength.
 - **Panel (selected board):** large board to play moves on; move marks `!! ! !? ?! ? ??`,
-  position marks `++ + +/- 0 -/+ - --` (PGN NAGs 18, 16, 14, 10, 15, 17, 19); comment;
+  position marks `++ + +/- 0 -/+ - -- ∞` (PGN NAGs 18, 16, 14, 10, 15, 17, 19, 13); comment;
   "Needs attention" (orange frame); make main line; delete from here; the position notes in
   words; the threat.
+- **Marks backed up (minimax):** a position whose real children (folded engine lines do not
+  count) all carry a mark, own or backed up, gets the best of them for the side to move;
+  checkmate and stalemate mark themselves. The player's own mark always wins (the panel notes
+  when the lines below say otherwise). "Needs attention" and "unclear" (∞) pass nothing up.
+  Shown as an outlined mark (own marks are solid), a fainter hatched bar with the engine off,
+  and a thick line along the moves the marks choose (all of them on a tie), from the top of
+  each settled part of the tree; refuted lines get none. Only own marks go into the PGN.
 - **Engine:** the app's engine, shared; a switch in the screen's bar turns it on or off. The
   setting is stored with each analysis (opening one restores it); a new analysis always starts
   with the engine off, so it is never used by accident. With the engine off the bar shows the

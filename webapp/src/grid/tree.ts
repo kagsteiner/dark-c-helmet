@@ -17,15 +17,21 @@ export const MOVE_MARK_TITLE: Record<MoveMark, string> = {
 };
 
 /** The player's assessment of a position, from White's point of view. */
-export const POS_MARKS = ["++", "+", "+/-", "0", "-/+", "-", "--"] as const;
+export const POS_MARKS = ["++", "+", "+/-", "0", "-/+", "-", "--", "∞"] as const;
 export type PosMark = (typeof POS_MARKS)[number];
-export const POS_MARK_NAG: Record<PosMark, number> = { "++": 18, "+": 16, "+/-": 14, "0": 10, "-/+": 15, "-": 17, "--": 19 };
+export const POS_MARK_NAG: Record<PosMark, number> = {
+  "++": 18, "+": 16, "+/-": 14, "0": 10, "-/+": 15, "-": 17, "--": 19, "∞": 13,
+};
 export const POS_MARK_TITLE: Record<PosMark, string> = {
   "++": "White is winning", "+": "White is clearly better", "+/-": "White is slightly better", "0": "equal",
-  "-/+": "Black is slightly better", "-": "Black is clearly better", "--": "Black is winning",
+  "-/+": "Black is slightly better", "-": "Black is clearly better", "--": "Black is winning", "∞": "unclear",
 };
 /** Bar length for the player's own assessment (when the engine is off). */
-export const POS_MARK_BAR: Record<PosMark, number> = { "++": 1, "+": 0.66, "+/-": 0.33, "0": 0, "-/+": -0.33, "-": -0.66, "--": -1 };
+export const POS_MARK_BAR: Record<PosMark, number> = {
+  "++": 1, "+": 0.66, "+/-": 0.33, "0": 0, "-/+": -0.33, "-": -0.66, "--": -1, "∞": 0,
+};
+/** Order of the marks for backing them up (higher is better for White); "unclear" has none. */
+const POS_MARK_ORDER: Partial<Record<PosMark, number>> = { "++": 3, "+": 2, "+/-": 1, "0": 0, "-/+": -1, "-": -2, "--": -3 };
 
 /** An engine line added with a suggestion, still folded: only its final position is drawn
  *  (faded, dashed). It keeps the line it was added with and unfolds only on request. */
@@ -193,4 +199,67 @@ export function scoreValue(s: Score | null): number {
   if (!s) return 0;
   if ("mate" in s) return s.mate > 0 ? 100000 - s.mate : -100000 - s.mate;
   return s.cp;
+}
+
+/** A position's assessment as it follows from the player's marks. */
+export interface Assessment {
+  /** What the position is worth: the player's own mark, or else the one that follows. */
+  mark: PosMark | null;
+  /** `mark` is the player's own. */
+  own: boolean;
+  /** What follows from the lines after it (or from the game's end), whatever the own mark
+   *  says; null while some line is open. */
+  derived: PosMark | null;
+  /** The children the derived value comes from: the best for the side to move (all of them
+   *  on a tie). Empty when nothing is derived. */
+  best: GNode[];
+}
+
+/** Backs up the player's position marks by minimax. A position counts as settled with its
+ *  own mark, or when every line after it (folded engine lines aside) is settled: then it is
+ *  worth the best of them for the side to move. Checkmate and stalemate settle themselves. A
+ *  position marked "needs attention", or marked unclear, settles nothing above it. */
+export function assess(root: GNode): Map<GNode, Assessment> {
+  const out = new Map<GNode, Assessment>();
+  /** The value passed up: the mark as a number, or null (open). */
+  const visit = (n: GNode): number | null => {
+    const values = n.children.map(visit); // every child, also below an open one
+    let derived: PosMark | null = null;
+    let best: GNode[] = [];
+    if (n.state === "checkmate") derived = n.fen.split(" ")[1] === "w" ? "--" : "++";
+    else if (n.state !== "ongoing") derived = "0";
+    else if (values.length && values.every((v) => v !== null)) {
+      const white = n.fen.split(" ")[1] === "w";
+      const v = (white ? Math.max : Math.min)(...(values as number[]));
+      best = n.children.filter((_, i) => values[i] === v);
+      derived = markOf(v);
+    }
+    const mark = n.posMark ?? derived;
+    out.set(n, { mark, own: !!n.posMark, derived, best });
+    if (n.attention || !mark) return null;
+    return POS_MARK_ORDER[mark] ?? null;
+  };
+  visit(root);
+  return out;
+}
+
+/** The positions on the line the marks choose, by the move that leads to them: from the top of
+ *  each settled part of the tree (a settled position whose parent is open) along the best
+ *  moves. Lines the marks refute are left out. */
+export function chosenLine(root: GNode, marks: Map<GNode, Assessment>): Set<GNode> {
+  const out = new Set<GNode>();
+  const follow = (n: GNode) => {
+    for (const c of marks.get(n)!.best) {
+      out.add(c);
+      follow(c);
+    }
+  };
+  walk(root, (n) => {
+    if (marks.get(n)!.best.length && !(n.parent && marks.get(n.parent)!.best.length)) follow(n);
+  });
+  return out;
+}
+
+function markOf(v: number): PosMark {
+  return (Object.keys(POS_MARK_ORDER) as PosMark[]).find((m) => POS_MARK_ORDER[m] === v)!;
 }

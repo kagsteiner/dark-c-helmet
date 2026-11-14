@@ -9,7 +9,8 @@ import { pieceUrl } from "../ui/board.ts";
 import { features, type Features, type PieceType } from "./features.ts";
 import { overMarks, squarePos, underMarks } from "./marks.ts";
 import {
-  alternatives, barFraction, layout, MOVE_MARK_TITLE, POS_MARK_BAR, POS_MARK_TITLE, scoreText, type Cell, type GNode,
+  alternatives, assess, barFraction, chosenLine, layout, MOVE_MARK_TITLE, POS_MARK_BAR, POS_MARK_TITLE, scoreText, type Assessment,
+  type Cell, type GNode,
 } from "./tree.ts";
 
 export interface GridCallbacks {
@@ -92,6 +93,11 @@ export class GridView {
 
     const path = new Set<GNode>();
     for (let n: GNode | null = selected; n; n = n.parent) path.add(n);
+    // The player's marks backed up: a thick line along the moves they choose.
+    const marks = assess(root);
+    const chosen = chosenLine(root, marks);
+    const best = (from: GNode, to: GNode) => chosen.has(to) && marks.get(from)!.best.includes(to);
+    const lineClass = (from: GNode, to: GNode) => [path.has(to) ? "on" : "", best(from, to) ? "best" : ""].join(" ").trim();
 
     // Lines first: within a row, and from a branch point down to the row it starts.
     const boardX = (col: number) => col * W + BAR + BAR_GAP;
@@ -114,7 +120,7 @@ export class GridView {
       const nc = next && at.get(next);
       if (nc && nc.row === c.row) {
         const y = c.row * H + S / 2;
-        lines.push(`<line x1="${boardX(c.col) + S}" y1="${y}" x2="${nc.col * W}" y2="${y}" class="${path.has(next) ? "on" : ""}"/>`);
+        lines.push(`<line x1="${boardX(c.col) + S}" y1="${y}" x2="${nc.col * W}" y2="${y}" class="${lineClass(c.node, next)}"/>`);
       }
     }
     for (const r of rows) {
@@ -123,9 +129,8 @@ export class GridView {
       const y1 = r.from.row * H + S + LABEL - 4;
       const y2 = r.row * H + S / 2;
       const first = cells.find((c) => c.row === r.row)!;
-      const on = !first.ghost && path.has(first.node);
       const end = first.ghost ? ghostX(r.startCol) : r.startCol * W;
-      const cls = first.ghost ? "ghost-line" : on ? "on" : "";
+      const cls = first.ghost ? "ghost-line" : lineClass(r.from.node, first.node);
       lines.push(`<path d="M${x} ${y1} V${y2 - 6} Q${x} ${y2} ${x + 6} ${y2} H${end}" class="${cls}"/>`);
     }
     this.svg.setAttribute("width", String(width));
@@ -133,11 +138,11 @@ export class GridView {
     this.svg.innerHTML = lines.join("");
 
     const frag = document.createDocumentFragment();
-    for (const c of cells) frag.append(...(c.ghost ? this.ghostCell(c, gb) : [this.cell(c, selected, path)]));
+    for (const c of cells) frag.append(...(c.ghost ? this.ghostCell(c, gb) : [this.cell(c, selected, path, marks.get(c.node)!)]));
     this.inner.replaceChildren(this.svg, frag);
   }
 
-  private cell(c: Cell, selected: GNode, path: Set<GNode>): HTMLElement {
+  private cell(c: Cell, selected: GNode, path: Set<GNode>, a: Assessment): HTMLElement {
     const n = c.node;
     const { placement, fx, hanging } = this.analysis(n.fen);
     const el = document.createElement("div");
@@ -149,7 +154,7 @@ export class GridView {
     else if (path.has(n)) el.classList.add("on-path");
     if (n.attention) el.classList.add("attention");
 
-    el.append(this.bar(n));
+    el.append(this.bar(n, a));
 
     const board = this.miniBoard(n, placement, fx, hanging);
     board.addEventListener("click", () => this.cb.select(n));
@@ -182,11 +187,13 @@ export class GridView {
       move.append(m);
     }
     label.append(move);
-    if (n.posMark) {
+    if (a.mark) {
       const p = document.createElement("span");
-      p.className = "gc-pos-mark";
-      p.textContent = n.posMark;
-      p.title = "Your assessment: " + POS_MARK_TITLE[n.posMark];
+      p.className = "gc-pos-mark" + (a.own ? "" : " derived");
+      p.textContent = a.mark;
+      p.title = a.own
+        ? "Your assessment: " + POS_MARK_TITLE[a.mark] + (a.derived && a.derived !== a.mark ? `\nYour lines after it say: ${a.derived}` : "")
+        : (n.state !== "ongoing" ? "The game is over: " : "Follows from your marks on the lines after it: ") + POS_MARK_TITLE[a.mark];
       label.append(p);
     }
     el.append(label);
@@ -197,17 +204,18 @@ export class GridView {
 
   /** The engine's evaluation, or the player's assessment (hatched) when the engine is off or
    *  has not looked at this board yet. */
-  private bar(n: GNode): HTMLElement {
+  private bar(n: GNode, a: Assessment): HTMLElement {
     const whiteToMove = n.fen.split(" ")[1] === "w";
     const bar = document.createElement("div");
     bar.className = "gc-bar";
     let f = 0;
     const engineKnows = this.engineOn && (n.analysed > 0 || n.state !== "ongoing");
     if (engineKnows || n.state !== "ongoing") f = barFraction(n.score, n.state, whiteToMove);
-    else if (n.posMark) {
-      f = POS_MARK_BAR[n.posMark];
+    else if (a.mark) {
+      f = POS_MARK_BAR[a.mark];
       bar.classList.add("own");
-      bar.title = "Your assessment: " + POS_MARK_TITLE[n.posMark];
+      if (!a.own) bar.classList.add("derived");
+      bar.title = (a.own ? "Your assessment: " : "Follows from your marks: ") + POS_MARK_TITLE[a.mark];
     } else bar.classList.add("pending");
     if (!bar.classList.contains("pending")) bar.append(whitePart(f, this.flipped));
     return bar;

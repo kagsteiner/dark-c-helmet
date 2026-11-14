@@ -22,7 +22,7 @@ import { overMarks, underMarks } from "./marks.ts";
 import { describeWin, forcingEnd, type LineMove } from "./threat-text.ts";
 import { normalSan, parsePgn, writePgn, type Annotation, type PgnMove } from "./pgn.ts";
 import {
-  MOVE_MARK_NAG, MOVE_MARK_TITLE, MOVE_MARKS, POS_MARK_NAG, POS_MARK_TITLE, POS_MARKS, scoreText, scoreValue, walk,
+  assess, MOVE_MARK_NAG, MOVE_MARK_TITLE, MOVE_MARKS, POS_MARK_NAG, POS_MARK_TITLE, POS_MARKS, scoreText, scoreValue, walk,
   whiteScore, type Ghost, type GNode, type MoveMark, type Origin, type PosMark, type Score,
 } from "./tree.ts";
 import "./grid.css";
@@ -272,6 +272,7 @@ export async function mountGrid(
         <div class="ag-info">
           <div class="ag-line"><span class="ag-move"></span><span class="ag-score numeric"></span></div>
           <div class="ag-status muted"></div>
+          <div class="ag-assess"></div>
           <div class="ag-threat"></div>
         </div>
         <div class="ag-nav">
@@ -321,6 +322,10 @@ export async function mountGrid(
           lines; only your own marks and comments. Unlocking asks first.</p>
         <p>An orange frame marks a position that needs attention; with the engine on it also gets a
             deep search, as do moves you play yourself (✓ when done).</p>
+          <p>Your position marks work backwards: a position whose lines after it all carry a mark
+            gets the best of them for the side to move (an outlined mark), and a thick line follows
+            the moves your marks choose. A mark you set yourself (solid) always wins. A position
+            that needs attention, or is marked unclear (∞), leaves everything before it open.</p>
         </details>
       </aside>
     </main>
@@ -465,7 +470,13 @@ export async function mountGrid(
     drawThreat(n, rules.inCheck());
 
     $(".ag-move").textContent = (n.uci ? `${n.moveNo} ${n.san}` : "Start position") + (n.moveMark ?? "");
-    $(".ag-score").textContent = [n.posMark ?? "", engineOn ? scoreText(n.score, n.state) : ""].filter(Boolean).join("  ");
+    const a = assess(root).get(n)!;
+    $(".ag-score").textContent = [a.mark ?? "", engineOn ? scoreText(n.score, n.state) : ""].filter(Boolean).join("  ");
+    let note = "";
+    if (a.own && a.derived && a.derived !== a.mark) note = `Your lines after it say ${a.derived}.`;
+    else if (!a.own && a.mark && n.state === "ongoing") note = `${a.mark} follows from your marks on the lines after it.`;
+    if (n.attention && a.mark) note = (note ? note + " " : "") + "Needs attention: counts for nothing before it until you remove the mark.";
+    $(".ag-assess").textContent = note;
     let status = "";
     if (n.state !== "ongoing") status = n.state;
     else if (engineOn) {

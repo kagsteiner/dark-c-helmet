@@ -4,7 +4,7 @@ import { placementFromFen } from "../chess/fen.ts";
 import { features } from "./features.ts";
 import { normalSan, parsePgn, writePgn } from "./pgn.ts";
 import { describeWin, forcingEnd } from "./threat-text.ts";
-import { barFraction, layout, type GNode } from "./tree.ts";
+import { assess, barFraction, chosenLine, layout, type GNode } from "./tree.ts";
 
 let id = 0;
 function node(parent: GNode | null, san = "x", fen = ""): GNode {
@@ -145,4 +145,73 @@ test("threat: what it wins, as players say it", () => {
   assert.equal(black("r1bqkbnr/pppppppp/8/8/8/8/PPPPP2P/RNBQKBNR w KQkq - 0 1"), "wins a piece for two pawns");
   // A knight for a bishop is no win.
   assert.equal(black("r1bqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RN1QKBNR w KQkq - 0 1"), null);
+});
+
+test("assess: marks back up by minimax; open lines, attention and unclear block", () => {
+  const W = "p w", B = "p b";
+  const root = node(null, "r", W); // White to move
+  const a = node(root, "a", B);
+  const a1 = node(a, "a1", W);
+  const a2 = node(a, "a2", W);
+  const b = node(root, "b", B);
+  a1.posMark = "+";
+  a2.posMark = "0";
+  let r = assess(root);
+  // Black picks a2 (0); the root stays open while b has no mark.
+  assert.equal(r.get(a)!.derived, "0");
+  assert.deepEqual(r.get(a)!.best, [a2]);
+  assert.equal(r.get(root)!.mark, null);
+  b.posMark = "+/-";
+  r = assess(root);
+  assert.equal(r.get(root)!.derived, "+/-");
+  assert.deepEqual(r.get(root)!.best, [b]);
+  assert.equal(r.get(root)!.own, false);
+  // A tie: both lines are best.
+  b.posMark = "0";
+  assert.deepEqual(assess(root).get(root)!.best, [a, b]);
+  // The player's own mark wins, and is what goes up.
+  a.posMark = "+";
+  r = assess(root);
+  assert.equal(r.get(a)!.mark, "+");
+  assert.equal(r.get(a)!.derived, "0");
+  assert.equal(r.get(root)!.derived, "+");
+  // Needs attention: open until removed, even with a mark.
+  a.attention = true;
+  assert.equal(assess(root).get(root)!.mark, null);
+  a.attention = false;
+  // Unclear blocks too.
+  b.posMark = "∞";
+  assert.equal(assess(root).get(root)!.mark, null);
+});
+
+test("assess: checkmate and stalemate settle themselves; ghosts do not count", () => {
+  const root = node(null, "r", "p b");
+  const m = node(root, "m", "p w");
+  m.state = "checkmate"; // White is mated
+  const s = node(root, "s", "p w");
+  s.state = "stalemate";
+  root.ghost = { ucis: ["x"], text: "", fen: "", san: "", moveNo: "", lastMove: null, state: "ongoing", score: null };
+  const r = assess(root);
+  assert.equal(r.get(m)!.mark, "--");
+  assert.equal(r.get(s)!.mark, "0");
+  assert.equal(r.get(root)!.mark, "--");
+  assert.deepEqual(r.get(root)!.best, [m]);
+});
+
+test("chosenLine: from the top of a settled part along the best moves, refuted lines left out", () => {
+  const root = node(null, "r", "p w");
+  const e4 = node(root, "e4", "p b");
+  const e5 = node(e4, "e5", "p w");
+  const nf3 = node(e5, "Nf3", "p b");
+  const e6 = node(e4, "e6", "p w");
+  const d4 = node(e6, "d4", "p b");
+  nf3.posMark = "+";
+  d4.posMark = "0";
+  let line = chosenLine(root, assess(root));
+  assert.deepEqual([...line].map((n) => n.san).sort(), ["d4", "e4", "e6"]);
+  // With the root open (another line without a mark), the settled part below 1.e4 still
+  // shows its choice.
+  node(root, "c4", "p b");
+  line = chosenLine(root, assess(root));
+  assert.deepEqual([...line].map((n) => n.san).sort(), ["d4", "e6"]);
 });
