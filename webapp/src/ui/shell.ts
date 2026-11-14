@@ -17,8 +17,8 @@ const ROUTES = [
   { path: "settings", label: "Settings" },
 ] as const;
 
-/** Reached through a link in Settings, not the navigation. */
-const OTHER_ROUTES = ["explore"] as const;
+/** Not in the navigation: explore through a link in Settings, grid from the Analysis screen. */
+const OTHER_ROUTES = ["explore", "grid"] as const;
 
 export type Route = (typeof ROUTES)[number]["path"] | (typeof OTHER_ROUTES)[number];
 

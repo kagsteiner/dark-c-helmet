@@ -257,3 +257,14 @@
     align-content: start;
   }
 }
+
+/* "Explore from here" opens the analysis grid: desktop only, it needs the room. */
+.an-explore {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .an-explore {
+    display: block;
+  }
+}

@@ -97,6 +97,18 @@ export class Rules {
     }));
   }
 
+  /** Squares of pieces (either colour) the opponent wins material on by capturing them:
+   *  the engine's static exchange evaluation; for the side not to move, after a null move. */
+  hanging(): number[] {
+    return JSON.parse(this.m.ccall("rules_hanging", "string", [], []) as string) as number[];
+  }
+
+  /** The position with the side to move passing (to ask what the opponent threatens), or
+   *  null when the side to move is in check. */
+  nullFen(): string | null {
+    return (this.m.ccall("rules_null_fen", "string", [], []) as string) || null;
+  }
+
   perft(depth: number): number {
     return this.m.ccall("rules_perft", "number", ["number"], [depth]) as number;
   }

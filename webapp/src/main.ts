@@ -5,6 +5,7 @@ import { PlayController } from "./play/controller.ts";
 import { analysisScreen } from "./screens/analysis.ts";
 import { bookScreen } from "./screens/book.ts";
 import { exploreScreen } from "./screens/explore.ts";
+import { gridScreen } from "./screens/grid.ts";
 import { playScreen } from "./screens/play.ts";
 import { progressScreen } from "./screens/progress.ts";
 import { settingsScreen } from "./screens/settings.ts";
@@ -37,6 +38,7 @@ startShell({
   book: bookScreen(),
   settings: settingsScreen(controller),
   explore: exploreScreen(rules, controller),
+  grid: gridScreen(rules, controller, () => engineStatus),
 });
 
 // The human-like opponent is downloaded when a game against it starts.
