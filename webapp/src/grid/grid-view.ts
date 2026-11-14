@@ -40,6 +40,9 @@ export class GridView {
   engineOn = true;
   /** Black at the bottom (boards, marks and bars). */
   flipped = false;
+  /** Computed hints: marks on the boards, extra material, folded engine lines. Off in a
+   *  locked analysis (the player's own). */
+  hints = true;
   private cb: GridCallbacks;
   private cache = new Map<string, { placement: Placement; fx: Features; hanging: number[] }>();
 
@@ -64,17 +67,19 @@ export class GridView {
   }
 
   private analysis(fen: string): { placement: Placement; fx: Features; hanging: number[] } {
-    let a = this.cache.get(fen);
+    // Separate entries with and without hints: a locked analysis computes no exchanges.
+    const key = (this.hints ? "h " : "- ") + fen;
+    let a = this.cache.get(key);
     if (!a) {
       const placement = placementFromFen(fen);
-      a = { placement, fx: features(placement), hanging: this.cb.hanging(fen) };
-      this.cache.set(fen, a);
+      a = { placement, fx: features(placement), hanging: this.hints ? this.cb.hanging(fen) : [] };
+      this.cache.set(key, a);
     }
     return a;
   }
 
   render(root: GNode, selected: GNode): void {
-    const { cells, rows, cols } = layout(root);
+    const { cells, rows, cols } = layout(root, this.hints);
     const W = this.cellW;
     const H = this.cellH;
     const S = this.size;
@@ -150,7 +155,7 @@ export class GridView {
     board.addEventListener("click", () => this.cb.select(n));
     el.append(board);
 
-    const alts = alternatives(n);
+    const alts = alternatives(n, this.hints);
     if (alts) {
       const badge = document.createElement("button");
       badge.className = "gc-badge" + (n.expanded ? " open" : "");
@@ -224,9 +229,9 @@ export class GridView {
       add("mb-mark", n.lastMove[0]);
       add("mb-mark", n.lastMove[1]);
     }
-    b.append(...underMarks(fx, this.flipped));
+    if (this.hints) b.append(...underMarks(fx, this.flipped));
     placement.forEach((p, sq) => p && add("mb-p", sq, pieceUrl(p)));
-    b.append(...overMarks(fx, hanging, this.flipped));
+    if (this.hints) b.append(...overMarks(fx, hanging, this.flipped));
     return b;
   }
 
@@ -250,7 +255,7 @@ export class GridView {
       g.textContent = "Draw";
       g.title = n.state;
       row.append(g);
-    } else {
+    } else if (this.hints) {
       const mat = materialView(fx);
       if (mat) row.append(mat);
     }

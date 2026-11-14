@@ -49,7 +49,10 @@ test("layout: a ghost ends its row, or gets a row of its own beside real childre
   l = layout(root);
   assert.equal(l.rows.length, 2);
   assert.deepEqual(l.cells.filter((c) => c.ghost).map((c) => [c.row, c.col]), [[1, 2]]);
-  assert.equal(l.rows[1].from!.node, a);
+  assert.equal(l.rows[1].from!.node, a);  // A locked analysis leaves ghosts out.
+  l = layout(root, false);
+  assert.equal(l.rows.length, 1);
+  assert.equal(l.cells.filter((c) => c.ghost).length, 0);
 });
 
 test("bar: linear, ±8 pawns or a mate fill it", () => {

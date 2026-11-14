@@ -226,11 +226,18 @@ analysis there). Code: `src/grid/` (`grid-app.ts` builds the screen), `src/scree
   position marks `++ + +/- 0 -/+ - --` (PGN NAGs 18, 16, 14, 10, 15, 17, 19); comment;
   "Needs attention" (orange frame); make main line; delete from here; the position notes in
   words; the threat.
-- **Engine:** the app's engine, shared; a switch in the screen's bar turns it off for this
-  screen (then the bar shows the player's own position mark, hatched). When on: a quick look
-  at every board, a deep search for boards played by hand or marked for attention, and the
-  threat of the selected board (a null-move search; shown only if it mates or wins material,
-  described along the forcing line: "wins a rook and a pawn", "wins the exchange").
+- **Engine:** the app's engine, shared; a switch in the screen's bar turns it on or off. The
+  setting is stored with each analysis (opening one restores it); a new analysis always starts
+  with the engine off, so it is never used by accident. With the engine off the bar shows the
+  player's own position mark, hatched. When on: a quick look at every board, a deep search
+  for boards played by hand or marked for attention, and the threat of the selected board (a
+  null-move search; shown only if it mates or wins material, described along the forcing
+  line: "wins a rook and a pawn", "wins the exchange").
+- **Lock ("own analysis"):** for games in which engines are not allowed (correspondence). A
+  locked analysis has no engine switch, and nothing computed is shown: no marks on the boards,
+  no exchange check, no material, no notes, no threats, no folded engine lines, no evals (also
+  not in the PGN export). Only the player's moves, marks and comments. Stored with the
+  analysis; unlocking asks for confirmation.
 - **Suggestions:** a short search after every legal move, a longer one for the best six; the
   panel says how long and how deep the engine thought; "Think deeper" doubles the time. Each
   chosen move adds one board; its continuation stays folded as a ghost (the final position,

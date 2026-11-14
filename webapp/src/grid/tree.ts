@@ -95,9 +95,10 @@ export interface Cell {
   ghost?: true;
 }
 
-/** Alternatives shown by a node's badge: other children, and a ghost beside real children. */
-export function alternatives(n: GNode): number {
-  return Math.max(0, n.children.length - 1) + (n.ghost && n.children.length ? 1 : 0);
+/** Alternatives shown by a node's badge: other children, and a ghost beside real children
+ *  (when ghosts are shown). */
+export function alternatives(n: GNode, ghosts = true): number {
+  return Math.max(0, n.children.length - 1) + (ghosts && n.ghost && n.children.length ? 1 : 0);
 }
 
 export interface Row {
@@ -113,7 +114,8 @@ export interface Layout {
   cols: number;
 }
 
-export function layout(root: GNode): Layout {
+/** `ghosts`: false leaves folded engine lines out (a locked analysis). */
+export function layout(root: GNode, ghosts = true): Layout {
   const cells: Cell[] = [];
   const rows: Row[] = [];
   let cols = 0;
@@ -128,7 +130,7 @@ export function layout(root: GNode): Layout {
       cols = Math.max(cols, n.ply + 1);
       if (!n.children.length) {
         // A ghost at the end of a row continues it.
-        if (n.ghost) {
+        if (ghosts && n.ghost) {
           cells.push({ node: n, row, col: n.ply + 1, ghost: true });
           cols = Math.max(cols, n.ply + 2);
         }
@@ -140,7 +142,7 @@ export function layout(root: GNode): Layout {
       const c = line[i];
       if (!c.node.expanded) continue;
       // A ghost beside real children gets a row of its own, like an alternative.
-      if (c.node.ghost && c.node.children.length) {
+      if (ghosts && c.node.ghost && c.node.children.length) {
         const r = rows.length;
         rows.push({ row: r, startCol: c.node.ply + 1, from: c });
         cells.push({ node: c.node, row: r, col: c.node.ply + 1, ghost: true });

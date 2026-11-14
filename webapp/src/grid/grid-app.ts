@@ -13,7 +13,6 @@ import type { Engine } from "../engine/engine.ts";
 import type { PlayController } from "../play/controller.ts";
 import { settings } from "../settings.ts";
 import { icons } from "../ui/icons.ts";
-import { load, save } from "../storage.ts";
 import { Board } from "../ui/board.ts";
 import { MoveInput } from "../ui/move-input.ts";
 import { features } from "./features.ts";
@@ -28,7 +27,6 @@ import {
 } from "./tree.ts";
 import "./grid.css";
 
-const ENGINE_KEY = "grid-engine-on";
 const QUICK_MS = 250;
 const DEEP_MS = 2000;
 const SUGGEST_SCAN_MS = 80;
@@ -61,6 +59,11 @@ export async function mountGrid(
   let analysisId = newId();
   let analysisName = "";
   let flipped = false; // Black at the bottom
+  // Both stored with each analysis. New analyses start with the engine off: switching it on
+  // is always a deliberate click. Locked: the player's own analysis (e.g. a correspondence
+  // game): no engine and nothing computed is shown, only the player's own marks and comments.
+  let engineOn = false;
+  let locked = false;
 
   // ---- Tree ----
 
@@ -173,6 +176,8 @@ export async function mountGrid(
     analysisId = a.id;
     analysisName = a.name;
     flipped = a.flipped ?? false;
+    locked = a.locked ?? false;
+    engineOn = !locked && (a.engineOn ?? false);
     return true;
   }
 
@@ -189,6 +194,8 @@ export async function mountGrid(
     analysisId = newId();
     analysisName = name;
     flipped = blackBelow;
+    engineOn = false;
+    locked = false;
     return true;
   }
 
@@ -207,6 +214,7 @@ export async function mountGrid(
     walk(root, () => boards++);
     return {
       id: analysisId, name: analysisName, updated: Date.now(), fen: root.fen, chess960, tree: serialize(root), boards, flipped,
+      engineOn, locked,
     };
   }
 
@@ -249,6 +257,7 @@ export async function mountGrid(
       <span class="ag-spacer"></span>
       <span class="ag-engine muted"></span>
       <button class="ag-engine-toggle" role="switch"></button>
+      <button class="ag-lock"></button>
     </header>
     <main class="ag-main">
       <section class="ag-grid"></section>
@@ -299,7 +308,11 @@ export async function mountGrid(
           <p>A faded, dashed board is an engine line you added from the suggestions, still folded:
             its final position. Click it to unfold the whole line; click the "moves" sign on the
             connector to unfold one move at a time.</p>
-          <p>An orange frame marks a position that needs attention; with the engine on it also gets a
+          <p>The engine setting is kept with each analysis; a new analysis starts with the engine
+          off. "Lock" makes an analysis your own (e.g. for a correspondence game): no engine, and
+          nothing computed is shown, no marks on the boards, no material, no notes, no engine
+          lines; only your own marks and comments. Unlocking asks first.</p>
+        <p>An orange frame marks a position that needs attention; with the engine on it also gets a
             deep search, as do moves you play yourself (✓ when done).</p>
         </details>
       </aside>
@@ -337,6 +350,7 @@ export async function mountGrid(
     },
     unfold: (n, all) => unfold(n, all),
     hanging: (fen) => {
+      if (locked) return [];
       rules.setFen(fen, chess960);
       return rules.hanging();
     },
@@ -356,7 +370,7 @@ export async function mountGrid(
   const input = new MoveInput(board, {
     onMove: (uci) => {
       // The next move of a folded engine line: unfold it (the ghost moves on).
-      if (selected.ghost?.ucis[0] === uci) {
+      if (!locked && selected.ghost?.ucis[0] === uci) {
         const from = selected;
         unfold(from, false);
         const c = from.children.find((k) => k.uci === uci);
@@ -388,6 +402,7 @@ export async function mountGrid(
     requestAnimationFrame(() => {
       drawPending = false;
       grid.engineOn = engineOn;
+      grid.hints = !locked;
       grid.flipped = flipped;
       grid.render(root, selected);
       drawPanel();
@@ -429,9 +444,10 @@ export async function mountGrid(
     board.setOrientation(flipped ? "black" : "white");
     board.setPlacement(placement, false);
     const fx = features(placement);
-    marksUnder.replaceChildren(...underMarks(fx, flipped));
-    const hanging = rules.hanging();
-    marksOver.replaceChildren(...overMarks(fx, hanging, flipped));
+    // Locked: nothing computed (no marks, no exchange check, no notes).
+    const hanging = locked ? [] : rules.hanging();
+    marksUnder.replaceChildren(...(locked ? [] : underMarks(fx, flipped)));
+    marksOver.replaceChildren(...(locked ? [] : overMarks(fx, hanging, flipped)));
     drawThreat(n, rules.inCheck());
 
     $(".ag-move").textContent = (n.uci ? `${n.moveNo} ${n.san}` : "Start position") + (n.moveMark ?? "");
@@ -467,10 +483,10 @@ export async function mountGrid(
     sug.disabled = !engine || n.state !== "ongoing" || suggesting;
 
     const ghost = $(".ag-ghost");
-    ghost.hidden = !n.ghost;
+    ghost.hidden = !n.ghost || locked;
     if (n.ghost) $(".ag-ghost-text").textContent = `Engine line (folded, ${n.ghost.ucis.length} moves): ${n.ghost.text}`;
 
-    const mat = materialView(fx);
+    const mat = locked ? null : materialView(fx);
     $(".ag-material").replaceChildren(...(mat ? [mat] : []));
     const PIECE_NAME: Record<string, string> = { p: "pawn", n: "knight", b: "bishop", r: "rook", q: "queen" };
     const lost = hanging.map((sq) => {
@@ -478,7 +494,7 @@ export async function mountGrid(
       const white = p === p.toUpperCase();
       return `${white ? "White" : "Black"} ${PIECE_NAME[p.toLowerCase()]} on ${"abcdefgh"[sq & 7]}${(sq >> 3) + 1} is lost in the exchange`;
     });
-    $(".ag-notes").innerHTML = [...lost, ...fx.notes].map((t) => `<li>${t}</li>`).join("");
+    $(".ag-notes").innerHTML = locked ? "" : [...lost, ...fx.notes].map((t) => `<li>${t}</li>`).join("");
     drawSuggestions();
   }
 
@@ -580,6 +596,8 @@ export async function mountGrid(
     await stopAnalysis();
     suggestions = null;
     showName();
+    syncEngine(); // the engine setting comes with the analysis
+    drawEngineToggle();
     persist();
     draw();
     pump();
@@ -635,7 +653,8 @@ export async function mountGrid(
       name.textContent = a.name + (a.id === analysisId ? " (open)" : "");
       const meta = document.createElement("div");
       meta.className = "muted";
-      meta.textContent = `${a.boards} boards${a.chess960 ? ", Chess960" : ""} · ${new Date(a.updated).toLocaleString()}`;
+      const engineNote = a.locked ? " · locked: own analysis, no engine" : a.engineOn ? " · engine on" : "";
+      meta.textContent = `${a.boards} boards${a.chess960 ? ", Chess960" : ""}${engineNote} · ${new Date(a.updated).toLocaleString()}`;
       info.append(name, meta);
       const openBtn = document.createElement("button");
       openBtn.type = "button";
@@ -674,7 +693,7 @@ export async function mountGrid(
       if (n.posMark) nags.push(POS_MARK_NAG[n.posMark]);
     } else if (n.posMark) cmds.push(`[%assess ${n.posMark}]`); // no NAGs before the first move
     if (n.attention) cmds.push("[%attention]");
-    if (n.analysed && n.score) {
+    if (n.analysed && n.score && !locked) {
       const s = n.score;
       cmds.push(`[%eval ${"mate" in s ? "#" + s.mate : (s.cp / 100).toFixed(2)}]`);
     }
@@ -765,7 +784,6 @@ export async function mountGrid(
 
   // ---- Engine ----
 
-  let engineOn = (await load<boolean>(ENGINE_KEY)) ?? true;
   /** The app's engine while it is switched on here (null: off, or not loaded yet). */
   let engine: Engine | null = null;
   const syncEngine = () => {
@@ -779,25 +797,55 @@ export async function mountGrid(
   const priority: (() => Promise<void>)[] = [];
 
   const toggle = $(".ag-engine-toggle");
+  const lockBtn = $(".ag-lock");
   function drawEngineToggle(): void {
+    toggle.hidden = locked;
+    lockBtn.classList.toggle("on", locked);
+    lockBtn.textContent = locked ? "Locked: own analysis" : "Lock";
+    lockBtn.title = locked
+      ? "No engine and no computed hints in this analysis. Click to unlock."
+      : "Lock this analysis as your own (e.g. a correspondence game): no engine, no computed hints";
+    if (locked) $(".ag-engine").textContent = "";
     toggle.setAttribute("aria-checked", String(engineOn));
     toggle.textContent = engineOn ? "Engine on" : "Engine off";
     toggle.title = engineOn ? "Switch the engine off: analyse on your own" : "Switch the engine on";
     toggle.classList.toggle("on", engineOn);
   }
+  /** Stops everything the engine does for this screen. */
+  async function engineOff(): Promise<void> {
+    await stopAnalysis();
+    engine = null;
+    $(".ag-engine").textContent = "";
+    suggestions = null;
+  }
+  lockBtn.addEventListener("click", async () => {
+    if (locked) {
+      const ok = confirm(
+        "Unlock this analysis? The engine and the computed hints (marks on the boards, threats, notes) can then be used " +
+          "again. For a game in which engines are not allowed, keep it locked.",
+      );
+      if (!ok) return;
+      locked = false; // the engine stays off until switched on
+    } else {
+      locked = true;
+      engineOn = false;
+      await engineOff();
+    }
+    persist();
+    drawEngineToggle();
+    draw();
+  });
   toggle.addEventListener("click", async () => {
+    if (locked) return;
     engineOn = !engineOn;
-    save(ENGINE_KEY, engineOn);
+    persist();
     drawEngineToggle();
     if (engineOn) {
       syncEngine();
       pump();
     } else {
       // Off means off: nothing runs in the background for this screen.
-      await stopAnalysis();
-      engine = null;
-      $(".ag-engine").textContent = "";
-      suggestions = null;
+      await engineOff();
     }
     draw();
   });

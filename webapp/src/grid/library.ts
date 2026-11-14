@@ -38,6 +38,10 @@ export interface Analysis {
   boards: number;
   /** Shown with Black at the bottom. */
   flipped?: boolean;
+  /** The engine is switched on for this analysis (missing: off). */
+  engineOn?: boolean;
+  /** The player's own analysis: no engine, no computed hints. */
+  locked?: boolean;
 }
 
 export function newId(): string {
