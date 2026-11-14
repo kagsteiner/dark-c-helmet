@@ -353,14 +353,22 @@ export async function mountGrid(
     </dialog>`;
   const $ = <T extends HTMLElement = HTMLElement>(s: string) => app.querySelector<T>(s)!;
 
+  // A board clicked in the grid: the panel scrolls back up, so its board shows in full.
+  const panelTop = () => $(".ag-panel").scrollTo({ top: 0 });
   const grid = new GridView({
-    select: (n) => select(n),
+    select: (n) => {
+      select(n);
+      panelTop();
+    },
     toggle: (n) => {
       n.expanded = !n.expanded;
       persist();
       draw();
     },
-    unfold: (n, all) => unfold(n, all),
+    unfold: (n, all) => {
+      unfold(n, all);
+      panelTop();
+    },
     hanging: (fen) => {
       if (locked) return [];
       rules.setFen(fen, chess960);
