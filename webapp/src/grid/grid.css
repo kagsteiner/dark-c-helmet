@@ -726,3 +726,25 @@
   font-size: var(--text-small);
   color: var(--mark-mistake);
 }
+
+/* ---- Deep search ---- */
+
+.ag-deep-progress p {
+  margin: 0 0 var(--space-1);
+}
+
+.ag-cand-tag {
+  font-weight: normal;
+  font-size: var(--text-small);
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.ag-cand-tag.new {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}

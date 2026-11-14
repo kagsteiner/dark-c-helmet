@@ -9,7 +9,7 @@
 import { placementFromFen } from "../chess/fen.ts";
 import type { LegalMove, Rules } from "../chess/rules.ts";
 import { san } from "../chess/san.ts";
-import type { Engine } from "../engine/engine.ts";
+import type { Engine, SearchInfo } from "../engine/engine.ts";
 import type { PlayController } from "../play/controller.ts";
 import { settings } from "../settings.ts";
 import { icons } from "../ui/icons.ts";
@@ -32,6 +32,9 @@ const DEEP_MS = 2000;
 const SUGGEST_SCAN_MS = 80;
 const SUGGEST_DEEP_MS = 700;
 const SUGGEST_COUNT = 6;
+/** Each "Think deeper" multiplies the time by this. The look at every move grows only with
+ *  the square root: the extra time goes mostly to the best few. */
+const DEEPER_STEP = 3;
 const PV_PLIES = 6;
 const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
@@ -275,6 +278,7 @@ export async function mountGrid(
           <button class="ag-back btn-secondary" title="Previous move (←)">◀</button>
           <button class="ag-fwd btn-secondary" title="Next move (→)">▶</button>
           <button class="ag-suggest btn-secondary">Suggest moves</button>
+          <button class="ag-deep btn-secondary" title="One search of the position, as deep as you let it run: what the engine itself would play">Deep search</button>
           <button class="ag-attention" aria-pressed="false">Needs attention</button>
         </div>
         <div class="ag-marks">
@@ -484,6 +488,9 @@ export async function mountGrid(
     const sug = $<HTMLButtonElement>(".ag-suggest");
     sug.hidden = !engineOn;
     sug.disabled = !engine || n.state !== "ongoing" || suggesting;
+    const deepBtn = $<HTMLButtonElement>(".ag-deep");
+    deepBtn.hidden = !engineOn;
+    deepBtn.disabled = sug.disabled;
 
     const ghost = $(".ag-ghost");
     ghost.hidden = !n.ghost || locked;
@@ -953,7 +960,7 @@ export async function mountGrid(
     if (!engine) return;
     let todo = 0;
     walk(root, (n) => needsWork(n) && todo++);
-    $(".ag-engine").textContent = suggesting ? "looking for moves…" : todo ? `${todo} board${todo > 1 ? "s" : ""} to analyse` : "idle";
+    $(".ag-engine").textContent = suggesting ? (suggestions?.deep?.running ? "deep search…" : "looking for moves…") : todo ? `${todo} board${todo > 1 ? "s" : ""} to analyse` : "idle";
   }
 
   /** Next board for the background analysis: the selected one first, then quick looks at all
@@ -1048,12 +1055,17 @@ export async function mountGrid(
     pvSan: string[];
     inTree: boolean;
     chosen: boolean;
+    /** Found by the deep search; `isNew`: not among the moves suggested before it. */
+    deep?: boolean;
+    isNew?: boolean;
   }
   /** How long and how deep the engine thought for a set of suggestions. */
   interface Effort {
     /** Thinking time per move in the scan and per candidate in the check (ms). */
     scanMs: number;
     checkMs: number;
+    /** Legal moves looked at. */
+    moves: number;
     /** In all: time (ms) and positions searched. */
     time: number;
     nodes: number;
@@ -1071,6 +1083,8 @@ export async function mountGrid(
     effort: Effort | null;
     /** The best move of the round before, when a deeper round changed it. */
     bestBefore: string | null;
+    /** The deep search: running, or how far the last one went. */
+    deep?: { running: boolean; started: number; info: SearchInfo | null };
   }
   let suggestions: Suggestions | null = null;
 
@@ -1104,6 +1118,100 @@ export async function mountGrid(
   }
 
   $(".ag-suggest").addEventListener("click", () => startSuggest(selected, 1));
+  $(".ag-deep").addEventListener("click", () => startDeep(selected));
+
+  /** Time of a round of suggestions, relative to the first: the look at every move grows with
+   *  the square root of `factor`, the check of the best few with `factor` itself. */
+  function roundCost(factor: number, moves: number): number {
+    return moves * SUGGEST_SCAN_MS * Math.sqrt(factor) + Math.min(SUGGEST_COUNT, moves) * SUGGEST_DEEP_MS * factor;
+  }
+
+  /** Starts the deep search of `node`: one search, until stopped. Its move joins the
+   *  suggestions (the ones there stay). */
+  function startDeep(node: GNode): void {
+    if (!engine || suggesting) return;
+    const before = suggestions?.node === node ? suggestions : null;
+    suggesting = true;
+    suggestions = {
+      node, list: before?.list ?? [], progress: "", factor: before?.factor ?? 0, effort: before?.effort ?? null,
+      bestBefore: null, deep: { running: true, started: performance.now(), info: null },
+    };
+    draw();
+    priority.push(() => deepSearch(node));
+    if (pumping) {
+      interrupted = true;
+      engine.stop();
+    }
+    pump();
+  }
+
+  async function deepSearch(node: GNode): Promise<void> {
+    const gen = generation;
+    const s = suggestions;
+    if (!s?.deep) return;
+    const deep = s.deep;
+    const tick = window.setInterval(() => drawDeepProgress(), 1000);
+    try {
+      const r = await engine!.search({ startFen: node.fen, moves: [], chess960 }, { infinite: true }, (info) => {
+        if (info.pv.length) deep.info = info;
+        drawDeepProgress();
+      }, false);
+      if (gen !== generation) return;
+      const info = r.info ?? deep.info;
+      if (r.info?.pv.length) deep.info = r.info;
+      const uci = r.bestmove ?? info?.pv[0];
+      if (info && uci) {
+        const whiteToMove = node.fen.split(" ")[1] === "w";
+        rules.setFen(node.fen, chess960);
+        const legal = rules.moves();
+        const m = legal.find((l) => l.uci === uci);
+        if (m) {
+          rules.play(uci);
+          const after = rules.fen();
+          const pv = info.pv[0] === uci ? info.pv.slice(1) : [];
+          const old = s.list.find((c) => c.uci === uci);
+          const cand: Candidate = {
+            uci, san: san(m, legal), score: whiteScore(info.score, whiteToMove), depth: info.depth, pv,
+            pvSan: pvToSan(after, pv, PV_PLIES - 1), inTree: node.children.some((c) => c.uci === uci),
+            chosen: old?.chosen ?? false, deep: true, isNew: !old && s.list.length > 0,
+          };
+          s.list = [cand, ...s.list.filter((c) => c.uci !== uci)];
+        }
+      }
+    } finally {
+      window.clearInterval(tick);
+      deep.running = false;
+      deep.info = deep.info ? { ...deep.info, time: performance.now() - deep.started } : null;
+      if (gen === generation) suggesting = false;
+      draw();
+    }
+  }
+
+  /** Updates the running deep search's line in place (no redraw of the whole panel). */
+  function drawDeepProgress(): void {
+    const el = document.querySelector<HTMLElement>(".ag-deep-progress");
+    const d = suggestions?.deep;
+    if (!el || !d || !suggestions) return;
+    el.replaceChildren(...deepLines(suggestions.node, d));
+  }
+
+  function deepLines(node: GNode, d: NonNullable<Suggestions["deep"]>): HTMLElement[] {
+    const head = document.createElement("p");
+    head.className = "ag-effort muted";
+    const time = d.running ? performance.now() - d.started : (d.info?.time ?? 0);
+    const parts = [`${d.running ? "Deep search running" : "Deep search"}: ${seconds(time)}`];
+    if (d.info) parts.push(`depth ${d.info.depth}`, `${formatCount(d.info.nodes)} nodes`);
+    head.textContent = parts.join(" · ");
+    if (!d.running || !d.info) return [head];
+    const best = document.createElement("p");
+    const whiteToMove = node.fen.split(" ")[1] === "w";
+    const line = sanLine(node.fen, d.info.pv.slice(0, PV_PLIES));
+    const ev = document.createElement("strong");
+    ev.className = "numeric";
+    ev.textContent = scoreText(whiteScore(d.info.score, whiteToMove), "ongoing");
+    best.append("Best so far: ", ev, ` ${line}`);
+    return [head, best];
+  }
 
   /** Starts a round of suggestions for `node`, thinking `factor` times as long as the first
    *  round. The moves already ticked stay ticked. */
@@ -1125,9 +1233,9 @@ export async function mountGrid(
 
   async function suggest(node: GNode, factor: number, before: Suggestions | null): Promise<void> {
     const gen = generation;
-    const scanMs = SUGGEST_SCAN_MS * factor;
+    const scanMs = Math.round(SUGGEST_SCAN_MS * Math.sqrt(factor));
     const checkMs = SUGGEST_DEEP_MS * factor;
-    const effort: Effort = { scanMs, checkMs, time: 0, nodes: 0, depthMin: Infinity, depthMax: 0 };
+    const effort: Effort = { scanMs, checkMs, moves: 0, time: 0, nodes: 0, depthMin: Infinity, depthMax: 0 };
     const count = (r: Evaluation | null) => {
       if (!r) return;
       effort.time += r.time;
@@ -1137,6 +1245,7 @@ export async function mountGrid(
     try {
       rules.setFen(node.fen, chess960);
       const legal = rules.moves();
+      effort.moves = legal.length;
       const whiteToMove = node.fen.split(" ")[1] === "w";
       const better = (a: Score, b: Score) => (whiteToMove ? scoreValue(b) - scoreValue(a) : scoreValue(a) - scoreValue(b));
       // 1. A short search after every legal move.
@@ -1185,11 +1294,19 @@ export async function mountGrid(
           uci: s.m.uci, san: san(s.m, legal), score, depth, pv, pvSan: pvToSan(s.fen, pv, PV_PLIES - 1), inTree, chosen,
         });
       }
+      // A move the deep search found stays, also when this round did not check it, with
+      // the deeper of the two results.
+      for (const c of before?.list ?? []) {
+        if (!c.deep) continue;
+        const i = list.findIndex((l) => l.uci === c.uci);
+        if (i < 0) list.push({ ...c, isNew: false });
+        else if (c.depth >= list[i].depth) list[i] = { ...c, chosen: list[i].chosen, isNew: false };
+      }
       list.sort((a, b) => better(a.score, b.score));
       if (effort.depthMin === Infinity) effort.depthMin = 0;
       const oldBest = before?.list[0];
       const bestBefore = oldBest && list[0] && oldBest.uci !== list[0].uci ? oldBest.san : null;
-      if (suggestions?.node === node) suggestions = { node, list, progress: "", factor, effort, bestBefore };
+      if (suggestions?.node === node) suggestions = { node, list, progress: "", factor, effort, bestBefore, deep: before?.deep };
     } finally {
       if (gen === generation) suggesting = false;
       draw();
@@ -1208,6 +1325,25 @@ export async function mountGrid(
       box.append(p);
       return;
     }
+    if (s.deep?.running) {
+      const prog = document.createElement("div");
+      prog.className = "ag-deep-progress";
+      prog.append(...deepLines(s.node, s.deep));
+      const stop = document.createElement("button");
+      stop.className = "btn-primary";
+      stop.textContent = "Stop";
+      stop.title = "Stop the deep search; its move joins the suggestions";
+      stop.addEventListener("click", () => {
+        stop.disabled = true;
+        engine?.stop();
+      });
+      const buttons = document.createElement("div");
+      buttons.className = "ag-nav";
+      buttons.append(stop);
+      box.append(prog, buttons);
+      return;
+    }
+    if (!s.list.length) return;
     const title = document.createElement("p");
     title.innerHTML = "<strong>Engine suggestions</strong> — pick the ones worth a row:";
     box.append(title);
@@ -1221,6 +1357,7 @@ export async function mountGrid(
         `${seconds(e.checkMs)} on each of the best ${s.list.length} (${depth}) · ${formatCount(e.nodes)} nodes`;
       box.append(info);
     }
+    if (s.deep) box.append(...deepLines(s.node, s.deep));
     if (s.bestBefore) {
       const changed = document.createElement("p");
       changed.className = "ag-effort-changed";
@@ -1247,6 +1384,13 @@ export async function mountGrid(
       const line = document.createElement("span");
       line.className = "ag-cand-pv muted";
       line.textContent = (c.pvSan.join(" ") || "") + (c.inTree ? " (already in the grid)" : "");
+      if (c.deep) {
+        const tag = document.createElement("span");
+        tag.className = "ag-cand-tag" + (c.isNew ? " new" : "");
+        tag.textContent = c.isNew ? "new · deep" : "deep";
+        tag.title = c.isNew ? "Found by the deep search; not among the suggestions before" : "Found by the deep search";
+        mv.append(" ", tag);
+      }
       label.append(cb, mv, ev, line);
       li.append(label);
       ul.append(li);
@@ -1270,14 +1414,24 @@ export async function mountGrid(
     });
     const deeper = document.createElement("button");
     deeper.className = "btn-secondary";
-    const estimate = s.effort ? ` (about ${seconds(s.effort.time * 2)})` : "";
-    deeper.textContent = `Think deeper${estimate}`;
-    deeper.title = "Search again with twice the time; the ticked moves stay ticked";
+    const next = Math.max(1, s.factor * DEEPER_STEP);
+    const e = s.effort;
+    const estimate = e && s.factor ? ` (about ${seconds((e.time * roundCost(next, e.moves)) / roundCost(s.factor, e.moves))})` : "";
+    deeper.textContent = `${s.factor ? "Think deeper" : "Suggest moves"}${estimate}`;
+    deeper.title = s.factor
+      ? "Compare the moves again with about three times the time; the ticked moves stay ticked"
+      : "Look at the alternatives too; the deep search's move stays";
     deeper.disabled = suggesting || !engine;
-    deeper.addEventListener("click", () => startSuggest(s.node, s.factor * 2));
+    deeper.addEventListener("click", () => startSuggest(s.node, next));
+    const deepAgain = document.createElement("button");
+    deepAgain.className = "btn-secondary";
+    deepAgain.textContent = "Deep search";
+    deepAgain.title = "One search of the position, as deep as you let it run";
+    deepAgain.disabled = suggesting || !engine;
+    deepAgain.addEventListener("click", () => startDeep(s.node));
     const buttons = document.createElement("div");
     buttons.className = "ag-nav";
-    buttons.append(add, deeper);
+    buttons.append(add, deeper, deepAgain);
     box.append(buttons);
   }
 
