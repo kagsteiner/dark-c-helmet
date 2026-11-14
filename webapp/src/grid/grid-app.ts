@@ -395,7 +395,14 @@ export async function mountGrid(
   input.setMode("move");
 
   function select(n: GNode): void {
-    if (n !== selected) suggestions = null;
+    if (n !== selected) {
+      suggestions = null;
+      // Suggestions belong to their board: leaving it drops a search still running.
+      if (suggesting) {
+        suggestRun++;
+        engine?.stop();
+      }
+    }
     selected = n;
     draw();
     grid.reveal(n);
@@ -803,6 +810,7 @@ export async function mountGrid(
   let generation = 0; // bumped when the tree is replaced: results for the old tree are dropped
   let pumping = false;
   let suggesting = false;
+  let suggestRun = 0; // bumped to drop the running suggestions or deep search
   let interrupted = false;
   const priority: (() => Promise<void>)[] = [];
 
@@ -1147,6 +1155,7 @@ export async function mountGrid(
 
   async function deepSearch(node: GNode): Promise<void> {
     const gen = generation;
+    const run = suggestRun;
     const s = suggestions;
     if (!s?.deep) return;
     const deep = s.deep;
@@ -1156,7 +1165,7 @@ export async function mountGrid(
         if (info.pv.length) deep.info = info;
         drawDeepProgress();
       }, false);
-      if (gen !== generation) return;
+      if (gen !== generation || run !== suggestRun) return;
       const info = r.info ?? deep.info;
       if (r.info?.pv.length) deep.info = r.info;
       const uci = r.bestmove ?? info?.pv[0];
@@ -1233,6 +1242,7 @@ export async function mountGrid(
 
   async function suggest(node: GNode, factor: number, before: Suggestions | null): Promise<void> {
     const gen = generation;
+    const run = suggestRun;
     const scanMs = Math.round(SUGGEST_SCAN_MS * Math.sqrt(factor));
     const checkMs = SUGGEST_DEEP_MS * factor;
     const effort: Effort = { scanMs, checkMs, moves: 0, time: 0, nodes: 0, depthMin: Infinity, depthMax: 0 };
@@ -1260,7 +1270,7 @@ export async function mountGrid(
         else if (state !== "ongoing") score = { cp: 0 };
         else {
           const r = await evaluate(fen, scanMs);
-          if (gen !== generation) return;
+          if (gen !== generation || run !== suggestRun) return;
           count(r);
           score = r?.score ?? { cp: 0 };
         }
@@ -1280,7 +1290,7 @@ export async function mountGrid(
         rules.setFen(s.fen, chess960);
         if (rules.state() === "ongoing") {
           const r = await evaluate(s.fen, checkMs);
-          if (gen !== generation) return;
+          if (gen !== generation || run !== suggestRun) return;
           count(r);
           if (r) {
             ({ score, pv, depth } = r);
