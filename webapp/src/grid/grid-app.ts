@@ -130,19 +130,22 @@ export async function mountGrid(
     return { ucis: played, text: words.join(" "), fen: rules.fen(), state: rules.state(), score, ...last };
   }
 
-  /** Turns a ghost into real boards: the whole line, or its next move (the ghost moves on). */
+  /** Turns a ghost into real boards: the whole line, or its next move (the ghost moves on).
+   *  The next move becomes the selected board, so it is shown large in the panel. */
   function unfold(n: GNode, all: boolean): void {
     const g = n.ghost;
     if (!g) return;
     n.ghost = null;
     n.expanded = true;
+    let next: GNode | null = null;
     if (all) addLine(n, g.ucis, "engine");
     else {
-      const c = child(n, g.ucis[0], "engine");
-      if (c && g.ucis.length > 1 && !c.ghost && !c.children.length) c.ghost = makeGhost(c, g.ucis.slice(1), g.score);
+      next = child(n, g.ucis[0], "engine");
+      if (next && g.ucis.length > 1 && !next.ghost && !next.children.length) next.ghost = makeGhost(next, g.ucis.slice(1), g.score);
     }
     persist();
-    draw();
+    if (next) select(next);
+    else draw();
     pump();
   }
 
