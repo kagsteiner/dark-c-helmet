@@ -213,7 +213,9 @@ analysis there). Code: `src/grid/` (`grid-app.ts` builds the screen), `src/scree
 
 - **Grid:** one column per ply, one row per line. A node's first child continues its row;
   other children start rows below, joined to their branch point (nearest branch first, so
-  connectors never cross). A badge above a board hides or shows its alternatives.
+  connectors never cross). A badge above a board hides or shows its alternatives. "Swap
+  sides" puts Black at the bottom (all boards, the marks and the bars; saved per analysis;
+  "Explore from here" takes over the Analysis screen's orientation).
 - **Each board:** an evaluation bar as in broadcasts (black on top, white from the bottom,
   half and half at 0.0, linear to ±8 or a mate); analysis marks on the board itself (red
   glow: king in danger; red dot: weak pawn; green arrow: passed pawn; red ring: piece lost in

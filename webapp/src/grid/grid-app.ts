@@ -12,6 +12,7 @@ import { san } from "../chess/san.ts";
 import type { Engine } from "../engine/engine.ts";
 import type { PlayController } from "../play/controller.ts";
 import { settings } from "../settings.ts";
+import { icons } from "../ui/icons.ts";
 import { load, save } from "../storage.ts";
 import { Board } from "../ui/board.ts";
 import { MoveInput } from "../ui/move-input.ts";
@@ -59,6 +60,7 @@ export async function mountGrid(
   let selected: GNode;
   let analysisId = newId();
   let analysisName = "";
+  let flipped = false; // Black at the bottom
 
   // ---- Tree ----
 
@@ -170,10 +172,11 @@ export async function mountGrid(
     selected = root;
     analysisId = a.id;
     analysisName = a.name;
+    flipped = a.flipped ?? false;
     return true;
   }
 
-  function startNew(fen: string, is960: boolean, name: string): boolean {
+  function startNew(fen: string, is960: boolean, name: string, blackBelow = false): boolean {
     const was = chess960;
     chess960 = is960;
     const r = makeRoot(fen);
@@ -185,6 +188,7 @@ export async function mountGrid(
     selected = root;
     analysisId = newId();
     analysisName = name;
+    flipped = blackBelow;
     return true;
   }
 
@@ -197,16 +201,19 @@ export async function mountGrid(
     return new Date().toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
   }
 
+  /** The analysis as it is saved. */
+  function snapshot(): Analysis {
+    let boards = 0;
+    walk(root, () => boards++);
+    return {
+      id: analysisId, name: analysisName, updated: Date.now(), fen: root.fen, chess960, tree: serialize(root), boards, flipped,
+    };
+  }
+
   let saveTimer: ReturnType<typeof setTimeout> | undefined;
   function persist(): void {
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => {
-      let boards = 0;
-      walk(root, () => boards++);
-      saveAnalysis({
-        id: analysisId, name: analysisName, updated: Date.now(), fen: root.fen, chess960, tree: serialize(root), boards,
-      });
-    }, 400);
+    saveTimer = setTimeout(() => saveAnalysis(snapshot()), 400);
   }
 
   const last = await currentAnalysis();
@@ -217,7 +224,8 @@ export async function mountGrid(
   if (fromFen) {
     history.replaceState(null, "", "#/grid"); // a later visit opens the analysis again, not a new one
     const full = fromFen.split(" ")[5] ?? "1";
-    if (!startNew(fromFen, params.get("chess960") === "1", `${today()}, move ${full}`) && (!last || !open(last))) sample();
+    const blackBelow = params.get("black") === "1"; // as the Analysis screen showed it
+    if (!startNew(fromFen, params.get("chess960") === "1", `${today()}, move ${full}`, blackBelow) && (!last || !open(last))) sample();
   }
 
   // ---- Page ----
@@ -237,6 +245,7 @@ export async function mountGrid(
       <label class="ag-size">Size <input type="range" min="56" max="200" step="4" value="96" /></label>
       <button class="ag-expand btn-secondary">Expand all</button>
       <button class="ag-collapse btn-secondary">Collapse all</button>
+      <button class="ag-flip btn-icon" aria-label="Swap sides" title="Swap sides: Black or White at the bottom">${icons.flip}</button>
       <span class="ag-spacer"></span>
       <span class="ag-engine muted"></span>
       <button class="ag-engine-toggle" role="switch"></button>
@@ -379,6 +388,7 @@ export async function mountGrid(
     requestAnimationFrame(() => {
       drawPending = false;
       grid.engineOn = engineOn;
+      grid.flipped = flipped;
       grid.render(root, selected);
       drawPanel();
     });
@@ -416,11 +426,12 @@ export async function mountGrid(
     let check: number | undefined;
     if (rules.inCheck()) check = placement.indexOf(whiteToMove ? "K" : "k");
     input.setPosition(placement, legal, whiteToMove, { lastMove: n.lastMove ?? undefined, check });
+    board.setOrientation(flipped ? "black" : "white");
     board.setPlacement(placement, false);
     const fx = features(placement);
-    marksUnder.replaceChildren(...underMarks(fx));
+    marksUnder.replaceChildren(...underMarks(fx, flipped));
     const hanging = rules.hanging();
-    marksOver.replaceChildren(...overMarks(fx, hanging));
+    marksOver.replaceChildren(...overMarks(fx, hanging, flipped));
     drawThreat(n, rules.inCheck());
 
     $(".ag-move").textContent = (n.uci ? `${n.moveNo} ${n.san}` : "Start position") + (n.moveMark ?? "");
@@ -545,6 +556,11 @@ export async function mountGrid(
     grid.size = Number((e.target as HTMLInputElement).value);
     draw();
   });
+  $(".ag-flip").addEventListener("click", () => {
+    flipped = !flipped;
+    persist();
+    draw();
+  });
   $(".ag-expand").addEventListener("click", () => {
     walk(root, (n) => (n.expanded = true));
     persist();
@@ -598,9 +614,7 @@ export async function mountGrid(
   /** Saves the current tree at once (before switching to another one). */
   function persistNow(): void {
     clearTimeout(saveTimer);
-    let boards = 0;
-    walk(root, () => boards++);
-    saveAnalysis({ id: analysisId, name: analysisName, updated: Date.now(), fen: root.fen, chess960, tree: serialize(root), boards });
+    saveAnalysis(snapshot());
   }
 
   const libDialog = $<HTMLDialogElement>(".ag-library-dialog");

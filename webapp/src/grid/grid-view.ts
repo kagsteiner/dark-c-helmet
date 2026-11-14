@@ -7,7 +7,7 @@
 import { placementFromFen, type Placement } from "../chess/fen.ts";
 import { pieceUrl } from "../ui/board.ts";
 import { features, type Features, type PieceType } from "./features.ts";
-import { overMarks, underMarks } from "./marks.ts";
+import { overMarks, squarePos, underMarks } from "./marks.ts";
 import {
   alternatives, barFraction, layout, MOVE_MARK_TITLE, POS_MARK_BAR, POS_MARK_TITLE, scoreText, type Cell, type GNode,
 } from "./tree.ts";
@@ -38,6 +38,8 @@ export class GridView {
   private svg: SVGSVGElement;
   size = 96;
   engineOn = true;
+  /** Black at the bottom (boards, marks and bars). */
+  flipped = false;
   private cb: GridCallbacks;
   private cache = new Map<string, { placement: Placement; fx: Features; hanging: number[] }>();
 
@@ -202,7 +204,7 @@ export class GridView {
       bar.classList.add("own");
       bar.title = "Your assessment: " + POS_MARK_TITLE[n.posMark];
     } else bar.classList.add("pending");
-    if (!bar.classList.contains("pending")) bar.append(whitePart(f));
+    if (!bar.classList.contains("pending")) bar.append(whitePart(f, this.flipped));
     return bar;
   }
 
@@ -212,8 +214,9 @@ export class GridView {
     const add = (cls: string, sq: number, img?: string) => {
       const d = document.createElement("div");
       d.className = cls;
-      d.style.left = (sq & 7) * 12.5 + "%";
-      d.style.top = (7 - (sq >> 3)) * 12.5 + "%";
+      const { left, top } = squarePos(sq, this.flipped);
+      d.style.left = left + "%";
+      d.style.top = top + "%";
       if (img) d.style.backgroundImage = `url("${img}")`;
       b.append(d);
     };
@@ -221,9 +224,9 @@ export class GridView {
       add("mb-mark", n.lastMove[0]);
       add("mb-mark", n.lastMove[1]);
     }
-    b.append(...underMarks(fx));
+    b.append(...underMarks(fx, this.flipped));
     placement.forEach((p, sq) => p && add("mb-p", sq, pieceUrl(p)));
-    b.append(...overMarks(fx, hanging));
+    b.append(...overMarks(fx, hanging, this.flipped));
     return b;
   }
 
@@ -299,7 +302,7 @@ export class GridView {
     bar.className = "gc-bar";
     const f = this.engineOn ? barFraction(g.score, g.state, g.fen.split(" ")[1] === "w") : 0;
     if (!this.engineOn) bar.classList.add("pending");
-    if (this.engineOn) bar.append(whitePart(f));
+    if (this.engineOn) bar.append(whitePart(f, this.flipped));
     el.append(bar);
 
     const { placement, fx, hanging } = this.analysis(g.fen);
@@ -331,10 +334,11 @@ export class GridView {
   }
 }
 
-/** The white part of a bar, growing from the bottom: half at 0, all at +1. */
-function whitePart(f: number): HTMLElement {
+/** The white part of a bar, growing from White's side (the bottom, or the top when the
+ *  boards are flipped): half at 0, all at +1. */
+function whitePart(f: number, flipped: boolean): HTMLElement {
   const w = document.createElement("div");
-  w.className = "gc-bar-white";
+  w.className = "gc-bar-white" + (flipped ? " from-top" : "");
   w.style.height = 50 + f * 50 + "%";
   return w;
 }

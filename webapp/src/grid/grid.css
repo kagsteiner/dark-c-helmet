@@ -1,7 +1,12 @@
 /* The Analysis grid screen (#/grid): fills the view below the app's top bar. */
 
+/* Exactly the window's height below the top bar (not growing with its content), so the
+   grid and the panel each scroll on their own. `flex: none`: the shell's `flex: 1` would
+   otherwise override the height. */
 .view[data-screen="grid"] {
+  flex: none;
   height: calc(100dvh - var(--topbar));
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -194,6 +199,12 @@
   right: 0;
   bottom: 0;
   background: #f4f4f2;
+}
+
+/* Black at the bottom: the white part comes from the top, as on broadcasts. */
+.gc-bar-white.from-top {
+  top: 0;
+  bottom: auto;
 }
 
 .gc-bar::after {

@@ -36,6 +36,8 @@ export interface Analysis {
   tree: SavedNode;
   /** Number of boards, for the list. */
   boards: number;
+  /** Shown with Black at the bottom. */
+  flipped?: boolean;
 }
 
 export function newId(): string {

@@ -369,7 +369,8 @@ export function analysisScreen(rules: Rules, controller: PlayController, engineS
         renderMoves();
         renderEngine();
         renderReview();
-        $<HTMLAnchorElement>(".an-explore a").href = `#/grid?fen=${encodeURIComponent(fen)}${line!.chess960 ? "&chess960=1" : ""}`;
+        $<HTMLAnchorElement>(".an-explore a").href =
+          `#/grid?fen=${encodeURIComponent(fen)}${line!.chess960 ? "&chess960=1" : ""}${orientation === "black" ? "&black=1" : ""}`;
       };
 
       const arrowFor = (g: Game, uci: string) => {
