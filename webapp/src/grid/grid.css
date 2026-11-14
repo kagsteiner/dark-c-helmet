@@ -1,0 +1,697 @@
+/* The Analysis grid screen (#/grid): fills the view below the app's top bar. */
+
+.view[data-screen="grid"] {
+  height: calc(100dvh - var(--topbar));
+  overflow: hidden;
+}
+
+.ag-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-4);
+  border-bottom: 1px solid var(--hairline);
+  flex-wrap: wrap;
+}
+
+.ag-title {
+  font-size: var(--text-title);
+  margin-right: var(--space-4);
+}
+
+.ag-tag {
+  font-size: var(--text-small);
+  font-weight: var(--weight-regular);
+  color: var(--muted);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  padding: 1px var(--space-1);
+  vertical-align: middle;
+}
+
+.ag-size {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-small);
+}
+
+.ag-spacer {
+  flex: 1;
+}
+
+.ag-engine {
+  font-size: var(--text-small);
+}
+
+.ag-main {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.ag-grid {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+
+.ag-panel {
+  width: 380px;
+  flex: none;
+  overflow-y: auto;
+  border-left: 1px solid var(--hairline);
+  padding: var(--space-4);
+  box-sizing: border-box;
+}
+
+.ag-line {
+  display: flex;
+  justify-content: space-between;
+  font-weight: var(--weight-strong);
+  margin-top: var(--space-3);
+}
+
+.ag-status {
+  font-size: var(--text-small);
+}
+
+.ag-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+
+.ag-notes {
+  font-size: var(--text-small);
+  padding-left: var(--space-4);
+}
+
+.ag-help {
+  font-size: var(--text-small);
+}
+
+.ag-cands {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--space-3);
+}
+
+.ag-cands li + li {
+  border-top: 1px solid var(--hairline);
+}
+
+.ag-cands label {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  column-gap: var(--space-2);
+  padding: var(--space-2) 0;
+  cursor: pointer;
+}
+
+.ag-cand-move {
+  font-weight: var(--weight-strong);
+}
+
+.ag-cand-pv {
+  grid-column: 2 / 4;
+  font-size: var(--text-small);
+}
+
+.ag-dialog {
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  width: min(560px, 90vw);
+}
+
+.ag-dialog::backdrop {
+  background: var(--scrim);
+}
+
+.ag-fen {
+  width: 100%;
+  box-sizing: border-box;
+  font: var(--text-small) ui-monospace, monospace;
+  padding: var(--space-2);
+}
+
+.ag-dialog-buttons {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* ---- The grid ---- */
+
+.grid-scroll {
+  flex: 1;
+  overflow: auto;
+  padding: var(--space-4);
+}
+
+.grid-inner {
+  position: relative;
+  margin-top: 12px; /* the first row's badges sit above its boards */
+}
+
+.grid-lines {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  fill: none;
+  stroke: var(--hairline);
+  stroke-width: 2;
+}
+
+.grid-lines .on {
+  stroke: var(--accent);
+}
+
+.gc {
+  position: absolute;
+  display: grid;
+  grid-template-columns: 7px var(--mb);
+  column-gap: 3px;
+  grid-template-rows: var(--mb) auto auto;
+}
+
+/* Evaluation bar, as in broadcasts: black on top, white growing from the bottom; half and
+   half at 0.0 (a small tick marks the middle). Grey: not evaluated. */
+.gc-bar {
+  position: relative;
+  background: #1b1b1d;
+  border-radius: 2px;
+  overflow: hidden;
+  box-shadow: 0 0 0 1px #8a8a8e; /* an all-white bar stays visible on a light page */
+}
+
+.gc-bar-white {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #f4f4f2;
+}
+
+.gc-bar::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  width: 3px;
+  top: calc(50% - 0.5px);
+  height: 1px;
+  background: #8a8a8e;
+}
+
+.gc-bar.pending {
+  background: #8a8a8e;
+  opacity: 0.35;
+}
+
+.gc-bar.pending::after {
+  display: none;
+}
+
+/* The player's own assessment (engine off): hatched, with a dashed outline. */
+.gc-bar.own {
+  outline: 1px dashed var(--muted);
+  outline-offset: 1px;
+  background: repeating-linear-gradient(135deg, #111113 0 2px, #55555a 2px 4px);
+}
+
+.gc-bar.own .gc-bar-white {
+  background: repeating-linear-gradient(135deg, #ffffff 0 2px, #bdbdb8 2px 4px);
+}
+
+.mb {
+  position: relative;
+  width: var(--mb);
+  height: var(--mb);
+  background: repeating-conic-gradient(var(--square-dark) 0 25%, var(--square-light) 0 50%) 0 0 / 25% 25%;
+  cursor: pointer;
+  outline-offset: 2px;
+  border-radius: 1px;
+}
+
+.mb-p,
+.mb-mark {
+  position: absolute;
+  width: 12.5%;
+  height: 12.5%;
+  background-size: 100%;
+}
+
+.mb-mark {
+  background: var(--last-move);
+}
+
+.gc.on-path .mb {
+  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.gc.selected .mb {
+  outline: 3px solid var(--accent);
+}
+
+/* Needs attention: an orange frame (inside the selection outline). */
+.gc.attention .mb {
+  box-shadow: 0 0 0 3px #f08a24;
+}
+
+.gc.attention.selected .mb,
+.gc.attention.on-path .mb {
+  outline-offset: 5px;
+}
+
+/* Above the board's top right corner, never on it (clear of the selection outline). */
+.gc-badge {
+  position: absolute;
+  right: 0;
+  top: -25px;
+  min-width: 22px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  line-height: 16px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 12px;
+  font-weight: var(--weight-strong);
+  z-index: 1;
+}
+
+.gc-badge.open {
+  background: var(--surface);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+}
+
+.gc-label {
+  grid-column: 2;
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-1);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.gc-move.from-engine {
+  font-style: italic;
+}
+
+.gc-move-mark {
+  font-weight: var(--weight-strong);
+  margin-left: 1px;
+}
+
+/* Move marks: good ones green/blue, bad ones the review colours. */
+.mm-brilliant { color: #1c9b8e; }
+.mm-good { color: #3b8f3b; }
+.mm-interesting { color: var(--accent); }
+.mm-dubious { color: var(--mark-inaccuracy); }
+.mm-mistake { color: var(--mark-mistake); }
+.mm-blunder { color: var(--mark-blunder); }
+
+.gc-assess {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.gc-pos-mark {
+  font-weight: var(--weight-strong);
+}
+
+.gc-eval {
+  color: var(--muted);
+}
+
+.gc-second {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 3px;
+  height: 18px;
+  font-size: 11px;
+}
+
+.gc-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  box-sizing: border-box;
+  border-radius: 4px;
+  font-weight: var(--weight-strong);
+  padding: 0 6px;
+}
+
+.gc-chip.white {
+  background: #f4f4f2;
+  color: #1b1b1d;
+  border: 1px solid #b9b9bd;
+}
+
+.gc-chip.black {
+  background: #1b1b1d;
+  color: #f4f4f2;
+  border: 1px solid #6b6b70;
+}
+
+.gc-chip.draw {
+  background: var(--hairline);
+}
+
+.gc-material {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.gc-piece {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  background-size: 100%;
+}
+
+.gc-material-sum {
+  margin-left: 3px;
+  font-weight: var(--weight-strong);
+}
+
+.gc-right {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.gc-comment {
+  color: var(--accent);
+  display: inline-flex;
+  cursor: help;
+}
+
+/* ---- Analysis marks on the boards (marks.ts) ---- */
+
+.fm-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.fm-glow,
+.fm-weak,
+.fm-passed,
+.fm-hanging {
+  position: absolute;
+  width: 12.5%;
+  height: 12.5%;
+  pointer-events: none;
+}
+
+/* A king in danger: a red glow reaching onto the next squares. */
+.fm-glow {
+  transform: scale(2.2);
+  background: radial-gradient(circle, rgba(225, 40, 30, 0.95) 0%, rgba(225, 40, 30, 0.55) 30%, rgba(225, 40, 30, 0) 68%);
+}
+
+/* A weak pawn: a red dot in the square's top right corner. */
+.fm-weak::after {
+  content: "";
+  position: absolute;
+  right: 8%;
+  top: 8%;
+  width: 16%;
+  height: 16%;
+  border-radius: 50%;
+  background: #d8352b;
+}
+
+/* A passed pawn: a green arrow at the square's front edge, pointing where it runs. */
+.fm-passed::after {
+  content: "";
+  position: absolute;
+  left: 4%;
+  width: 34%;
+  height: 34%;
+  background: #22a45a;
+  clip-path: polygon(50% 0, 100% 60%, 68% 60%, 68% 100%, 32% 100%, 32% 60%, 0 60%);
+  filter: drop-shadow(0 0 1px #fff);
+}
+
+.fm-passed.up::after {
+  top: 4%;
+}
+
+.fm-passed.down::after {
+  bottom: 4%;
+  transform: rotate(180deg);
+}
+
+.fm-passed.advanced::after {
+  width: 44%;
+  height: 44%;
+}
+
+/* A piece lost in the exchange: a thin red ring along the square's edge. */
+.fm-hanging {
+  background: radial-gradient(circle, transparent 60%, rgba(216, 53, 43, 0.9) 62%, rgba(216, 53, 43, 0.9) 70%, transparent 72%);
+}
+
+/* Small boards: only the king glow and the rings. */
+.grid-inner.small .fm-weak,
+.grid-inner.small .fm-passed {
+  display: none;
+}
+
+/* ---- Panel controls ---- */
+
+.ag-attention {
+  min-height: var(--touch);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius);
+  border: 2px solid #f08a24;
+  color: #c7660a;
+  font-weight: var(--weight-strong);
+}
+
+.ag-attention[aria-pressed="true"] {
+  background: #f08a24;
+  color: #fff;
+}
+
+.ag-marks {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.ag-marks-label {
+  font-size: var(--text-small);
+}
+
+.ag-seg {
+  display: flex;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.ag-seg button {
+  flex: 1;
+  min-height: 34px;
+  font-weight: var(--weight-strong);
+  font-size: var(--text-small);
+}
+
+.ag-seg button + button {
+  border-left: 1px solid var(--hairline);
+}
+
+.ag-seg button.on {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.ag-comment {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: var(--space-3);
+  font: inherit;
+  padding: var(--space-2);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  resize: vertical;
+}
+
+.ag-material {
+  margin-top: var(--space-3);
+}
+
+.ag-help summary {
+  cursor: pointer;
+}
+
+/* ---- Top bar additions ---- */
+
+.ag-bar .ag-name {
+  font: inherit;
+  font-weight: var(--weight-strong);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text);
+  flex: 0 0 14em;
+  width: 14em;
+  min-height: 0;
+}
+
+.ag-bar .ag-name:hover,
+.ag-bar .ag-name:focus {
+  border-color: var(--hairline);
+  background: var(--surface);
+}
+
+.ag-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: var(--space-2) 0;
+  background: var(--hairline);
+}
+
+.ag-engine-toggle {
+  min-height: 32px;
+  padding: 0 var(--space-3);
+  border-radius: 16px;
+  border: 1px solid var(--hairline);
+  color: var(--muted);
+  font-weight: var(--weight-strong);
+}
+
+.ag-engine-toggle.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+.ag-library-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.ag-library-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.ag-library-list li > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.ag-library-list .muted {
+  font-size: var(--text-small);
+}
+
+/* ---- Ghosts: folded engine lines ---- */
+
+.grid-lines .ghost-line {
+  stroke-dasharray: 4 4;
+}
+
+.gc.ghost .mb {
+  opacity: 0.5;
+  outline: 2px dashed var(--muted);
+  outline-offset: 2px;
+  transition: opacity var(--motion);
+}
+
+.gc.ghost .mb:hover {
+  opacity: 0.85;
+}
+
+.gc.ghost .gc-bar {
+  opacity: 0.5;
+}
+
+.gc.ghost .gc-label {
+  color: var(--muted);
+}
+
+.gc-ghost-pill {
+  position: absolute;
+  height: 30px;
+  min-width: 34px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--muted);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--accent);
+  font-size: 10px;
+  line-height: 1.1;
+  z-index: 1;
+}
+
+.gc-ghost-pill strong {
+  font-size: 12px;
+}
+
+.gc-ghost-pill:hover {
+  border-style: solid;
+  border-color: var(--accent);
+}
+
+.ag-ghost-text {
+  font-size: var(--text-small);
+  margin-bottom: 0;
+}
+
+/* ---- Threat (level 2, engine): red arrow on the large board and a line below it ---- */
+
+.ag-board {
+  --arrow: rgba(216, 53, 43, 0.85);
+}
+
+.ag-threat {
+  font-size: var(--text-small);
+  min-height: 1.4em;
+}
+
+.ag-threat.on {
+  color: #c62f2f;
+}
+
+/* ---- Suggestions: how long and deep the engine thought ---- */
+
+.ag-effort {
+  font-size: var(--text-small);
+  margin-top: 0;
+}
+
+.ag-effort-changed {
+  font-size: var(--text-small);
+  color: var(--mark-mistake);
+}

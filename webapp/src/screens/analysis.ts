@@ -116,6 +116,9 @@ export function analysisScreen(rules: Rules, controller: PlayController, engineS
               </div>
               <p class="an-review-status small muted"></p>
             </div>
+            <div class="an-explore">
+              <a class="btn-secondary" href="#/grid" title="Open this position in the analysis grid: lines as rows of small boards">Explore from here</a>
+            </div>
           </div>
         </section>`;
       const $ = <T extends Element>(sel: string) => root.querySelector<T>(sel)!;
@@ -366,6 +369,7 @@ export function analysisScreen(rules: Rules, controller: PlayController, engineS
         renderMoves();
         renderEngine();
         renderReview();
+        $<HTMLAnchorElement>(".an-explore a").href = `#/grid?fen=${encodeURIComponent(fen)}${line!.chess960 ? "&chess960=1" : ""}`;
       };
 
       const arrowFor = (g: Game, uci: string) => {

@@ -41,7 +41,7 @@ echo "rules"
 # shellcheck disable=SC2086
 emcc $CFLAGS -I"$SRC" "$ROOT/webapp/engine/rules_api.c" "$SRC/bitboard.c" "$SRC/position.c" \
     "$SRC/movegen.c" "$SRC/eval.c" "$SRC/perft.c" $COMMON \
-    -sEXPORTED_FUNCTIONS=_rules_init,_rules_set_fen,_rules_fen,_rules_play,_rules_undo,_rules_state,_rules_in_check,_rules_moves,_rules_perft \
+    -sEXPORTED_FUNCTIONS=_rules_init,_rules_set_fen,_rules_fen,_rules_play,_rules_undo,_rules_state,_rules_in_check,_rules_moves,_rules_perft,_rules_hanging,_rules_null_fen \
     -sEXPORT_NAME=createRules -o "$OUT/dh-rules.js"
 
 echo "human player"

@@ -100,6 +100,7 @@ The work plan is in `BACKLOG.md`.
 | Play | the game in progress; new-game sheet (variant, start position, colour, time control) |
 | Setup | position editor, then "Play" or "Analyze" |
 | Analysis | endless analysis of the current position; full-game pass with eval graph |
+| Analysis grid | exploring lines from a position as rows of small boards (desktop only; from Analysis) |
 | Progress | the 960 Chess960 start positions with the player's games and starred wins |
 | Book | statistics, export, merge from file |
 | Settings | threads, hash, move input, theme |
@@ -200,6 +201,43 @@ key-value store), and with reduced motion the tiles only fade.
 - Opened during a game: both clocks stop, the star goes out, moves tried in analysis do not
   touch the game, "Back to game" resumes exactly where it was.
 - Import PGN (post-MVP), FEN import/export (MVP).
+- "Explore from here" opens the position in the analysis grid (from 1024 px wide; hidden on
+  phones and small tablets).
+
+### Analysis grid
+
+For exploring how a position can go on (openings, correspondence games), where the normal
+Analysis screen would show one line at a time. Route `#/grid`, not in the navigation; reached
+with "Explore from here" on the Analysis screen (`#/grid?fen=…&chess960=1` starts a new
+analysis there). Code: `src/grid/` (`grid-app.ts` builds the screen), `src/screens/grid.ts`.
+
+- **Grid:** one column per ply, one row per line. A node's first child continues its row;
+  other children start rows below, joined to their branch point (nearest branch first, so
+  connectors never cross). A badge above a board hides or shows its alternatives.
+- **Each board:** an evaluation bar as in broadcasts (black on top, white from the bottom,
+  half and half at 0.0, linear to ±8 or a mate); analysis marks on the board itself (red
+  glow: king in danger; red dot: weak pawn; green arrow: passed pawn; red ring: piece lost in
+  the exchange, from the engine's static exchange evaluation, both colours); below it the
+  move with the player's move mark, the player's position mark, the extra material, the
+  engine eval and a comment sign. Red means weakness or danger, green strength.
+- **Panel (selected board):** large board to play moves on; move marks `!! ! !? ?! ? ??`,
+  position marks `++ + +/- 0 -/+ - --` (PGN NAGs 18, 16, 14, 10, 15, 17, 19); comment;
+  "Needs attention" (orange frame); make main line; delete from here; the position notes in
+  words; the threat.
+- **Engine:** the app's engine, shared; a switch in the screen's bar turns it off for this
+  screen (then the bar shows the player's own position mark, hatched). When on: a quick look
+  at every board, a deep search for boards played by hand or marked for attention, and the
+  threat of the selected board (a null-move search; shown only if it mates or wins material,
+  described along the forcing line: "wins a rook and a pawn", "wins the exchange").
+- **Suggestions:** a short search after every legal move, a longer one for the best six; the
+  panel says how long and how deep the engine thought; "Think deeper" doubles the time. Each
+  chosen move adds one board; its continuation stays folded as a ghost (the final position,
+  faded and dashed, with "N moves" on the connector): click the ghost to unfold the line, the
+  connector to unfold one move. A ghost keeps the line it was added with.
+- **Saving:** every analysis is saved on the device as the player works (IndexedDB keys
+  `grid-analysis:<id>`); "Analyses…" lists them. PGN export and import with variations,
+  comments and NAGs; attention and engine evals go into comments (`[%attention]`, `[%eval]`).
+  Folded ghosts are not exported.
 
 ### Setup
 

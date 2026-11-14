@@ -126,3 +126,48 @@ EMSCRIPTEN_KEEPALIVE const char* rules_moves(void) {
 
 // Number of leaf nodes at the given depth (tests).
 EMSCRIPTEN_KEEPALIVE double rules_perft(int depth) { return (double)perft(&pos, depth); }
+
+// Pieces the opponent wins material on by capturing them (static exchange evaluation: the
+// capture sequence on that square, cheapest attacker first, each side free to stop). Both
+// colours: the side to move's captures as they stand, the other side's after a null move
+// (not when in check). JSON array of squares 0-63.
+static void hanging_squares(Bitboard* found) {
+    MoveList list;
+    generate_legal(&pos, &list);
+    for (int i = 0; i < list.count; ++i) {
+        Move m = list.moves[i].move;
+        if (move_is_capture(m) && see_ge(&pos, m, 1)) *found |= BB(move_to(m));
+    }
+}
+
+EMSCRIPTEN_KEEPALIVE const char* rules_hanging(void) {
+    Bitboard found = 0;
+    hanging_squares(&found);
+    if (!in_check(&pos)) {
+        pos_make_null(&pos);
+        hanging_squares(&found);
+        pos_unmake_null(&pos);
+    }
+    int n = snprintf(out, sizeof(out), "[");
+    int first = 1;
+    for (int sq = 0; sq < 64; ++sq) {
+        if (!(found & BB(sq))) continue;
+        n += snprintf(out + n, sizeof(out) - n, "%s%d", first ? "" : ",", sq);
+        first = 0;
+    }
+    snprintf(out + n, sizeof(out) - n, "]");
+    return out;
+}
+
+// The position with the side to move passing (a null move), to ask what the opponent
+// threatens. Empty when the side to move is in check.
+EMSCRIPTEN_KEEPALIVE const char* rules_null_fen(void) {
+    if (in_check(&pos)) {
+        out[0] = '\0';
+        return out;
+    }
+    pos_make_null(&pos);
+    pos_to_fen(&pos, out, sizeof(out));
+    pos_unmake_null(&pos);
+    return out;
+}
