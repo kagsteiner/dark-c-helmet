@@ -230,6 +230,9 @@ analysis there). Code: `src/grid/` (`grid-app.ts` builds the screen), `src/scree
   count) all carry a mark, own or backed up, gets the best of them for the side to move;
   checkmate and stalemate mark themselves. The player's own mark always wins (the panel notes
   when the lines below say otherwise). "Needs attention" and "unclear" (∞) pass nothing up.
+  "Not needed" (a cutoff by hand, like alpha-beta: another move already settles the position
+  before it) leaves the move out of the backing up; the board fades, its move is struck
+  through, a ✂ below; the background engine skips it (PGN: `[%cut]`).
   Shown as an outlined mark (own marks are solid), a fainter hatched bar with the engine off,
   and a thick line along the moves the marks choose (all of them on a tie), from the top of
   each settled part of the tree; refuted lines get none. Only own marks go into the PGN.

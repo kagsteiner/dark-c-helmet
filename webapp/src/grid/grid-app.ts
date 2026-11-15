@@ -158,6 +158,7 @@ export async function mountGrid(
       comment: n.comment, moveMark: n.moveMark, posMark: n.posMark, expanded: n.expanded, children: n.children.map(serialize),
       ghost: n.ghost ? { ucis: n.ghost.ucis, score: n.ghost.score } : undefined,
       hidden: n.hidden || undefined,
+      cut: n.cut || undefined,
     };
   }
 
@@ -165,6 +166,7 @@ export async function mountGrid(
     Object.assign(n, {
       score: s.score, analysed: s.analysed, depth: s.depth, expanded: s.expanded, attention: s.attention ?? s.toCheck ?? false,
       comment: s.comment ?? "", moveMark: s.moveMark ?? null, posMark: s.posMark ?? null, hidden: s.hidden ?? false,
+      cut: s.cut ?? false,
     });
     if (s.ghost) n.ghost = makeGhost(n, s.ghost.ucis, s.ghost.score);
     for (const cs of s.children) {
@@ -282,6 +284,7 @@ export async function mountGrid(
           <button class="ag-suggest btn-secondary">Suggest moves</button>
           <button class="ag-deep btn-secondary" title="One search of the position, as deep as you let it run: what the engine itself would play">Deep search</button>
           <button class="ag-attention" aria-pressed="false">Needs attention</button>
+          <button class="ag-cut btn-secondary" aria-pressed="false">Not needed</button>
         </div>
         <div class="ag-marks">
           <span class="ag-marks-label muted">Move</span>
@@ -326,7 +329,9 @@ export async function mountGrid(
           <p>Your position marks work backwards: a position whose lines after it all carry a mark
             gets the best of them for the side to move (an outlined mark), and a thick line follows
             the moves your marks choose. A mark you set yourself (solid) always wins. A position
-            that needs attention, or is marked unclear (∞), leaves everything before it open.</p>
+            that needs attention, or is marked unclear (∞), leaves everything before it open.
+            "Not needed" (✂, faded) is a cutoff by hand: another move already settles the
+            position before it, so the marks leave this move out, and the engine skips it.</p>
           <p>Right-click a board for more: needs attention, make main line, hide the line from
             there on, delete. A hidden line shows as one small board, the end of the line, with the
             lines branching off it added up (+N); click it to show the line again.</p>
@@ -502,6 +507,7 @@ export async function mountGrid(
     if (a.own && a.derived && a.derived !== a.mark) note = `Your lines after it say ${a.derived}.`;
     else if (!a.own && a.mark && n.state === "ongoing") note = `${a.mark} follows from your marks on the lines after it.`;
     if (n.attention && a.mark) note = (note ? note + " " : "") + "Needs attention: counts for nothing before it until you remove the mark.";
+    if (n.cut) note = "Not needed: the marks before it leave this move out.";
     $(".ag-assess").textContent = note;
     let status = "";
     if (n.state !== "ongoing") status = n.state;
@@ -514,6 +520,12 @@ export async function mountGrid(
     const att = $(".ag-attention");
     att.setAttribute("aria-pressed", String(n.attention));
     att.title = n.attention ? "Remove the mark" : "Mark this position: it needs attention";
+    const cutBtn = $<HTMLButtonElement>(".ag-cut");
+    cutBtn.setAttribute("aria-pressed", String(!!n.cut));
+    cutBtn.disabled = !n.parent;
+    cutBtn.title = n.cut
+      ? "Count this move again"
+      : "This move need not be analysed: another move already settles the position before it (a cutoff by hand). The marks before it leave it out.";
     for (const b of $(".ag-move-marks").children as HTMLCollectionOf<HTMLButtonElement>) {
       b.classList.toggle("on", b.dataset.mark === n.moveMark);
       b.disabled = !n.parent;
@@ -563,6 +575,13 @@ export async function mountGrid(
     persist();
     draw();
     pump();
+  }
+
+  function toggleCut(n: GNode): void {
+    if (!n.parent) return;
+    n.cut = !n.cut;
+    persist();
+    draw();
   }
 
   function makeMainLine(n: GNode): void {
@@ -654,6 +673,7 @@ export async function mountGrid(
       select(n);
       panelTop();
       item("Needs attention", () => toggleAttention(n), { check: n.attention });
+      item("Not needed", () => toggleCut(n), { check: !!n.cut, disabled: !n.parent });
       item("Make main line", () => makeMainLine(n), { disabled: !n.parent || n.parent.children[0] === n });
       item(branches(n) ? "Hide lines" : "Hide line", () => hideLine(n), { disabled: !n.parent });
       line();
@@ -696,6 +716,7 @@ export async function mountGrid(
   grid.el.addEventListener("scroll", closeMenu);
 
   $(".ag-attention").addEventListener("click", () => toggleAttention(selected));
+  $(".ag-cut").addEventListener("click", () => toggleCut(selected));
   $<HTMLTextAreaElement>(".ag-comment").addEventListener("input", (e) => {
     selected.comment = (e.target as HTMLTextAreaElement).value;
     persist();
@@ -875,6 +896,7 @@ export async function mountGrid(
       if (n.posMark) nags.push(POS_MARK_NAG[n.posMark]);
     } else if (n.posMark) cmds.push(`[%assess ${n.posMark}]`); // no NAGs before the first move
     if (n.attention) cmds.push("[%attention]");
+    if (n.cut) cmds.push("[%cut]");
     if (n.analysed && n.score && !locked) {
       const s = n.score;
       cmds.push(`[%eval ${"mate" in s ? "#" + s.mate : (s.cp / 100).toFixed(2)}]`);
@@ -950,6 +972,7 @@ export async function mountGrid(
       .replace(/\[%(\w+)\s*([^\]]*)\]/g, (_, cmd: string, arg: string) => {
         arg = arg.trim();
         if (cmd === "attention") n.attention = true;
+        else if (cmd === "cut") n.cut = true;
         else if (cmd === "assess" && (POS_MARKS as readonly string[]).includes(arg)) n.posMark = arg as PosMark;
         else if (cmd === "eval") {
           const score: Score | null = arg.startsWith("#") ? { mate: Number(arg.slice(1)) } : Number.isFinite(Number(arg)) ? { cp: Math.round(Number(arg) * 100) } : null;
@@ -1125,7 +1148,15 @@ export async function mountGrid(
     return n.attention || n.origin === "user";
   }
 
+  /** `n` or a move before it is marked "not needed": no engine time for it. */
+  function isCut(n: GNode): boolean {
+    for (let p: GNode | null = n; p; p = p.parent) if (p.cut) return true;
+    return false;
+  }
+
   function needsWork(n: GNode): boolean {
+    // Lines marked "not needed" get no engine time, unless the player looks at one.
+    if (n !== selected && isCut(n)) return false;
     return n.state === "ongoing" && (n.analysed === 0 || (wantsDeep(n) && n.analysed < 2));
   }
 

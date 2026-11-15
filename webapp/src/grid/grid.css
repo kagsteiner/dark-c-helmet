@@ -850,3 +850,26 @@
   border: none;
   border-top: 1px solid var(--hairline);
 }
+
+/* ---- Not needed (a cutoff by hand): the board fades, a pair of scissors below ---- */
+
+.gc.cut .mb,
+.gc.cut .gc-bar {
+  opacity: 0.4;
+}
+
+.gc.cut .gc-move {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+.gc-cut {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.ag-cut[aria-pressed="true"] {
+  background: var(--muted);
+  border-color: var(--muted);
+  color: var(--bg);
+}

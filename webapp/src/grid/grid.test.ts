@@ -250,3 +250,18 @@ test("hidden line: one small board ends the row; its branches add up", () => {
   assert.equal(row.length, 1);
   assert.ok(row[0].folded);
 });
+
+test("assess: a move marked not needed is left out (a cutoff by hand)", () => {
+  const root = node(null, "r", "p w"); // White to move
+  const good = node(root, "good", "p b");
+  const other = node(root, "other", "p b");
+  good.posMark = "+";
+  assert.equal(assess(root).get(root)!.mark, null); // "other" is open
+  other.cut = true;
+  const r = assess(root);
+  assert.equal(r.get(root)!.mark, "+");
+  assert.deepEqual(r.get(root)!.best, [good]);
+  // Everything cut: nothing to go on.
+  good.cut = true;
+  assert.equal(assess(root).get(root)!.mark, null);
+});

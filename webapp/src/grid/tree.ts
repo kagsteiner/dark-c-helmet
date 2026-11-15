@@ -83,6 +83,9 @@ export interface GNode {
   /** Hidden by the player: this position and everything after it are drawn as one small
    *  board, the end of its line. */
   hidden?: boolean;
+  /** Marked "not needed" by the player (a cutoff by hand): the move is not worth analysing,
+   *  because another move already settles the position. The marks before it leave it out. */
+  cut?: boolean;
 }
 
 export interface Threat {
@@ -241,14 +244,17 @@ export interface Assessment {
 }
 
 /** Backs up the player's position marks by minimax. A position counts as settled with its
- *  own mark, or when every line after it (folded engine lines aside) is settled: then it is
- *  worth the best of them for the side to move. Checkmate and stalemate settle themselves. A
+ *  own mark, or when every line after it (folded engine lines and moves marked "not needed"
+ *  aside) is settled: then it is worth the best of them for the side to move. Checkmate and stalemate settle themselves. A
  *  position marked "needs attention", or marked unclear, settles nothing above it. */
 export function assess(root: GNode): Map<GNode, Assessment> {
   const out = new Map<GNode, Assessment>();
   /** The value passed up: the mark as a number, or null (open). */
   const visit = (n: GNode): number | null => {
-    const values = n.children.map(visit); // every child, also below an open one
+    const all = n.children.map(visit); // every child, also below an open one
+    // Moves marked "not needed" are left out.
+    const kids = n.children.filter((c) => !c.cut);
+    const values = all.filter((_, i) => !n.children[i].cut);
     let derived: PosMark | null = null;
     let best: GNode[] = [];
     if (n.state === "checkmate") derived = n.fen.split(" ")[1] === "w" ? "--" : "++";
@@ -256,7 +262,7 @@ export function assess(root: GNode): Map<GNode, Assessment> {
     else if (values.length && values.every((v) => v !== null)) {
       const white = n.fen.split(" ")[1] === "w";
       const v = (white ? Math.max : Math.min)(...(values as number[]));
-      best = n.children.filter((_, i) => values[i] === v);
+      best = kids.filter((_, i) => values[i] === v);
       derived = markOf(v);
     }
     const mark = n.posMark ?? derived;

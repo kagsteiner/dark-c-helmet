@@ -24,6 +24,8 @@ export interface SavedNode {
   ghost?: { ucis: string[]; score: Score | null };
   /** Hidden by the player (drawn as the end of its line). */
   hidden?: boolean;
+  /** Marked "not needed" (a cutoff by hand). */
+  cut?: boolean;
   /** First prototype. */
   toCheck?: boolean;
 }

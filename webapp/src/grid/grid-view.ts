@@ -163,6 +163,7 @@ export class GridView {
     if (n === selected) el.classList.add("selected");
     else if (path.has(n)) el.classList.add("on-path");
     if (n.attention) el.classList.add("attention");
+    if (n.cut) el.classList.add("cut");
 
     el.append(this.bar(n, a));
 
@@ -289,6 +290,13 @@ export class GridView {
       ev.textContent = scoreText(n.score, n.state);
       ev.title = n.analysed === 2 ? `Engine, deep search (depth ${n.depth})` : n.analysed ? `Engine, quick look (depth ${n.depth})` : "";
       right.append(ev);
+    }
+    if (n.cut) {
+      const c = document.createElement("span");
+      c.className = "gc-cut";
+      c.textContent = "✂";
+      c.title = "Not needed: another move already settles the position before it";
+      right.append(c);
     }
     if (n.comment.trim()) {
       const c = document.createElement("span");
