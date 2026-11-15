@@ -67,6 +67,10 @@ export async function mountGrid(
   // game): no engine and nothing computed is shown, only the player's own marks and comments.
   let engineOn = false;
   let locked = false;
+  /** The game this analysis belongs to (correspondence against the engine), if any. */
+  let gameOf: string | null = null;
+  /** The board of the game's current position (in an analysis of the running game). */
+  let gameNode: GNode | null = null;
 
   // ---- Tree ----
 
@@ -187,6 +191,50 @@ export async function mountGrid(
     flipped = a.flipped ?? false;
     locked = a.locked ?? false;
     engineOn = !locked && (a.engineOn ?? false);
+    gameOf = a.game ?? null;
+    gameNode = null;
+    syncGame();
+    return true;
+  }
+
+  /** The analysis belongs to the game being played now, and it is not over: no engine, no
+   *  computed hints, no unlocking. */
+  function gameRunning(): boolean {
+    return !!gameOf && controller.gameId === gameOf && !controller.result;
+  }
+
+  /** An analysis of the game being played: its moves become the main line (new ones are
+   *  added), and the lock is on while the game goes on. */
+  function syncGame(): void {
+    if (!gameOf || controller.gameId !== gameOf) return;
+    let n = root;
+    for (const m of controller.game.moves) {
+      const c = child(n, m.uci, "seed");
+      if (!c) break;
+      n.children.splice(n.children.indexOf(c), 1);
+      n.children.unshift(c);
+      n.expanded = true;
+      n = c;
+    }
+    gameNode = n;
+    selected = n;
+    for (let p: GNode | null = n; p; p = p.parent) p.hidden = false;
+    if (gameRunning()) {
+      locked = true;
+      engineOn = false;
+    }
+  }
+
+  /** The analysis of the game being played (made when first needed). */
+  function openGame(id: string, existing: Analysis | null): boolean {
+    if (controller.gameId !== id) return false;
+    if (existing) return open(existing);
+    const s = controller.setup;
+    const date = new Date(controller.startedAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+    if (!startNew(s.startFen, s.chess960, `Game vs Dark C. Helmet, ${date}`, s.human === "b")) return false;
+    analysisId = "game-" + id;
+    gameOf = id;
+    syncGame();
     return true;
   }
 
@@ -205,6 +253,8 @@ export async function mountGrid(
     flipped = blackBelow;
     engineOn = false;
     locked = false;
+    gameOf = null;
+    gameNode = null;
     return true;
   }
 
@@ -223,7 +273,7 @@ export async function mountGrid(
     walk(root, () => boards++);
     return {
       id: analysisId, name: analysisName, updated: Date.now(), fen: root.fen, chess960, tree: serialize(root), boards, flipped,
-      engineOn, locked,
+      engineOn, locked, ...(gameOf ? { game: gameOf } : {}),
     };
   }
 
@@ -238,7 +288,13 @@ export async function mountGrid(
   // "Explore from here" on the Analysis screen: a new analysis from that position.
   const params = new URLSearchParams(location.hash.split("?")[1] ?? "");
   const fromFen = params.get("fen");
-  if (fromFen) {
+  const forGame = params.get("game");
+  if (forGame) {
+    // "Think in the grid" on the game screen: the analysis of that game.
+    history.replaceState(null, "", "#/grid");
+    const mine = (await listAnalyses()).find((a) => a.game === forGame) ?? null;
+    if (!openGame(forGame, mine) && (!last || !open(last))) sample();
+  } else if (fromFen) {
     history.replaceState(null, "", "#/grid"); // a later visit opens the analysis again, not a new one
     const full = fromFen.split(" ")[5] ?? "1";
     const blackBelow = params.get("black") === "1"; // as the Analysis screen showed it
@@ -271,6 +327,13 @@ export async function mountGrid(
     <main class="ag-main">
       <section class="ag-grid"></section>
       <aside class="ag-panel">
+        <div class="ag-game" hidden>
+          <p class="ag-game-text"></p>
+          <div class="ag-nav">
+            <button class="ag-game-play btn-primary"></button>
+            <a class="ag-game-back btn-secondary" href="#/play">Back to the game</a>
+          </div>
+        </div>
         <div class="ag-board"></div>
         <div class="ag-info">
           <div class="ag-line"><span class="ag-move"></span><span class="ag-score numeric"></span></div>
@@ -456,7 +519,36 @@ export async function mountGrid(
       grid.flipped = flipped;
       grid.render(root, selected);
       drawPanel();
+      drawGame();
     });
+  }
+
+  /** The strip for the game this analysis belongs to: whose move it is, the move to play
+   *  (the first move of the selected line after the game's position), back to the game. */
+  function drawGame(): void {
+    const box = $(".ag-game");
+    const ours = !!gameOf && controller.gameId === gameOf;
+    box.hidden = !ours;
+    if (!ours) return;
+    const text = $(".ag-game-text");
+    const play = $<HTMLButtonElement>(".ag-game-play");
+    const move = gameMove();
+    if (controller.result) text.textContent = `This game is over: ${controller.result}`;
+    else if (!controller.humanToMove) text.textContent = "Your game: the engine is to move. Go back to the game to let it play.";
+    else text.textContent = move
+      ? "Your game: your move. When you have decided, play it from here."
+      : "Your game: your move. Select a board after the game's position (the last board of the main line) to play its move.";
+    play.hidden = !!controller.result || !controller.humanToMove;
+    play.disabled = !move;
+    play.textContent = move ? `Play ${move.moveNo} ${move.san} in the game` : "Play in the game";
+  }
+
+  /** The move the player would play in the game: the first move of the line to the selected
+   *  board after the game's position, if the selection is on such a line. */
+  function gameMove(): GNode | null {
+    if (!gameNode || !gameRunning() || !controller.humanToMove) return null;
+    for (let n: GNode | null = selected; n?.parent; n = n.parent) if (n.parent === gameNode) return n;
+    return null;
   }
 
   // Mark buttons: built once.
@@ -716,6 +808,14 @@ export async function mountGrid(
   grid.el.addEventListener("scroll", closeMenu);
 
   $(".ag-attention").addEventListener("click", () => toggleAttention(selected));
+  // The move is played in the game, then back to the game screen, where the engine replies.
+  $(".ag-game-play").addEventListener("click", () => {
+    const m = gameMove();
+    if (!m?.uci || !controller.humanMove(m.uci)) return;
+    gameNode = m;
+    persistNow();
+    location.hash = "#/play";
+  });
   $(".ag-cut").addEventListener("click", () => toggleCut(selected));
   $<HTMLTextAreaElement>(".ag-comment").addEventListener("input", (e) => {
     selected.comment = (e.target as HTMLTextAreaElement).value;
@@ -1003,14 +1103,17 @@ export async function mountGrid(
   const priority: (() => Promise<void>)[] = [];
 
   const toggle = $(".ag-engine-toggle");
-  const lockBtn = $(".ag-lock");
+  const lockBtn = $<HTMLButtonElement>(".ag-lock");
   function drawEngineToggle(): void {
     toggle.hidden = locked;
     lockBtn.classList.toggle("on", locked);
     lockBtn.textContent = locked ? "Locked: own analysis" : "Lock";
-    lockBtn.title = locked
-      ? "No engine and no computed hints in this analysis. Click to unlock."
-      : "Lock this analysis as your own (e.g. a correspondence game): no engine, no computed hints";
+    lockBtn.disabled = locked && gameRunning();
+    lockBtn.title = lockBtn.disabled
+      ? "Locked while your game against the engine goes on"
+      : locked
+        ? "No engine and no computed hints in this analysis. Click to unlock."
+        : "Lock this analysis as your own (e.g. a correspondence game): no engine, no computed hints";
     if (locked) $(".ag-engine").textContent = "";
     toggle.setAttribute("aria-checked", String(engineOn));
     toggle.textContent = engineOn ? "Engine on" : "Engine off";
@@ -1025,6 +1128,7 @@ export async function mountGrid(
     suggestions = null;
   }
   lockBtn.addEventListener("click", async () => {
+    if (locked && gameRunning()) return;
     if (locked) {
       const ok = confirm(
         "Unlock this analysis? The engine and the computed hints (marks on the boards, threats, notes) can then be used " +

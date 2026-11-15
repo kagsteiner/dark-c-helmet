@@ -1,6 +1,6 @@
 // The Play screen: renders the PlayController's game and passes the player's input to it.
 import { placementFromFen } from "../chess/fen.ts";
-import { describeTimeControl, formatClock, type Side } from "../play/clocks.ts";
+import { describeTimeControl, formatClock, noClock, type Side } from "../play/clocks.ts";
 import { opponentName, type PlayController, type StarLoss } from "../play/controller.ts";
 import { isBookmarked, setBookmarkNote, startName, toggleBookmark } from "../play/bookmarks.ts";
 import { chooseNewGame } from "../play/new-game.ts";
@@ -38,15 +38,18 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
             <ol class="move-list numeric" aria-label="Moves"></ol>
             <p class="play-status small muted" aria-live="polite"></p>
             <p class="play-help small" aria-live="polite"></p>
+            <a class="play-think btn-primary" href="#/grid" hidden
+              title="Your own analysis of this game in the analysis grid: locked, no engine. Your star stays.">Think in the grid</a>
           </div>
           <div class="play-actions">
-            <button class="btn-icon" data-action="undo" aria-label="Take back" title="Take back">${icons.undo}</button>
+            <button class="btn-icon play-undo" data-action="undo" aria-label="Take back" title="Take back">${icons.undo}</button>
             <button class="btn-icon" data-action="hint" aria-label="Hint" title="Hint">${icons.hint}</button>
             <button class="btn-icon" data-action="evaluation" aria-label="Evaluation" title="Evaluation">${icons.evaluation}</button>
             <button class="btn-icon star" data-action="star" aria-label="Star" title="Star"></button>
             <button class="btn-icon" data-action="bookmark" aria-label="Bookmark this start position" title="Bookmark this start position" aria-pressed="false" hidden></button>
             <button class="btn-icon" data-action="colors" aria-label="Board colours" title="Board colours">${icons.palette}</button>
             <span class="spacer"></span>
+            <button class="btn-secondary" data-action="odds" title="A game against Dark C. Helmet with odds for you: less time for the engine, no clock for you, takebacks that keep the star">Odds…</button>
             <button class="btn-secondary" data-action="new">New game</button>
             <input class="bookmark-note" type="text" maxlength="100" placeholder="Add a note to this bookmark" aria-label="Note for this bookmark" hidden>
             <p class="star-tip small" role="status" hidden></p>
@@ -93,7 +96,9 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
             : c.setup.chess960
               ? `Chess960 no. ${wNo ?? "?"} · `
               : "") +
+          (c.odds ? "Odds: " : "") +
           tc +
+          (c.odds ? ` · ${c.setup.takebacks ?? 0} takeback${c.setup.takebacks === 1 ? "" : "s"} with the star` : "") +
           (c.setup.strongestOpenings ? " · strongest openings" : "");
         renderMoves();
         renderClocks();
@@ -119,7 +124,17 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
         $(".play-help").textContent = c.hint ? `Hint: ${c.hint.san}` : c.evaluation ? `Evaluation: ${c.evaluation}` : "";
 
         const helpAllowed = humanTurn && !!c.engine && !c.helping;
-        $<HTMLButtonElement>('[data-action="undo"]').disabled = !c.canUndo;
+        const undo = $<HTMLButtonElement>('[data-action="undo"]');
+        undo.disabled = !c.canUndo;
+        // With odds: how many takebacks still keep the star.
+        const left = c.takebacksLeft;
+        if (left === null) delete undo.dataset.left;
+        else undo.dataset.left = String(left);
+        undo.title = left === null ? "Take back" : `Take back (${left} left that keep${left === 1 ? "s" : ""} the star)`;
+        // Correspondence with odds: think it over in the analysis grid (locked) on your move.
+        const think = $<HTMLAnchorElement>(".play-think");
+        think.hidden = !(noClock(c.setup.tc) && humanTurn);
+        think.href = `#/grid?game=${encodeURIComponent(c.gameId)}`;
         $<HTMLButtonElement>('[data-action="hint"]').disabled = !helpAllowed;
         $<HTMLButtonElement>('[data-action="evaluation"]').disabled = !helpAllowed;
         const star = $<HTMLButtonElement>('[data-action="star"]');
@@ -128,7 +143,13 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
         star.classList.toggle("lit", !c.star || silver);
         star.classList.toggle("silver", silver);
         const tip = $<HTMLElement>(".star-tip");
-        if (!tip.hidden) tip.textContent = STAR_TEXT[c.star ?? "lit"];
+        if (!tip.hidden) {
+          tip.textContent = STAR_TEXT[c.star ?? "lit"];
+          if (c.odds && !c.star) {
+            const n = c.setup.takebacks ?? 0;
+            tip.textContent = `Clean game within your odds: ${c.takebacksUsed} of ${n} takeback${n === 1 ? "" : "s"} used, no hints.`;
+          } else if (c.odds && c.star === "undo") tip.textContent = "Star lost: you took back more moves than your odds allow.";
+        }
       };
 
       // Chess960 and Chess 960²: one sentence on how balanced the start is, compared with normal
@@ -225,6 +246,11 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
         ];
         for (const [sel, side] of rows) {
           const el = $<HTMLElement>(sel);
+          if (c.clocks && side === c.setup.human && noClock(c.setup.tc)) {
+            el.textContent = "no clock";
+            el.className = "clock small muted";
+            continue;
+          }
           if (!c.clocks) {
             el.textContent = side === c.engineSide && c.setup.tc.kind === "move" ? `${c.setup.tc.seconds} s / move` : "";
             el.className = "clock small muted";
@@ -269,8 +295,8 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
         else if (action === "star") {
           tip.hidden = !tip.hidden;
           render();
-        } else if (action === "new") {
-          const setup = await chooseNewGame();
+        } else if (action === "new" || action === "odds") {
+          const setup = await chooseNewGame(undefined, undefined, action === "odds");
           if (setup) controller.start(setup);
         }
       });

@@ -873,3 +873,21 @@
   border-color: var(--muted);
   color: var(--bg);
 }
+
+/* ---- The game this analysis belongs to (correspondence against the engine) ---- */
+
+.ag-game {
+  margin-bottom: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+}
+
+.ag-game-text {
+  margin: 0;
+  font-size: var(--text-small);
+}
+
+.ag-game .ag-nav a {
+  text-decoration: none;
+}

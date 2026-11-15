@@ -6,17 +6,38 @@ export type TimeControl =
   /** Minutes per game plus an increment per move (0: sudden death). */
   | { kind: "game"; minutes: number; increment: number }
   /** FIDE classical: 90 min for 40 moves, then 30 min for the rest, 30 s per move from move 1. */
-  | { kind: "classical" };
+  | { kind: "classical" }
+  /** Odds against the engine: the engine has `engineSeconds` for the whole game; the player
+   *  `humanMinutes`, or no clock at all (0: correspondence). */
+  | { kind: "odds"; engine: Side; engineSeconds: number; humanMinutes: number };
+
+/** The clock of a player without one (correspondence): never runs out. */
+const NO_CLOCK = 1e12;
 
 export const CLASSICAL = { minutes: 90, moves: 40, bonusMinutes: 30, increment: 30 };
 
 export function describeTimeControl(tc: TimeControl): string {
   if (tc.kind === "move") return `${tc.seconds} s per move`;
   if (tc.kind === "classical") return "90 min / 40 moves + 30 min, +30 s";
+  if (tc.kind === "odds") {
+    return `engine ${formatSeconds(tc.engineSeconds)} per game · you ${tc.humanMinutes ? `${tc.humanMinutes} min` : "no clock (correspondence)"}`;
+  }
   return tc.increment ? `${tc.minutes} + ${tc.increment}` : `${tc.minutes} min`;
 }
 
 export type Side = "w" | "b";
+
+/** "5 s", "1 min", "1 min 30 s". */
+export function formatSeconds(s: number): string {
+  if (s < 60) return `${s} s`;
+  const m = Math.floor(s / 60);
+  return s % 60 ? `${m} min ${s % 60} s` : `${m} min`;
+}
+
+/** The player has no clock in this time control (correspondence against the engine). */
+export function noClock(tc: TimeControl): boolean {
+  return tc.kind === "odds" && !tc.humanMinutes;
+}
 
 export interface ClockState {
   /** Remaining milliseconds; negative once a player has overstepped. */
@@ -45,12 +66,16 @@ export class Clocks {
   ) {
     this.tc = tc;
     this.now = now;
-    const start = (tc.kind === "classical" ? CLASSICAL.minutes : tc.minutes) * 60_000;
-    this.state = state ?? { remaining: { w: start, b: start }, moves: { w: 0, b: 0 } };
+    const startOf = (side: Side): number => {
+      if (tc.kind === "odds") return side === tc.engine ? tc.engineSeconds * 1000 : tc.humanMinutes ? tc.humanMinutes * 60_000 : NO_CLOCK;
+      return (tc.kind === "classical" ? CLASSICAL.minutes : tc.minutes) * 60_000;
+    };
+    this.state = state ?? { remaining: { w: startOf("w"), b: startOf("b") }, moves: { w: 0, b: 0 } };
     if (!state && extra && extra.ms > 0) this.state.extra = { w: 0, b: 0, [extra.side]: extra.ms };
   }
 
   get increment(): number {
+    if (this.tc.kind === "odds") return 0;
     return (this.tc.kind === "classical" ? CLASSICAL.increment : this.tc.increment) * 1000;
   }
 

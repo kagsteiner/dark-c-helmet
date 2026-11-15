@@ -28,6 +28,18 @@ export interface GameRecord {
   /** The star at the end (or at the latest save) of the game. */
   star: Star;
   plies: number;
+  /** A game with odds against the engine (experimental): not a win on the Progress screen. */
+  odds?: OddsRecord;
+}
+
+/** The odds of a game, for the log of games with odds. */
+export interface OddsRecord {
+  engineSeconds: number;
+  /** 0: no clock (correspondence). */
+  humanMinutes: number;
+  /** Takebacks that keep the star, and how many were used. */
+  takebacks: number;
+  used: number;
 }
 
 const PREFIX = "game:";
@@ -71,7 +83,8 @@ export const OPPONENT_NAMES: Record<OpponentKey, string> = {
 
 /** A win that counts on the Progress screen: with the gold star, or against Dark C. Helmet with
  *  the silver one (nobody beats it at equal time). */
-export function countsAsWin(r: Pick<GameRecord, "outcome" | "star" | "opponent">): boolean {
+export function countsAsWin(r: Pick<GameRecord, "outcome" | "star" | "opponent" | "odds">): boolean {
+  if (r.odds) return false; // games with odds are an experiment for now: played, not won
   return r.outcome === "win" && (r.star === "gold" || (r.star === "silver" && r.opponent === "engine"));
 }
 

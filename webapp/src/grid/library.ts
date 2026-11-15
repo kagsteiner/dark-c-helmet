@@ -46,6 +46,9 @@ export interface Analysis {
   engineOn?: boolean;
   /** The player's own analysis: no engine, no computed hints. */
   locked?: boolean;
+  /** The game against the engine this analysis belongs to (correspondence with odds): the
+   *  game's moves are its main line, and it stays locked while the game goes on. */
+  game?: string;
 }
 
 export function newId(): string {

@@ -327,3 +327,68 @@
 .bm-note {
   grid-column: 1 / -1;
 }
+
+/* ---- Games with odds ---- */
+
+/* Takebacks left that keep the star: a small number on the undo button. */
+.play-undo {
+  position: relative;
+}
+
+.play-undo[data-left]::after {
+  content: attr(data-left);
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 10px;
+  line-height: 14px;
+  font-weight: var(--weight-strong);
+  box-sizing: border-box;
+}
+
+/* Correspondence: the analysis grid is desktop only. */
+.play-think {
+  display: none;
+  margin-top: var(--space-2);
+}
+
+@media (min-width: 1024px) {
+  .play-think:not([hidden]) {
+    display: inline-flex;
+  }
+}
+
+/* The log in the odds sheet */
+.odds-log summary {
+  cursor: pointer;
+  font-weight: var(--weight-strong);
+}
+
+.odds-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: var(--space-2) 0;
+}
+
+.odds-table th,
+.odds-table td {
+  text-align: left;
+  padding: 3px var(--space-1);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.odds-table td.numeric,
+.odds-table th:not(:first-child) {
+  text-align: right;
+}
+
+.odds-games {
+  padding-left: var(--space-4);
+  margin: var(--space-1) 0;
+}

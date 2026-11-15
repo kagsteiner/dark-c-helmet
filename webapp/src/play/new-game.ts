@@ -9,6 +9,8 @@ import { randomBalancedPair } from "./balanced.ts";
 import { bookmarkDate, loadBookmarks, removeBookmark, setBookmarkNote, startName, type Bookmark } from "./bookmarks.ts";
 import type { TimeControl } from "./clocks.ts";
 import type { GameSetup } from "./controller.ts";
+import { loadRecords } from "./history.ts";
+import { oddsGameLine, tallyByOdds } from "./odds-log.ts";
 
 export interface Choices {
   /** "engine" (Dark C. Helmet) or a human-like profile ("human-1300"). */
@@ -32,7 +34,18 @@ export interface Choices {
   incSeconds: number;
   /** Chess960 with a clock: extra seconds for the player's first move. */
   extraSeconds: number;
+  /** Games with odds: the engine's time for the whole game (seconds). */
+  oddsEngineSeconds: number;
+  /** Games with odds: the player's clock, or none (correspondence). */
+  oddsClock: "none" | "clock";
+  oddsMinutes: number;
+  /** Games with odds: takebacks that keep the star. */
+  oddsTakebacks: number;
 }
+
+/** The engine's time for the whole game, in a game with odds. */
+const ODDS_ENGINE_SECONDS = [1, 2, 5, 10, 15, 30, 60, 120, 300, 900];
+const ODDS_TAKEBACKS = [0, 1, 2, 3, 5, 10, 20];
 
 const DEFAULTS: Choices = {
   opponent: "engine",
@@ -50,6 +63,10 @@ const DEFAULTS: Choices = {
   incMinutes: 10,
   incSeconds: 5,
   extraSeconds: 30,
+  oddsEngineSeconds: 5,
+  oddsClock: "none",
+  oddsMinutes: 15,
+  oddsTakebacks: 3,
 };
 
 const PREFS_KEY = "new-game-choices";
@@ -86,19 +103,25 @@ function segmented(name: string, options: [string, string][], value: string): st
 
 /** Shows the sheet. Resolves to the new game's setup, or null if cancelled. With `position`
  *  (from the Setup screen) the variant choice is left out. `preset` overrides the remembered
- *  choices (from the Progress screen). */
+ *  choices (from the Progress screen). `odds`: a game with odds against Dark C. Helmet (the
+ *  engine's time, the player's clock or none, takebacks that keep the star) instead of the
+ *  opponent and time control, with the log of such games. */
 export async function chooseNewGame(
   position?: { startFen: string; chess960: boolean },
   preset?: Partial<Choices>,
+  odds = false,
 ): Promise<GameSetup | null> {
   const c: Choices = { ...DEFAULTS, ...(await load<Partial<Choices>>(PREFS_KEY)), ...preset };
   const bookmarks = await loadBookmarks();
   const dialog = document.createElement("dialog");
   dialog.className = "sheet";
-  dialog.setAttribute("aria-label", "New game");
+  dialog.setAttribute("aria-label", odds ? "Game with odds" : "New game");
+  const option = (v: number, label: string, cur: number) => `<option value="${v}"${v === cur ? " selected" : ""}>${label}</option>`;
   dialog.innerHTML = `
     <form class="sheet-body" method="dialog">
-      <h2 class="title">New game</h2>
+      <h2 class="title">${odds ? "Game with odds" : "New game"}</h2>
+      <p class="small muted" data-show="oddsIntro">Against Dark C. Helmet at full strength, with odds for you. An
+        experiment: these games are logged below, and do not count on the Progress screen yet.</p>
       <div class="field" data-show="opponent">
         <span class="field-label">Opponent</span>
         ${segmented("opponent", [["engine", "Dark C. Helmet"], ["human-1300", "1300 Elo player"], ["human-1600", "1600 Elo player"]], c.opponent)}
@@ -140,7 +163,25 @@ export async function chooseNewGame(
         <span class="field-label">Engine's openings</span>
         ${segmented("openings", [["varied", "Varied"], ["strongest", "Strongest"]], c.openings)}
       </div>
-      <label class="field">
+      <label class="field" data-show="odds">
+        <span class="field-label">Engine's time for the whole game</span>
+        <select name="oddsEngineSeconds">${ODDS_ENGINE_SECONDS.map((s) => option(s, s < 60 ? `${s} s` : `${s / 60} min`, c.oddsEngineSeconds)).join("")}</select>
+      </label>
+      <div class="field" data-show="odds">
+        <span class="field-label">Your time</span>
+        ${segmented("oddsClock", [["none", "No clock (correspondence)"], ["clock", "Clock"]], c.oddsClock)}
+      </div>
+      <p class="small muted" data-show="oddsCorrespondence">Take all the time you want. "Think in the grid" on the
+        game screen opens your own analysis of the game: locked, no engine.</p>
+      <label class="field" data-show="oddsMinutes">
+        <span class="field-label">Your minutes for the whole game</span>
+        <input type="number" name="oddsMinutes" min="1" max="600" value="${c.oddsMinutes}">
+      </label>
+      <label class="field" data-show="odds">
+        <span class="field-label">Takebacks that keep the star</span>
+        <select name="oddsTakebacks">${ODDS_TAKEBACKS.map((n) => option(n, String(n), c.oddsTakebacks)).join("")}</select>
+      </label>
+      <label class="field" data-show="tc">
         <span class="field-label">Time control</span>
         <select name="tcKind">
           <option value="move"${c.tcKind === "move" ? " selected" : ""}>Time per engine move</option>
@@ -173,6 +214,10 @@ export async function chooseNewGame(
         <span class="field-label">Extra seconds for your first move</span>
         <input type="number" name="extraSeconds" min="0" max="600" value="${c.extraSeconds}">
       </label>
+      <details class="odds-log" data-show="odds">
+        <summary>Your games with odds</summary>
+        <div class="odds-log-body small"><p class="muted">Loading…</p></div>
+      </details>
       <div class="sheet-actions">
         <button type="button" class="btn-secondary" value="cancel">Cancel</button>
         <button type="submit" class="btn-primary" value="start">Start game</button>
@@ -204,6 +249,10 @@ export async function chooseNewGame(
       incMinutes: n("incMinutes", 1, 600),
       incSeconds: n("incSeconds", 0, 600),
       extraSeconds: n("extraSeconds", 0, 600),
+      oddsEngineSeconds: n("oddsEngineSeconds", 1, 3600),
+      oddsClock: (d.get("oddsClock") ?? c.oddsClock) as Choices["oddsClock"],
+      oddsMinutes: n("oddsMinutes", 1, 600),
+      oddsTakebacks: n("oddsTakebacks", 0, 100),
     };
   };
   // The list shows the bookmarks of the chosen variant, always with one of them selected.
@@ -226,9 +275,16 @@ export async function chooseNewGame(
     const bookmarkCount = updateBookmarks(squared);
     const r = read();
     // The human-like player has no opening book.
-    const human = r.opponent !== "engine";
+    const human = !odds && r.opponent !== "engine";
+    const corr = odds && r.oddsClock === "none";
+    const tcShown = (kind: Choices["tcKind"]) => !odds && r.tcKind === kind;
     const visible: Record<string, boolean> = {
-      opponent: true,
+      opponent: !odds,
+      oddsIntro: odds,
+      odds,
+      oddsCorrespondence: corr,
+      oddsMinutes: odds && !corr,
+      tc: !odds,
       variant: !position,
       // The book's choice matters in standard chess; Chess960 games are out of book at once.
       openings: !position && !human && r.variant === "standard",
@@ -237,12 +293,12 @@ export async function chooseNewGame(
       number960: r.variant === "chess960" && r.start960 === "number",
       numbers960sq: !position && r.variant === "chess960sq" && r.start960 === "number",
       bookmarks: !position && r.variant !== "standard" && r.start960 === "bookmark",
-      move: r.tcKind === "move",
-      game: r.tcKind === "game",
-      increment: r.tcKind === "increment",
-      classical: r.tcKind === "classical",
+      move: tcShown("move"),
+      game: tcShown("game"),
+      increment: tcShown("increment"),
+      classical: tcShown("classical"),
       // Chess960 with a clock: time to look at the starting position.
-      extra: (position ? position.chess960 : r.variant !== "standard") && r.tcKind !== "move",
+      extra: (position ? position.chess960 : r.variant !== "standard") && (odds ? !corr : r.tcKind !== "move"),
     };
     for (const el of form.querySelectorAll<HTMLElement>("[data-show]")) el.hidden = !visible[el.dataset.show!];
     form.querySelector<HTMLButtonElement>('[value="start"]')!.disabled = visible.bookmarks && !bookmarkCount;
@@ -266,6 +322,7 @@ export async function chooseNewGame(
   });
   form.addEventListener("change", update);
   update();
+  if (odds) void fillOddsLog(form.querySelector<HTMLElement>(".odds-log-body")!);
 
   return new Promise((resolve) => {
     let result: GameSetup | null = null;
@@ -274,8 +331,10 @@ export async function chooseNewGame(
     form.addEventListener("submit", () => {
       const r = read();
       save(PREFS_KEY, r);
-      const tc: TimeControl =
-        r.tcKind === "move"
+      const engineSide = r.color === "w" ? "b" : "w"; // fixed below for a random colour
+      const tc: TimeControl = odds
+        ? { kind: "odds", engine: engineSide, engineSeconds: r.oddsEngineSeconds, humanMinutes: r.oddsClock === "none" ? 0 : r.oddsMinutes }
+        : r.tcKind === "move"
           ? { kind: "move", seconds: r.seconds }
           : r.tcKind === "game"
             ? { kind: "game", minutes: r.minutes, increment: 0 }
@@ -283,12 +342,15 @@ export async function chooseNewGame(
               ? { kind: "game", minutes: r.incMinutes, increment: r.incSeconds }
               : { kind: "classical" };
       const human = r.color === "random" ? (Math.random() < 0.5 ? "w" : "b") : r.color;
-      const humanProfile = r.opponent.startsWith("human-") ? r.opponent.slice(6) : undefined;
+      if (tc.kind === "odds") tc.engine = human === "w" ? "b" : "w";
+      const humanProfile = !odds && r.opponent.startsWith("human-") ? r.opponent.slice(6) : undefined;
+      const takebacks = odds ? r.oddsTakebacks : undefined;
+      const noClockForYou = tc.kind === "move" || (tc.kind === "odds" && !tc.humanMinutes);
       if (position) {
-        result = { ...position, human, tc, humanProfile, firstMoveExtra: position.chess960 && tc.kind !== "move" ? r.extraSeconds : 0 };
+        result = { ...position, human, tc, humanProfile, takebacks, firstMoveExtra: position.chess960 && !noClockForYou ? r.extraSeconds : 0 };
       } else if (r.variant !== "standard") {
         const squared = r.variant === "chess960sq";
-        const firstMoveExtra = tc.kind !== "move" ? r.extraSeconds : 0;
+        const firstMoveExtra = !noClockForYou ? r.extraSeconds : 0;
         const start = (white: number, black: number) => {
           result = {
             startFen: chess960SquaredFen(white, black),
@@ -298,6 +360,7 @@ export async function chooseNewGame(
             human,
             tc,
             humanProfile,
+            takebacks,
             firstMoveExtra,
           };
         };
@@ -310,7 +373,7 @@ export async function chooseNewGame(
           start(n, n);
         }
       } else {
-        result = { startFen: START_FEN, chess960: false, human, tc, humanProfile, strongestOpenings: !humanProfile && r.openings === "strongest" };
+        result = { startFen: START_FEN, chess960: false, human, tc, humanProfile, takebacks, strongestOpenings: !humanProfile && r.openings === "strongest" };
       }
     });
     dialog.addEventListener("close", async () => {
@@ -320,4 +383,44 @@ export async function chooseNewGame(
     });
     dialog.showModal();
   });
+}
+
+/** The log of games with odds: how the player did with which odds, then the latest games. */
+async function fillOddsLog(box: HTMLElement): Promise<void> {
+  const records = (await loadRecords()).filter((r) => r.odds).sort((a, b) => b.started - a.started);
+  if (!records.length) {
+    box.innerHTML = `<p class="muted">No games with odds yet.</p>`;
+    return;
+  }
+  const table = document.createElement("table");
+  table.className = "odds-table";
+  table.innerHTML = `<thead><tr><th>Odds</th><th>Games</th><th>Won</th><th>Drawn</th><th>Lost</th><th>Unfinished</th></tr></thead>`;
+  const body = document.createElement("tbody");
+  for (const t of tallyByOdds(records)) {
+    const tr = document.createElement("tr");
+    const cells = [t.name, String(t.games), t.wins + (t.starredWins ? ` (${t.starredWins} ★)` : ""), String(t.draws), String(t.losses), String(t.unfinished)];
+    for (const [i, text] of cells.entries()) {
+      const td = document.createElement("td");
+      td.textContent = text;
+      if (i) td.className = "numeric";
+      tr.append(td);
+    }
+    body.append(tr);
+  }
+  table.append(body);
+  const list = document.createElement("ol");
+  list.className = "odds-games";
+  for (const r of records.slice(0, 30)) {
+    const li = document.createElement("li");
+    li.textContent = oddsGameLine(r);
+    const odds = document.createElement("span");
+    odds.className = "muted";
+    odds.textContent = " — " + tallyByOdds([r])[0].name;
+    li.append(odds);
+    list.append(li);
+  }
+  const latest = document.createElement("p");
+  latest.className = "muted";
+  latest.textContent = records.length > 30 ? "The latest 30 games:" : "The games:";
+  box.replaceChildren(table, latest, list);
 }

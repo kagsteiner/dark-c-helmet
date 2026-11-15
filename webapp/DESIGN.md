@@ -166,6 +166,28 @@ then. Clicking it shows one line:
 On the Progress screen a win counts with the gold star, and against Dark C. Helmet also with
 the silver one.
 
+### Games with odds (experiment)
+
+To beat the real engine: "Odds…" on the Play screen opens the new-game sheet for a game
+against Dark C. Helmet at full strength with odds for the player, in place of opponent and
+time control:
+
+- **Engine's time for the whole game:** 1 s to 15 min (its own clock, no increment). Time,
+  not nodes: the same setting is weaker on a phone, and that is fine.
+- **Your time:** no clock (correspondence) or minutes for the game.
+- **Takebacks that keep the star:** 0 to 20. The undo button shows how many are left; beyond
+  them a takeback puts the star out as usual.
+- **Correspondence:** on the player's move, "Think in the grid" (from 1024 px) opens the
+  analysis grid with the analysis of this game (made when first needed, stored as
+  `game-<id>`): the game's moves are its main line, it is locked (no engine, no computed
+  hints, no unlocking) while the game goes on, and it does not cost the star. A strip above
+  the panel's board offers "Play <move> in the game" (the first move of the selected line after
+  the game's position) and "Back to the game".
+- The record of such a game carries its odds (`odds` in the game record). They are not wins
+  on the Progress screen yet: the sheet's log ("Your games with odds") shows, per set of
+  odds, games won (with the star), drawn and lost, and the latest games. From that log the
+  ladder of odds levels will be built.
+
 ### Progress
 
 Every game is written to a history in IndexedDB (`game:<id>` in the key-value store, see

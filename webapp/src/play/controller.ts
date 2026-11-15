@@ -26,6 +26,8 @@ export interface GameSetup {
   /** The opponent: Dark C. Helmet (default) or a human-like player of a rating band ("1300"),
    *  which plays without the book and uses its whole move time. */
   humanProfile?: string;
+  /** A game with odds (time control "odds"): takebacks that keep the star. */
+  takebacks?: number;
 }
 
 /** Name shown for the opponent of a game. */
@@ -53,6 +55,8 @@ interface Saved {
   star: StarLoss | null;
   result: string | null;
   lowScores: number;
+  /** Takebacks used (games with odds). */
+  takebacksUsed?: number;
 }
 
 const SAVE_KEY = "current-game";
@@ -100,6 +104,8 @@ export class PlayController {
   evaluation: string | null = null;
   helping: "hint" | "evaluation" | null = null;
   premove: [number, number] | null = null;
+  /** Takebacks used in this game (with odds, the first `setup.takebacks` keep the star). */
+  takebacksUsed = 0;
   /** The engine's last move came from the opening book. */
   bookMove = false;
   /** The book knew the engine's last position, but too shallowly for this time control. */
@@ -136,7 +142,28 @@ export class PlayController {
     this.star = saved.star;
     this.result = saved.result;
     this.lowScores = saved.lowScores;
+    this.takebacksUsed = saved.takebacksUsed ?? 0;
     this.emit();
+  }
+
+  /** The key of this game (in the history; a grid analysis made for it refers to it). */
+  get gameId(): string {
+    return this.id;
+  }
+
+  /** When this game was started (ms since 1970). */
+  get startedAt(): number {
+    return this.started;
+  }
+
+  /** A game with odds against the engine. */
+  get odds(): boolean {
+    return this.setup.tc.kind === "odds";
+  }
+
+  /** Takebacks left that keep the star (games with odds), else null. */
+  get takebacksLeft(): number | null {
+    return this.odds ? Math.max(0, (this.setup.takebacks ?? 0) - this.takebacksUsed) : null;
   }
 
   subscribe(listener: () => void): () => void {
@@ -164,6 +191,7 @@ export class PlayController {
       star: this.star,
       result: this.result,
       lowScores: this.lowScores,
+      takebacksUsed: this.takebacksUsed,
     } satisfies Saved);
   }
 
@@ -186,6 +214,16 @@ export class PlayController {
       outcome,
       star: starOf(this.star),
       plies,
+      ...(this.setup.tc.kind === "odds"
+        ? {
+            odds: {
+              engineSeconds: this.setup.tc.engineSeconds,
+              humanMinutes: this.setup.tc.humanMinutes,
+              takebacks: this.setup.takebacks ?? 0,
+              used: this.takebacksUsed,
+            },
+          }
+        : {}),
     });
   }
 
@@ -239,6 +277,7 @@ export class PlayController {
     this.star = null;
     this.result = null;
     this.lowScores = 0;
+    this.takebacksUsed = 0;
     this.premove = null;
     this.bookMove = false;
     this.bookTooShallow = false;
@@ -461,7 +500,9 @@ export class PlayController {
     this.bookMove = false;
     this.bookTooShallow = false;
     this.clearHelp();
-    this.loseStar("undo");
+    // With odds, the first takebacks are part of the deal and keep the star.
+    this.takebacksUsed++;
+    if (this.takebacksLeft === null || this.takebacksUsed > (this.setup.takebacks ?? 0)) this.loseStar("undo");
     if (this.active) this.clocks?.start(this.setup.human);
     this.persist();
     this.emit();
