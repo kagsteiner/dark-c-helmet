@@ -56,5 +56,13 @@ export function oddsGameLine(r: GameRecord): string {
     OUTCOME_TEXT[r.outcome] + (r.outcome === "win" && r.star ? " ★" : ""),
     `${o.used} of ${o.takebacks} takeback${o.takebacks === 1 ? "" : "s"}`,
     `${Math.ceil(r.plies / 2)} move${Math.ceil(r.plies / 2) === 1 ? "" : "s"}`,
+    ...(r.engineEval && r.outcome === "unfinished" ? [`engine's eval for you ${evalText(r.engineEval)}`] : []),
   ].join(" · ");
+}
+
+/** An evaluation from the player's point of view: "+0.35", "−4.20", "you mate in 3", "mated in 2". */
+export function evalText(e: { cp: number } | { mate: number }): string {
+  if ("mate" in e) return e.mate > 0 ? `you mate in ${e.mate}` : `mated in ${-e.mate}`;
+  const v = e.cp / 100;
+  return (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(2);
 }

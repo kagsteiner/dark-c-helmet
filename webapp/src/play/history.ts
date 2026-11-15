@@ -30,6 +30,9 @@ export interface GameRecord {
   plies: number;
   /** A game with odds against the engine (experimental): not a win on the Progress screen. */
   odds?: OddsRecord;
+  /** The engine's evaluation after its last search, from the player's point of view
+   *  (centipawns, or mate in N: positive, the player mates). How a game stood when it was left. */
+  engineEval?: { cp: number } | { mate: number };
 }
 
 /** The odds of a game, for the log of games with odds. */

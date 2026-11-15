@@ -57,6 +57,7 @@ interface Saved {
   lowScores: number;
   /** Takebacks used (games with odds). */
   takebacksUsed?: number;
+  engineEval?: { cp: number } | { mate: number } | null;
 }
 
 const SAVE_KEY = "current-game";
@@ -106,6 +107,8 @@ export class PlayController {
   premove: [number, number] | null = null;
   /** Takebacks used in this game (with odds, the first `setup.takebacks` keep the star). */
   takebacksUsed = 0;
+  /** The engine's evaluation after its last search, from the player's point of view. */
+  engineEval: { cp: number } | { mate: number } | null = null;
   /** The engine's last move came from the opening book. */
   bookMove = false;
   /** The book knew the engine's last position, but too shallowly for this time control. */
@@ -143,6 +146,7 @@ export class PlayController {
     this.result = saved.result;
     this.lowScores = saved.lowScores;
     this.takebacksUsed = saved.takebacksUsed ?? 0;
+    this.engineEval = saved.engineEval ?? null;
     this.emit();
   }
 
@@ -192,6 +196,7 @@ export class PlayController {
       result: this.result,
       lowScores: this.lowScores,
       takebacksUsed: this.takebacksUsed,
+      engineEval: this.engineEval,
     } satisfies Saved);
   }
 
@@ -214,6 +219,7 @@ export class PlayController {
       outcome,
       star: starOf(this.star),
       plies,
+      ...(this.engineEval ? { engineEval: this.engineEval } : {}),
       ...(this.setup.tc.kind === "odds"
         ? {
             odds: {
@@ -278,6 +284,7 @@ export class PlayController {
     this.result = null;
     this.lowScores = 0;
     this.takebacksUsed = 0;
+    this.engineEval = null;
     this.premove = null;
     this.bookMove = false;
     this.bookTooShallow = false;
@@ -416,6 +423,8 @@ export class PlayController {
     this.bookTooShallow = !fromBook && !!book?.shallow;
     this.clocks?.moveMade(this.engineSide);
     if (info) {
+      // The engine's score is its own (the side that moved): the player's is the opposite.
+      this.engineEval = "mate" in info.score ? { mate: -info.score.mate } : { cp: -info.score.cp };
       const lost = "mate" in info.score ? info.score.mate < 0 : info.score.cp <= RESIGN_CP;
       this.lowScores = lost ? this.lowScores + 1 : 0;
     }

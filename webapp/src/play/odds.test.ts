@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Clocks, describeTimeControl, noClock, type TimeControl } from "./clocks.ts";
 import { countsAsWin, type GameRecord } from "./history.ts";
-import { oddsName, tallyByOdds } from "./odds-log.ts";
+import { evalText, oddsGameLine, oddsName, tallyByOdds } from "./odds-log.ts";
 
 test("odds clock: the engine's own time, no clock for the player in correspondence", () => {
   let now = 0;
@@ -45,4 +45,15 @@ test("odds log: games tallied by their odds; they do not count on the Progress s
   assert.equal(oddsName({ engineSeconds: 90, humanMinutes: 15, takebacks: 1 }), "engine 1 min 30 s · you 15 min · 1 takeback");
   assert.equal(countsAsWin(records[0]), false);
   assert.equal(countsAsWin(records[4]), true);
+});
+
+test("odds log: an unfinished game shows how it stood, from the player's point of view", () => {
+  assert.equal(evalText({ cp: -430 }), "−4.30");
+  assert.equal(evalText({ cp: 35 }), "+0.35");
+  assert.equal(evalText({ mate: 3 }), "you mate in 3");
+  assert.equal(evalText({ mate: -2 }), "mated in 2");
+  const left = { ...rec("unfinished", 3, 3), engineEval: { cp: -512 } };
+  assert.match(oddsGameLine(left), /not finished · 3 of 3 takebacks · 30 moves · engine's eval for you −5\.12$/);
+  // A finished game says how it ended; no evaluation.
+  assert.doesNotMatch(oddsGameLine({ ...rec("loss", 3, 3), engineEval: { mate: -1 } }), /eval/);
 });
