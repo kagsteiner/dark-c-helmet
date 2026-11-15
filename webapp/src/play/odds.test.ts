@@ -57,3 +57,17 @@ test("odds log: an unfinished game shows how it stood, from the player's point o
   // A finished game says how it ended; no evaluation.
   assert.doesNotMatch(oddsGameLine({ ...rec("loss", 3, 3), engineEval: { mate: -1 } }), /eval/);
 });
+
+test("clock refund: a move that cost no thinking gives the time back", () => {
+  let now = 0;
+  const c = new Clocks({ kind: "odds", engine: "b", engineSeconds: 1, humanMinutes: 0 }, undefined, () => now);
+  c.start("b");
+  now += 320; // a book move: lookup and the pause to show both moves
+  c.refund("b", 320);
+  c.moveMade("b");
+  assert.equal(c.remaining("b"), 1000);
+  c.start("b");
+  now += 40; // a real search
+  c.moveMade("b");
+  assert.equal(c.remaining("b"), 960);
+});

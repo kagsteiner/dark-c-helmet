@@ -112,6 +112,11 @@ export class Clocks {
     this.running = null;
   }
 
+  /** Gives time back to a side (a move that cost no thinking, e.g. from the opening book). */
+  refund(side: Side, ms: number): void {
+    this.state.remaining[side] += Math.max(0, ms);
+  }
+
   /** The side to move completed its move: stop its clock, add the increment and, after the
    *  40th move in classical, the extra time; then start the opponent's clock. */
   moveMade(side: Side): void {

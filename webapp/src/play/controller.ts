@@ -421,6 +421,10 @@ export class PlayController {
     }
     this.bookMove = !!fromBook;
     this.bookTooShallow = !fromBook && !!book?.shallow;
+    // A book move costs the engine no thinking time: the lookup and the pause that lets the
+    // player see both moves are given back (with a second for the whole game, they would use
+    // it up within a few moves).
+    if (fromBook) this.clocks?.refund(this.engineSide, performance.now() - started);
     this.clocks?.moveMade(this.engineSide);
     if (info) {
       // The engine's score is its own (the side that moved): the player's is the opposite.
