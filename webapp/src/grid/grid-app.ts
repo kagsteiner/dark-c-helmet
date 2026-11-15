@@ -12,6 +12,7 @@ import { san } from "../chess/san.ts";
 import type { Engine, SearchInfo } from "../engine/engine.ts";
 import type { PlayController } from "../play/controller.ts";
 import { settings } from "../settings.ts";
+import { load, save } from "../storage.ts";
 import { icons } from "../ui/icons.ts";
 import { Board } from "../ui/board.ts";
 import { MoveInput } from "../ui/move-input.ts";
@@ -326,6 +327,8 @@ export async function mountGrid(
     </header>
     <main class="ag-main">
       <section class="ag-grid"></section>
+      <div class="ag-split" role="separator" aria-orientation="vertical" tabindex="0"
+        aria-label="Width of the panel" title="Drag to give the grid or the panel more room (double-click: back to normal)"></div>
       <aside class="ag-panel">
         <div class="ag-game" hidden>
           <p class="ag-game-text"></p>
@@ -424,6 +427,65 @@ export async function mountGrid(
       </form>
     </dialog>`;
   const $ = <T extends HTMLElement = HTMLElement>(s: string) => app.querySelector<T>(s)!;
+
+  // ---- The divider between grid and panel: drag it to give either more room; the panel's
+  // board grows with the panel. Kept on this device. ----
+
+  const PANEL_WIDTH_KEY = "grid-panel-width";
+  const PANEL_DEFAULT = 380;
+  const PANEL_MIN = 300;
+  const GRID_MIN = 240;
+  const panelEl = $(".ag-panel");
+  const split = $(".ag-split");
+  function setPanelWidth(w: number, keep = false): void {
+    const total = $(".ag-main").getBoundingClientRect().width;
+    const max = Math.max(PANEL_MIN, total - GRID_MIN - split.offsetWidth);
+    const width = Math.round(Math.min(max, Math.max(PANEL_MIN, w)));
+    panelEl.style.width = width + "px";
+    split.setAttribute("aria-valuenow", String(width));
+    split.setAttribute("aria-valuemin", String(PANEL_MIN));
+    split.setAttribute("aria-valuemax", String(Math.round(max)));
+    if (keep) void save(PANEL_WIDTH_KEY, width);
+    // The board grows with the panel, up to the panel's visible height (less its padding).
+    const pad = parseFloat(getComputedStyle(panelEl).paddingTop) + parseFloat(getComputedStyle(panelEl).paddingBottom);
+    panelEl.style.setProperty("--ag-board-max", Math.max(200, panelEl.clientHeight - pad) + "px");
+  }
+  // Measured once the screen is on the page; then the width kept from last time.
+  requestAnimationFrame(() => {
+    if (panelEl.isConnected) setPanelWidth(panelEl.getBoundingClientRect().width || PANEL_DEFAULT);
+    void load<number>(PANEL_WIDTH_KEY).then((w) => {
+      if (typeof w === "number" && panelEl.isConnected) setPanelWidth(w);
+    });
+  });
+  split.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    split.setPointerCapture(e.pointerId);
+    split.classList.add("dragging");
+    const right = $(".ag-main").getBoundingClientRect().right;
+    const move = (ev: PointerEvent) => setPanelWidth(right - ev.clientX - split.offsetWidth / 2);
+    const up = () => {
+      split.removeEventListener("pointermove", move);
+      split.removeEventListener("pointerup", up);
+      split.removeEventListener("pointercancel", up);
+      split.classList.remove("dragging");
+      setPanelWidth(panelEl.getBoundingClientRect().width, true);
+    };
+    split.addEventListener("pointermove", move);
+    split.addEventListener("pointerup", up);
+    split.addEventListener("pointercancel", up);
+  });
+  split.addEventListener("dblclick", () => setPanelWidth(PANEL_DEFAULT, true));
+  split.addEventListener("keydown", (e) => {
+    const step = e.shiftKey ? 80 : 20;
+    const w = panelEl.getBoundingClientRect().width;
+    if (e.key === "ArrowLeft") setPanelWidth(w + step, true);
+    else if (e.key === "ArrowRight") setPanelWidth(w - step, true);
+    else return;
+    e.preventDefault();
+    e.stopPropagation(); // not the grid's move keys
+  });
+  const onResize = () => setPanelWidth(panelEl.getBoundingClientRect().width);
+  window.addEventListener("resize", onResize);
 
   // A board clicked in the grid: the panel scrolls back up, so its board shows in full.
   const panelTop = () => $(".ag-panel").scrollTo({ top: 0 });
@@ -1839,6 +1901,7 @@ export async function mountGrid(
     document.removeEventListener("pointerdown", onMenuAway, true);
     window.removeEventListener("blur", closeMenu);
     window.removeEventListener("resize", closeMenu);
+    window.removeEventListener("resize", onResize);
     menu.remove();
     unsubscribe();
     persistNow();

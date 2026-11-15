@@ -61,11 +61,45 @@
   display: flex;
 }
 
+/* The divider between grid and panel: drag to share the room (the panel's board grows with
+   the panel). A wide, invisible grip around a hairline. */
+.ag-split {
+  flex: none;
+  width: 9px;
+  margin: 0 -4px;
+  position: relative;
+  z-index: 2;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.ag-split::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
+  width: 1px;
+  background: var(--hairline);
+  transition: background var(--motion), width var(--motion), left var(--motion);
+}
+
+.ag-split:hover::before,
+.ag-split:focus-visible::before,
+.ag-split.dragging::before {
+  left: 3px;
+  width: 3px;
+  background: var(--accent);
+}
+
+.ag-split:focus-visible {
+  outline: none;
+}
+
 .ag-panel {
   width: 380px;
   flex: none;
   overflow-y: auto;
-  border-left: 1px solid var(--hairline);
   padding: var(--space-4);
   box-sizing: border-box;
 }
@@ -743,6 +777,10 @@
 
 .ag-board {
   --arrow: rgba(216, 53, 43, 0.85);
+  /* It grows with the panel, but never beyond the panel's visible height (set by the
+     script), so the whole board can always be seen. */
+  max-width: var(--ag-board-max, none);
+  margin: 0 auto;
 }
 
 .ag-threat {
