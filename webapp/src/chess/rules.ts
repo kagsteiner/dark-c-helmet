@@ -59,8 +59,17 @@ export class Rules {
     return new Rules(m);
   }
 
+  private version = 0;
+
+  /** Counts every change of the position (setFen, play, undo): a Game that shares this
+   *  module sees whether someone else (the analysis grid, the explorer) has used it since. */
+  get changes(): number {
+    return this.version;
+  }
+
   /** Starts a new game from this position. Returns false if the FEN is not valid. */
   setFen(fen: string, chess960: boolean): boolean {
+    this.version++;
     return this.m.ccall("rules_set_fen", "number", ["string", "number"], [fen, chess960 ? 1 : 0]) === 1;
   }
 
@@ -70,11 +79,13 @@ export class Rules {
 
   /** Plays a move (UCI notation). Returns false if it is not legal. */
   play(uci: string): boolean {
+    this.version++;
     return this.m.ccall("rules_play", "number", ["string"], [uci]) === 1;
   }
 
   /** Takes back the last move. Returns false if there is none. */
   undo(): boolean {
+    this.version++;
     return this.m.ccall("rules_undo", "number", [], []) === 1;
   }
 

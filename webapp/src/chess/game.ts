@@ -15,27 +15,28 @@ export interface PlayedMove {
   castle: boolean;
 }
 
-let owner: Game | null = null;
-
 export class Game {
   readonly moves: PlayedMove[] = [];
   readonly startFen: string;
   readonly chess960: boolean;
   private rules: Rules;
+  /** The rules module's change count when it last held this game's position: anyone else
+   *  using the shared module since (another Game, the analysis grid) means a replay. */
+  private seen = -1;
 
   constructor(rules: Rules, startFen = START_FEN, chess960 = false) {
     this.rules = rules;
     this.startFen = startFen;
     this.chess960 = chess960;
     if (!rules.setFen(startFen, chess960)) throw new Error("invalid FEN: " + startFen);
-    owner = this;
+    this.seen = rules.changes;
   }
 
   private sync(): Rules {
-    if (owner !== this) {
+    if (this.rules.changes !== this.seen) {
       this.rules.setFen(this.startFen, this.chess960);
       for (const m of this.moves) this.rules.play(m.uci);
-      owner = this;
+      this.seen = this.rules.changes;
     }
     return this.rules;
   }
@@ -66,6 +67,7 @@ export class Game {
     const legal = this.legalMoves();
     const move = legal.find((m) => m.uci === uci);
     if (!move || !this.rules.play(uci)) return null;
+    this.seen = this.rules.changes;
     const played = { uci, san: san(move, legal), from: move.from, to: move.to, rook: move.rook, castle: move.castle };
     this.moves.push(played);
     return played;
@@ -74,6 +76,7 @@ export class Game {
   undo(): PlayedMove | null {
     if (!this.moves.length) return null;
     this.sync().undo();
+    this.seen = this.rules.changes;
     return this.moves.pop()!;
   }
 }
