@@ -72,6 +72,9 @@ export async function mountGrid(
   let gameOf: string | null = null;
   /** The board of the game's current position (in an analysis of the running game). */
   let gameNode: GNode | null = null;
+  /** After the next drawing, scroll the selected board into the middle of the grid: the
+   *  screen or an analysis was opened (e.g. "Think in the grid" after a few more moves). */
+  let revealOnDraw = true;
 
   // ---- Tree ----
 
@@ -195,6 +198,7 @@ export async function mountGrid(
     gameOf = a.game ?? null;
     gameNode = null;
     syncGame();
+    revealOnDraw = true;
     return true;
   }
 
@@ -454,7 +458,10 @@ export async function mountGrid(
   requestAnimationFrame(() => {
     if (panelEl.isConnected) setPanelWidth(panelEl.getBoundingClientRect().width || PANEL_DEFAULT);
     void load<number>(PANEL_WIDTH_KEY).then((w) => {
-      if (typeof w === "number" && panelEl.isConnected) setPanelWidth(w);
+      if (typeof w !== "number" || !panelEl.isConnected) return;
+      setPanelWidth(w);
+      // The grid got narrower or wider: the selected board in its middle again.
+      requestAnimationFrame(() => grid.reveal(selected, true));
     });
   });
   split.addEventListener("pointerdown", (e) => {
@@ -580,6 +587,10 @@ export async function mountGrid(
       grid.hints = !locked;
       grid.flipped = flipped;
       grid.render(root, selected);
+      if (revealOnDraw) {
+        revealOnDraw = false;
+        grid.reveal(selected, true);
+      }
       drawPanel();
       drawGame();
     });

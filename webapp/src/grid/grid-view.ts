@@ -437,9 +437,11 @@ export class GridView {
   }
 
   /** Scrolls so the board of this node is visible. */
-  reveal(node: GNode): void {
+  /** `center`: in the middle of the visible area (when the screen opens), not just inside it. */
+  reveal(node: GNode, center = false): void {
     const el = this.inner.querySelector<HTMLElement>(`.gc[data-id="${node.id}"]`);
-    el?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    const where = center ? "center" : "nearest";
+    el?.scrollIntoView({ block: where, inline: where });
   }
 }
 
