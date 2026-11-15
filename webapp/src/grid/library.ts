@@ -22,6 +22,8 @@ export interface SavedNode {
   children: SavedNode[];
   /** A folded engine line. */
   ghost?: { ucis: string[]; score: Score | null };
+  /** Hidden by the player (drawn as the end of its line). */
+  hidden?: boolean;
   /** First prototype. */
   toCheck?: boolean;
 }

@@ -9,7 +9,7 @@ import { pieceUrl } from "../ui/board.ts";
 import { features, type Features, type PieceType } from "./features.ts";
 import { overMarks, squarePos, underMarks } from "./marks.ts";
 import {
-  alternatives, assess, barFraction, chosenLine, layout, MOVE_MARK_TITLE, POS_MARK_BAR, POS_MARK_TITLE, scoreText, type Assessment,
+  alternatives, assess, barFraction, chosenLine, hiddenLine, layout, MOVE_MARK_TITLE, POS_MARK_BAR, POS_MARK_TITLE, scoreText, type Assessment,
   type Cell, type GNode,
 } from "./tree.ts";
 
@@ -20,6 +20,10 @@ export interface GridCallbacks {
   unfold(node: GNode, all: boolean): void;
   /** Squares of pieces lost in the exchange (rules module). */
   hanging(fen: string): number[];
+  /** Shows a hidden line again. */
+  show(node: GNode): void;
+  /** The context menu (right click) for a board, a hidden line or a folded engine line. */
+  menu(node: GNode, kind: "board" | "hidden" | "ghost", x: number, y: number): void;
 }
 
 const BAR = 7; // evaluation bar width
@@ -107,6 +111,7 @@ export class GridView {
     const at = new Map<GNode, Cell>();
     for (const c of cells) if (!c.ghost) at.set(c.node, c);
     for (const c of cells) {
+      if (c.folded) continue;
       if (c.ghost) {
         // A ghost at the end of its node's row: a dashed line from the node.
         const from = at.get(c.node)!;
@@ -120,7 +125,8 @@ export class GridView {
       const nc = next && at.get(next);
       if (nc && nc.row === c.row) {
         const y = c.row * H + S / 2;
-        lines.push(`<line x1="${boardX(c.col) + S}" y1="${y}" x2="${nc.col * W}" y2="${y}" class="${lineClass(c.node, next)}"/>`);
+        const x2 = nc.folded ? ghostX(nc.col) : nc.col * W;
+        lines.push(`<line x1="${boardX(c.col) + S}" y1="${y}" x2="${x2}" y2="${y}" class="${lineClass(c.node, next)}"/>`);
       }
     }
     for (const r of rows) {
@@ -129,7 +135,7 @@ export class GridView {
       const y1 = r.from.row * H + S + LABEL - 4;
       const y2 = r.row * H + S / 2;
       const first = cells.find((c) => c.row === r.row)!;
-      const end = first.ghost ? ghostX(r.startCol) : r.startCol * W;
+      const end = first.ghost || first.folded ? ghostX(r.startCol) : r.startCol * W;
       const cls = first.ghost ? "ghost-line" : lineClass(r.from.node, first.node);
       lines.push(`<path d="M${x} ${y1} V${y2 - 6} Q${x} ${y2} ${x + 6} ${y2} H${end}" class="${cls}"/>`);
     }
@@ -138,7 +144,11 @@ export class GridView {
     this.svg.innerHTML = lines.join("");
 
     const frag = document.createDocumentFragment();
-    for (const c of cells) frag.append(...(c.ghost ? this.ghostCell(c, gb) : [this.cell(c, selected, path, marks.get(c.node)!)]));
+    for (const c of cells) {
+      if (c.ghost) frag.append(...this.ghostCell(c, gb));
+      else if (c.folded) frag.append(...this.hiddenCell(c, gb, marks));
+      else frag.append(this.cell(c, selected, path, marks.get(c.node)!));
+    }
     this.inner.replaceChildren(this.svg, frag);
   }
 
@@ -158,6 +168,10 @@ export class GridView {
 
     const board = this.miniBoard(n, placement, fx, hanging);
     board.addEventListener("click", () => this.cb.select(n));
+    board.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      this.cb.menu(n, "board", e.clientX, e.clientY);
+    });
     el.append(board);
 
     const alts = alternatives(n, this.hints);
@@ -322,6 +336,10 @@ export class GridView {
     const board = this.miniBoard({ ...n, lastMove: g.lastMove }, placement, fx, hanging);
     board.title = `Engine line: ${g.text}\nClick: unfold the whole line`;
     board.addEventListener("click", () => this.cb.unfold(n, true));
+    board.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      this.cb.menu(n, "ghost", e.clientX, e.clientY);
+    });
     el.append(board);
 
     const label = document.createElement("div");
@@ -334,6 +352,76 @@ export class GridView {
       const ev = document.createElement("span");
       ev.className = "gc-eval numeric";
       ev.textContent = scoreText(g.score, g.state);
+      label.append(ev);
+    }
+    el.append(label);
+    return [pill, el];
+  }
+
+  /** A line the player hid: the pill on the connector ("N moves") and the faded end of the
+   *  line, with the lines branching off it added up ("+N"). A click shows it again. */
+  private hiddenCell(c: Cell, gb: number, marks: Map<GNode, Assessment>): HTMLElement[] {
+    const n = c.node;
+    const { end, plies, branches } = hiddenLine(n, this.hints);
+    const S = this.size;
+    const left = c.col * this.cellW;
+    const top = c.row * this.cellH;
+    const what = `Hidden: ${n.moveNo} ${n.san} … ${end.moveNo} ${end.san}` +
+      (branches ? `, ${branches} more line${branches > 1 ? "s" : ""} branching off` : "");
+
+    const pill = document.createElement("button");
+    pill.className = "gc-ghost-pill hidden-line";
+    pill.style.left = left - GAP_X + 2 + "px";
+    pill.style.width = GAP_X + S - gb - 4 + "px";
+    pill.style.top = top + S / 2 - 15 + "px";
+    pill.innerHTML = `<strong>${plies}</strong><span>${plies === 1 ? "move" : "moves"}</span>`;
+    pill.title = `${what}\nClick: show it again`;
+    pill.addEventListener("click", () => this.cb.show(n));
+
+    const el = document.createElement("div");
+    el.className = "gc ghost hidden-line";
+    el.style.left = left + S - gb + "px";
+    el.style.top = top + (S - gb) / 2 + "px";
+    el.style.setProperty("--mb", gb + "px");
+    el.append(this.bar(end, marks.get(end)!));
+
+    const { placement, fx, hanging } = this.analysis(end.fen);
+    const board = this.miniBoard(end, placement, fx, hanging);
+    board.title = `${what}\nClick: show it again`;
+    board.addEventListener("click", () => this.cb.show(n));
+    board.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      this.cb.menu(n, "hidden", e.clientX, e.clientY);
+    });
+    el.append(board);
+
+    if (branches) {
+      const badge = document.createElement("button");
+      badge.className = "gc-badge";
+      badge.textContent = `+${branches}`;
+      badge.title = `${branches} line${branches > 1 ? "s" : ""} branching off the hidden line\nClick: show it again`;
+      badge.addEventListener("click", () => this.cb.show(n));
+      el.append(badge);
+    }
+
+    const label = document.createElement("div");
+    label.className = "gc-label";
+    const move = document.createElement("span");
+    move.className = "gc-move";
+    move.textContent = end === n || !end.uci ? `${n.moveNo} ${n.san}` : `${end.moveNo} ${end.san}`;
+    label.append(move);
+    // The line's value: the player's mark (own or backed up), else the engine's.
+    const a = marks.get(n)!;
+    if (a.mark) {
+      const p = document.createElement("span");
+      p.className = "gc-pos-mark" + (a.own ? "" : " derived");
+      p.textContent = a.mark;
+      p.title = "The hidden line: " + POS_MARK_TITLE[a.mark];
+      label.append(p);
+    } else if (this.engineOn && end.state === "ongoing" && end.analysed) {
+      const ev = document.createElement("span");
+      ev.className = "gc-eval numeric";
+      ev.textContent = scoreText(end.score, end.state);
       label.append(ev);
     }
     el.append(label);

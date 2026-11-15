@@ -233,6 +233,17 @@ analysis there). Code: `src/grid/` (`grid-app.ts` builds the screen), `src/scree
   Shown as an outlined mark (own marks are solid), a fainter hatched bar with the engine off,
   and a thick line along the moves the marks choose (all of them on a tie), from the top of
   each settled part of the tree; refuted lines get none. Only own marks go into the PGN.
+- **Context menu (right click):** on a board: needs attention, make main line, hide
+  line(s), delete from here; on a hidden line: show, make main line, delete; on a folded
+  engine line: unfold the next move, unfold all, discard.
+- **Hidden lines:** the player can hide a line from any board on: it is drawn like a folded
+  engine line (a small, faded board: the end of the line along the first moves; solid, not
+  dashed), with a "N moves" pill and a "+N" badge that adds up the alternatives of every
+  board on the hidden line. A click, or reaching a board inside with the arrow keys, shows it
+  again. Stored with the analysis.
+- **Suggestions already in the grid** can be ticked too: the board takes the new evaluation
+  (if the search went at least as deep), and the line goes on along the moves already there;
+  what is new is added folded.
 - **Engine:** the app's engine, shared; a switch in the screen's bar turns it on or off. The
   setting is stored with each analysis (opening one restores it); a new analysis always starts
   with the engine off, so it is never used by accident. With the engine off the bar shows the

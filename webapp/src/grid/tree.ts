@@ -80,6 +80,9 @@ export interface GNode {
   ghost: Ghost | null;
   /** What the opponent threatens (engine, null move): undefined not looked at yet, null none. */
   threat?: Threat | null;
+  /** Hidden by the player: this position and everything after it are drawn as one small
+   *  board, the end of its line. */
+  hidden?: boolean;
 }
 
 export interface Threat {
@@ -99,6 +102,8 @@ export interface Cell {
   col: number;
   /** This cell is `node`'s ghost (its folded engine line), not the node. */
   ghost?: true;
+  /** `node` is hidden: this cell stands for it and everything after it. */
+  folded?: true;
 }
 
 /** Alternatives shown by a node's badge: other children, and a ghost beside real children
@@ -130,6 +135,12 @@ export function layout(root: GNode, ghosts = true): Layout {
     rows.push({ row, startCol: start.ply, from });
     const line: Cell[] = [];
     for (let n: GNode = start; ; n = n.children[0]) {
+      if (n.hidden) {
+        // A hidden line ends the row: one small board for all of it.
+        cells.push({ node: n, row, col: n.ply, folded: true });
+        cols = Math.max(cols, n.ply + 1);
+        break;
+      }
       const c = { node: n, row, col: n.ply };
       cells.push(c);
       line.push(c);
@@ -159,6 +170,20 @@ export function layout(root: GNode, ghosts = true): Layout {
   };
   emit(root, null);
   return { cells, rows, cols };
+}
+
+/** What a hidden line holds: its end (along the first moves), how many moves lead there, and
+ *  how many lines branch off on the way (the "+N" of every board on it, added up). */
+export function hiddenLine(n: GNode, ghosts = true): { end: GNode; plies: number; branches: number } {
+  let end = n;
+  let plies = 1;
+  let branches = alternatives(n, ghosts);
+  while (end.children.length) {
+    end = end.children[0];
+    plies++;
+    branches += alternatives(end, ghosts);
+  }
+  return { end, plies, branches };
 }
 
 export function walk(n: GNode, f: (n: GNode) => void): void {

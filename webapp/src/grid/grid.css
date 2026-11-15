@@ -787,3 +787,66 @@
   color: var(--accent);
   font-weight: 600;
 }
+
+/* ---- Hidden lines: the player's own, folded into their end (solid, not dashed) ---- */
+
+.gc.ghost.hidden-line .mb {
+  outline-style: solid;
+}
+
+.gc-ghost-pill.hidden-line {
+  border-style: solid;
+}
+
+/* ---- Context menu (right click on a board) ---- */
+
+.ag-menu {
+  position: fixed;
+  z-index: 50;
+  min-width: 200px;
+  padding: var(--space-1) 0;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+}
+
+.ag-menu button {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  padding: 6px var(--space-3);
+  border: none;
+  border-radius: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ag-menu button:hover:not(:disabled),
+.ag-menu button:focus-visible {
+  background: var(--hairline);
+}
+
+.ag-menu button:disabled {
+  color: var(--muted);
+  opacity: 0.6;
+  cursor: default;
+}
+
+.ag-menu button.danger {
+  color: var(--danger);
+}
+
+.ag-menu .check {
+  color: var(--accent);
+}
+
+.ag-menu hr {
+  margin: var(--space-1) 0;
+  border: none;
+  border-top: 1px solid var(--hairline);
+}

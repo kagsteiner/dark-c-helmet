@@ -4,7 +4,7 @@ import { placementFromFen } from "../chess/fen.ts";
 import { features } from "./features.ts";
 import { normalSan, parsePgn, writePgn } from "./pgn.ts";
 import { describeWin, forcingEnd } from "./threat-text.ts";
-import { assess, barFraction, chosenLine, layout, type GNode } from "./tree.ts";
+import { assess, barFraction, chosenLine, hiddenLine, layout, type GNode } from "./tree.ts";
 
 let id = 0;
 function node(parent: GNode | null, san = "x", fen = ""): GNode {
@@ -214,4 +214,39 @@ test("chosenLine: from the top of a settled part along the best moves, refuted l
   node(root, "c4", "p b");
   line = chosenLine(root, assess(root));
   assert.deepEqual([...line].map((n) => n.san).sort(), ["d4", "e6"]);
+});
+
+test("hidden line: one small board ends the row; its branches add up", () => {
+  const root = node(null);
+  const m1 = node(root, "m1");
+  const m2 = node(m1, "m2");
+  const m3 = node(m2, "m3");
+  const m4 = node(m3, "m4");
+  node(m2, "b1"); // two lines branch off at m2…
+  node(m2, "b2");
+  node(m4, "c1"); // …and one at m4 (m4's first child continues the line)
+  node(m4, "c2");
+  const other = node(root, "x");
+  m1.hidden = true;
+  const { cells, rows } = layout(root);
+  // Row 0: root, then the hidden line as one cell; row 1: x. Nothing inside the hidden line.
+  assert.equal(rows.length, 2);
+  const folded = cells.filter((c) => c.folded);
+  assert.equal(folded.length, 1);
+  assert.equal(folded[0].node, m1);
+  assert.equal(folded[0].row, 0);
+  assert.equal(folded[0].col, 1);
+  assert.ok(!cells.some((c) => [m2, m3, m4].includes(c.node)));
+  assert.ok(cells.some((c) => c.node === other && c.row === 1));
+  const h = hiddenLine(m1);
+  assert.equal(h.end.san, "c1");
+  assert.equal(h.plies, 5); // m1 m2 m3 m4 c1
+  assert.equal(h.branches, 3); // +2 at m2, +1 at m4
+  // A hidden alternative: its row holds only the small board.
+  m1.hidden = false;
+  other.hidden = true;
+  const l = layout(root);
+  const row = l.cells.filter((c) => c.node === other);
+  assert.equal(row.length, 1);
+  assert.ok(row[0].folded);
 });

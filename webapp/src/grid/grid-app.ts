@@ -157,13 +157,14 @@ export async function mountGrid(
       uci: n.uci, score: n.score, analysed: n.analysed, depth: n.depth, origin: n.origin, attention: n.attention,
       comment: n.comment, moveMark: n.moveMark, posMark: n.posMark, expanded: n.expanded, children: n.children.map(serialize),
       ghost: n.ghost ? { ucis: n.ghost.ucis, score: n.ghost.score } : undefined,
+      hidden: n.hidden || undefined,
     };
   }
 
   function applySaved(n: GNode, s: SavedNode): void {
     Object.assign(n, {
       score: s.score, analysed: s.analysed, depth: s.depth, expanded: s.expanded, attention: s.attention ?? s.toCheck ?? false,
-      comment: s.comment ?? "", moveMark: s.moveMark ?? null, posMark: s.posMark ?? null,
+      comment: s.comment ?? "", moveMark: s.moveMark ?? null, posMark: s.posMark ?? null, hidden: s.hidden ?? false,
     });
     if (s.ghost) n.ghost = makeGhost(n, s.ghost.ucis, s.ghost.score);
     for (const cs of s.children) {
@@ -326,6 +327,9 @@ export async function mountGrid(
             gets the best of them for the side to move (an outlined mark), and a thick line follows
             the moves your marks choose. A mark you set yourself (solid) always wins. A position
             that needs attention, or is marked unclear (∞), leaves everything before it open.</p>
+          <p>Right-click a board for more: needs attention, make main line, hide the line from
+            there on, delete. A hidden line shows as one small board, the end of the line, with the
+            lines branching off it added up (+N); click it to show the line again.</p>
         </details>
       </aside>
     </main>
@@ -369,6 +373,11 @@ export async function mountGrid(
       unfold(n, all);
       panelTop();
     },
+    show: (n) => {
+      showLine(n);
+      panelTop();
+    },
+    menu: (n, kind, x, y) => openMenu(n, kind, x, y),
     hanging: (fen) => {
       if (locked) return [];
       rules.setFen(fen, chess960);
@@ -408,6 +417,15 @@ export async function mountGrid(
   input.setMode("move");
 
   function select(n: GNode): void {
+    // A board inside a hidden line (reached with the arrow keys): the line shows again.
+    let shown = false;
+    for (let p: GNode | null = n; p; p = p.parent) {
+      if (p.hidden) {
+        p.hidden = false;
+        shown = true;
+      }
+    }
+    if (shown) persist();
     if (n !== selected) {
       suggestions = null;
       // Suggestions belong to their board: leaving it drops a search still running.
@@ -538,12 +556,146 @@ export async function mountGrid(
 
   $(".ag-back").addEventListener("click", () => selected.parent && select(selected.parent));
   $(".ag-fwd").addEventListener("click", () => selected.children[0] && select(selected.children[0]));
-  $(".ag-attention").addEventListener("click", () => {
-    selected.attention = !selected.attention;
+  // ---- Actions on a board (panel buttons and the context menu) ----
+
+  function toggleAttention(n: GNode): void {
+    n.attention = !n.attention;
     persist();
     draw();
     pump();
-  });
+  }
+
+  function makeMainLine(n: GNode): void {
+    const p = n.parent;
+    if (!p) return;
+    p.children.splice(p.children.indexOf(n), 1);
+    p.children.unshift(n);
+    persist();
+    draw();
+  }
+
+  function deleteFrom(n: GNode): void {
+    const p = n.parent;
+    if (!p) return;
+    let count = 0;
+    walk(n, () => count++);
+    if (!confirm(`Delete ${n.moveNo} ${n.san} and ${count - 1} board${count === 2 ? "" : "s"} after it?`)) return;
+    p.children.splice(p.children.indexOf(n), 1);
+    persist();
+    if (isIn(selected, n)) select(p);
+    else draw();
+  }
+
+  /** Hides `n` and everything after it: drawn as one small board, the end of its line. */
+  function hideLine(n: GNode): void {
+    if (!n.parent) return;
+    n.hidden = true;
+    persist();
+    if (isIn(selected, n)) select(n.parent);
+    else draw();
+  }
+
+  function showLine(n: GNode): void {
+    n.hidden = false;
+    persist();
+    select(n);
+  }
+
+  /** `n` is `top` or comes after it. */
+  function isIn(n: GNode, top: GNode): boolean {
+    for (let p: GNode | null = n; p; p = p.parent) if (p === top) return true;
+    return false;
+  }
+
+  /** More than one line from `n` on (something branches off). */
+  function branches(n: GNode): boolean {
+    let more = false;
+    walk(n, (k) => {
+      if (k.children.length > 1) more = true;
+    });
+    return more;
+  }
+
+  // ---- Context menu (right click on a board in the grid) ----
+
+  const menu = document.createElement("div");
+  menu.className = "ag-menu";
+  menu.setAttribute("role", "menu");
+  menu.hidden = true;
+  app.append(menu);
+
+  function closeMenu(): void {
+    menu.hidden = true;
+    menu.replaceChildren();
+  }
+
+  function openMenu(n: GNode, kind: "board" | "hidden" | "ghost", x: number, y: number): void {
+    closeMenu();
+    const item = (text: string, run: () => void, opts: { disabled?: boolean; danger?: boolean; check?: boolean } = {}) => {
+      const b = document.createElement("button");
+      b.setAttribute("role", "menuitem");
+      b.textContent = text;
+      if (opts.check !== undefined) {
+        const c = document.createElement("span");
+        c.className = "check";
+        c.textContent = opts.check ? "✓" : "";
+        b.append(c);
+      }
+      if (opts.danger) b.classList.add("danger");
+      b.disabled = !!opts.disabled;
+      b.addEventListener("click", () => {
+        closeMenu();
+        run();
+      });
+      menu.append(b);
+    };
+    const line = () => menu.append(document.createElement("hr"));
+    if (kind === "board") {
+      select(n);
+      panelTop();
+      item("Needs attention", () => toggleAttention(n), { check: n.attention });
+      item("Make main line", () => makeMainLine(n), { disabled: !n.parent || n.parent.children[0] === n });
+      item(branches(n) ? "Hide lines" : "Hide line", () => hideLine(n), { disabled: !n.parent });
+      line();
+      item("Delete from here…", () => deleteFrom(n), { disabled: !n.parent, danger: true });
+    } else if (kind === "hidden") {
+      item(branches(n) ? "Show lines" : "Show line", () => {
+        showLine(n);
+        panelTop();
+      });
+      item("Make main line", () => makeMainLine(n), { disabled: !n.parent || n.parent.children[0] === n });
+      line();
+      item("Delete from here…", () => deleteFrom(n), { disabled: !n.parent, danger: true });
+    } else {
+      item("Unfold next move", () => {
+        unfold(n, false);
+        panelTop();
+      });
+      item("Unfold whole line", () => unfold(n, true));
+      line();
+      item("Discard", () => {
+        n.ghost = null;
+        persist();
+        draw();
+      }, { danger: true });
+    }
+    menu.hidden = false;
+    // Inside the window, also near its right and bottom edges.
+    const r = menu.getBoundingClientRect();
+    menu.style.left = Math.max(4, Math.min(x, innerWidth - r.width - 4)) + "px";
+    menu.style.top = Math.max(4, Math.min(y, innerHeight - r.height - 4)) + "px";
+    menu.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
+  }
+
+  const onMenuAway = (e: Event) => {
+    if (!menu.hidden && !menu.contains(e.target as Node)) closeMenu();
+  };
+  document.addEventListener("pointerdown", onMenuAway, true);
+  window.addEventListener("blur", closeMenu);
+  window.addEventListener("resize", closeMenu);
+  grid.el.addEventListener("scroll", closeMenu);
+
+  $(".ag-attention").addEventListener("click", () => toggleAttention(selected));
   $<HTMLTextAreaElement>(".ag-comment").addEventListener("input", (e) => {
     selected.comment = (e.target as HTMLTextAreaElement).value;
     persist();
@@ -556,25 +708,19 @@ export async function mountGrid(
     persist();
     draw();
   });
-  $(".ag-main-line").addEventListener("click", () => {
-    const p = selected.parent;
-    if (!p) return;
-    p.children.splice(p.children.indexOf(selected), 1);
-    p.children.unshift(selected);
-    persist();
-    draw();
-  });
-  $(".ag-delete").addEventListener("click", () => {
-    const p = selected.parent;
-    if (!p) return;
-    let count = 0;
-    walk(selected, () => count++);
-    if (!confirm(`Delete ${selected.moveNo} ${selected.san} and ${count - 1} board${count === 2 ? "" : "s"} after it?`)) return;
-    p.children.splice(p.children.indexOf(selected), 1);
-    persist();
-    select(p);
-  });
+  $(".ag-main-line").addEventListener("click", () => makeMainLine(selected));
+  $(".ag-delete").addEventListener("click", () => deleteFrom(selected));
   const onKey = (e: KeyboardEvent) => {
+    if (!menu.hidden) {
+      if (e.key === "Escape") closeMenu();
+      else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        const items = [...menu.querySelectorAll<HTMLButtonElement>("button:not(:disabled)")];
+        const i = items.indexOf(document.activeElement as HTMLButtonElement);
+        items[(i + (e.key === "ArrowDown" ? 1 : items.length - 1)) % items.length]?.focus();
+      } else return;
+      e.preventDefault();
+      return;
+    }
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
     if (document.querySelector("dialog[open]")) return;
     if (e.key === "ArrowLeft" && selected.parent) select(selected.parent);
@@ -1342,6 +1488,40 @@ export async function mountGrid(
     }
   }
 
+  /** A suggested move that is already in the grid: its board takes the new evaluation (if
+   *  the search went at least as deep), and the line goes on along the moves already there;
+   *  what is new is added folded, like any suggested line. */
+  function mergeLine(from: GNode, c: Candidate): void {
+    let n = from.children.find((k) => k.uci === c.uci);
+    if (!n) return;
+    if (c.depth && c.depth >= n.depth) {
+      n.score = c.score;
+      n.depth = c.depth;
+      n.analysed = 2;
+    }
+    const pv = c.pv.slice(0, PV_PLIES - 1);
+    let i = 0;
+    for (; i < pv.length; i++) {
+      const next: GNode | undefined = n.children.find((k) => k.uci === pv[i]);
+      if (!next) break;
+      n = next;
+    }
+    const rest = pv.slice(i);
+    if (!rest.length) return;
+    if (!n.children.length) {
+      // The end of a line: the new moves fold after it (a longer folded line on the same
+      // moves stays).
+      if (n.ghost && rest.every((u, k) => n!.ghost!.ucis[k] === u)) return;
+      n.ghost = makeGhost(n, rest, c.score);
+      return;
+    }
+    // The line leaves the grid's moves here: a new alternative, folded after its first move.
+    const alt = child(n, rest[0], "engine");
+    if (!alt) return;
+    n.expanded = true;
+    if (rest.length > 1 && !alt.children.length) alt.ghost = makeGhost(alt, rest.slice(1), c.score);
+  }
+
   function drawSuggestions(): void {
     const box = $(".ag-suggestions");
     const s = suggestions;
@@ -1400,8 +1580,7 @@ export async function mountGrid(
       const label = document.createElement("label");
       const cb = document.createElement("input");
       cb.type = "checkbox";
-      cb.checked = c.chosen || c.inTree;
-      cb.disabled = c.inTree;
+      cb.checked = c.chosen;
       cb.addEventListener("change", () => (c.chosen = cb.checked));
       const mv = document.createElement("span");
       mv.className = "ag-cand-move";
@@ -1412,7 +1591,7 @@ export async function mountGrid(
       if (c.depth) ev.title = `depth ${c.depth}`;
       const line = document.createElement("span");
       line.className = "ag-cand-pv muted";
-      line.textContent = (c.pvSan.join(" ") || "") + (c.inTree ? " (already in the grid)" : "");
+      line.textContent = (c.pvSan.join(" ") || "") + (c.inTree ? " (in the grid: tick to add what is new and update the evaluation)" : "");
       if (c.deep) {
         const tag = document.createElement("span");
         tag.className = "ag-cand-tag" + (c.isNew ? " new" : "");
@@ -1431,7 +1610,11 @@ export async function mountGrid(
     add.addEventListener("click", () => {
       // One real board per chosen move; the engine's continuation stays folded (a ghost).
       for (const c of s.list) {
-        if (!c.chosen || c.inTree) continue;
+        if (!c.chosen) continue;
+        if (c.inTree) {
+          mergeLine(s.node, c);
+          continue;
+        }
         const n = child(s.node, c.uci, "engine");
         if (n && c.pv.length && !n.children.length) n.ghost = makeGhost(n, c.pv.slice(0, PV_PLIES - 1), c.score);
       }
@@ -1499,6 +1682,10 @@ export async function mountGrid(
     engine?.stop();
     engine = null;
     document.removeEventListener("keydown", onKey);
+    document.removeEventListener("pointerdown", onMenuAway, true);
+    window.removeEventListener("blur", closeMenu);
+    window.removeEventListener("resize", closeMenu);
+    menu.remove();
     unsubscribe();
     persistNow();
     document.title = originalTitle;
