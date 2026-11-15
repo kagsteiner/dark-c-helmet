@@ -1381,6 +1381,8 @@ export async function mountGrid(
             chosen: old?.chosen ?? false, deep: true, isNew: !old && s.list.length > 0,
           };
           s.list = [cand, ...s.list.filter((c) => c.uci !== uci)];
+          // Boards already in the grid along its line take the new evaluation right away.
+          if (takeLine(node, [uci, ...pv], cand.score, cand.depth)) persist();
         }
       }
     } finally {
@@ -1519,17 +1521,33 @@ export async function mountGrid(
     }
   }
 
+  /** A search's line through boards already in the grid: every position on the engine's main
+   *  line has its value, so each board on it takes the evaluation, one ply less deep per move
+   *  (if that is at least as deep as what the board has). Returns whether anything changed. */
+  function takeLine(from: GNode, ucis: string[], score: Score, depth: number): boolean {
+    let changed = false;
+    let n: GNode | undefined = from;
+    for (const [k, u] of ucis.entries()) {
+      n = n.children.find((c) => c.uci === u);
+      const d = depth - k;
+      if (!n || d < 1) break;
+      if (d >= n.depth && n.state === "ongoing") {
+        n.score = score;
+        n.depth = d;
+        n.analysed = 2;
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
   /** A suggested move that is already in the grid: its board takes the new evaluation (if
    *  the search went at least as deep), and the line goes on along the moves already there;
    *  what is new is added folded, like any suggested line. */
   function mergeLine(from: GNode, c: Candidate): void {
     let n = from.children.find((k) => k.uci === c.uci);
     if (!n) return;
-    if (c.depth && c.depth >= n.depth) {
-      n.score = c.score;
-      n.depth = c.depth;
-      n.analysed = 2;
-    }
+    takeLine(from, [c.uci, ...c.pv], c.score, c.depth);
     const pv = c.pv.slice(0, PV_PLIES - 1);
     let i = 0;
     for (; i < pv.length; i++) {
@@ -1647,6 +1665,7 @@ export async function mountGrid(
           continue;
         }
         const n = child(s.node, c.uci, "engine");
+        if (n) takeLine(s.node, [c.uci], c.score, c.depth); // the search's evaluation, not a new quick look
         if (n && c.pv.length && !n.children.length) n.ghost = makeGhost(n, c.pv.slice(0, PV_PLIES - 1), c.score);
       }
       s.node.expanded = true;
