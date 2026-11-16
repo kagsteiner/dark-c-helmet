@@ -171,7 +171,8 @@ export async function chooseNewGame(
         ${segmented("oddsClock", [["none", "No clock (correspondence)"], ["clock", "Clock"]], c.oddsClock)}
       </div>
       <p class="small muted" data-show="oddsCorrespondence">Take all the time you want. "Think in the grid" on the
-        game screen opens your own analysis of the game: locked, no engine.</p>
+        game screen opens your own analysis of the game: locked, no engine. On a phone it is
+        called "Think it over" and shows the board with your lines as moves, without the grid.</p>
       <label class="field" data-show="oddsMinutes">
         <span class="field-label">Your minutes for the whole game</span>
         <input type="number" name="oddsMinutes" min="1" max="600" value="${c.oddsMinutes}">

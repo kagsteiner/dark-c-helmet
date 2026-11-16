@@ -48,7 +48,7 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
             <p class="play-status small muted" aria-live="polite"></p>
             <p class="play-help small" aria-live="polite"></p>
             <a class="play-think btn-primary" href="#/grid" hidden
-              title="Your own analysis of this game in the analysis grid: locked, no engine. Your star stays.">Think in the grid</a>
+              title="Your own analysis of this game in the analysis grid: locked, no engine. Your star stays. (On a phone: the board with your lines as moves, without the grid.)"><span class="think-wide">Think in the grid</span><span class="think-phone">Think it over</span></a>
           </div>
           <div class="play-actions">
             <button class="btn-icon play-undo" data-action="undo" aria-label="Take back" title="Take back">${icons.undo}</button>

@@ -929,3 +929,98 @@
 .ag-game .ag-nav a {
   text-decoration: none;
 }
+
+/* ---- The lines as moves (phones only: in place of the grid) ---- */
+
+.ag-vars {
+  display: none;
+}
+
+.ag-var-line,
+.ag-var-alt,
+.ag-var-next {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px var(--space-1);
+}
+
+.ag-var-line:empty,
+.ag-var-alt:empty,
+.ag-var-next:empty {
+  display: none;
+}
+
+.ag-var-label {
+  font-size: var(--text-small);
+  margin-right: var(--space-1);
+}
+
+.ag-var {
+  font: inherit;
+  color: var(--text);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  padding: 2px var(--space-1);
+  cursor: pointer;
+  min-height: 32px;
+}
+
+.ag-var .muted {
+  margin-right: 2px;
+}
+
+.ag-var.on {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: var(--weight-strong);
+}
+
+.ag-var.ahead {
+  color: var(--muted);
+}
+
+.ag-var.main {
+  font-weight: var(--weight-strong);
+}
+
+.ag-var-alt .ag-var,
+.ag-var-next .ag-var {
+  border-color: var(--hairline);
+}
+
+/* Phones (narrow, or short in landscape; same query as PHONE_QUERY in grid-app.ts): the grid
+   and much of the bar are left out, the panel takes the whole width. */
+@media (max-width: 700px), (max-height: 500px) {
+  .ag-grid,
+  .ag-split,
+  .ag-help,
+  .ag-title,
+  .ag-sep,
+  .ag-size,
+  .ag-expand,
+  .ag-collapse,
+  .ag-import,
+  .ag-export {
+    display: none;
+  }
+
+  .ag-panel {
+    width: auto !important; /* over the divider's width */
+    flex: 1;
+    padding: var(--space-3);
+  }
+
+  .ag-bar .ag-name {
+    flex: 1 1 8em;
+    min-width: 0;
+  }
+
+  .ag-vars {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin: var(--space-2) 0;
+  }
+}

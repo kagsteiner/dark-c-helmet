@@ -202,6 +202,13 @@ time control:
 - **Engine's choice marks:** in the move list of a game with odds, a player's move that was
   the engine's choice for them gets a dot (flashing once when played). Only a match is shown,
   never the engine's move, so it is no hint; a move taken back loses its dot.
+- **On a phone** (narrow, or short in landscape: `PHONE_QUERY` in grid-app.ts, the same query
+  in grid.css and play.css) the grid screen leaves the grid out: the panel alone, its board,
+  and the lines as moves below it (the line to the selected board, the main line on from it
+  faded, the other moves instead of this one, and the lines from here). Moves are played on
+  the board, ◀ goes back, "Make main line" and "Delete from here" work as before. The game
+  screen calls the button "Think it over" there. Grid and board together are too much for a
+  phone.
 - **Achievements** (`#/achievements`, linked from the game screen, the odds sheet and
   Progress; rules in `src/play/achievements.ts`, list in `ACHIEVEMENTS.md`) instead of a
   ladder: no order needed, the player picks the goal. Three tabs like the new-game screen

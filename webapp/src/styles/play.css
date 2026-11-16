@@ -465,3 +465,18 @@
   color: var(--text);
   margin-bottom: var(--space-1);
 }
+
+/* "Think in the grid": on a phone the grid is left out (same query as in grid.css). */
+.think-phone {
+  display: none;
+}
+
+@media (max-width: 700px), (max-height: 500px) {
+  .think-wide {
+    display: none;
+  }
+
+  .think-phone {
+    display: inline;
+  }
+}

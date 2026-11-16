@@ -28,6 +28,8 @@ import {
 } from "./tree.ts";
 import "./grid.css";
 
+/** Phones (narrow, or short in landscape): no grid, the panel alone. Same as in grid.css. */
+const PHONE_QUERY = "(max-width: 700px), (max-height: 500px)";
 const QUICK_MS = 250;
 const DEEP_MS = 2000;
 const SUGGEST_SCAN_MS = 80;
@@ -358,6 +360,13 @@ export async function mountGrid(
           <div class="ag-assess"></div>
           <div class="ag-threat"></div>
         </div>
+        <div class="ag-vars">
+          <p class="ag-phone-note small muted">On a phone the grid is left out: the board, and your lines
+            as moves. Play moves on the board, ◀ takes you back. A larger screen shows the whole grid.</p>
+          <div class="ag-var-line"></div>
+          <div class="ag-var-alt"></div>
+          <div class="ag-var-next"></div>
+        </div>
         <div class="ag-nav">
           <button class="ag-back btn-secondary" title="Previous move (←)">◀</button>
           <button class="ag-fwd btn-secondary" title="Next move (→)">▶</button>
@@ -620,7 +629,9 @@ export async function mountGrid(
     else if (!controller.humanToMove) text.textContent = "Your game: the engine is to move. Go back to the game to let it play.";
     else text.textContent = move
       ? "Your game: your move. When you have decided, play it from here."
-      : "Your game: your move. Select a board after the game's position (the last board of the main line) to play its move.";
+      : phone.matches
+        ? "Your game: your move. Go to a move after the game's position (the end of the main line) to play it."
+        : "Your game: your move. Select a board after the game's position (the last board of the main line) to play its move.";
     play.hidden = !!controller.result || !controller.humanToMove;
     play.disabled = !move;
     play.textContent = move ? `Play ${move.moveNo} ${move.san} in the game` : "Play in the game";
@@ -736,8 +747,52 @@ export async function mountGrid(
       return `${white ? "White" : "Black"} ${PIECE_NAME[p.toLowerCase()]} on ${"abcdefgh"[sq & 7]}${(sq >> 3) + 1} is lost in the exchange`;
     });
     $(".ag-notes").innerHTML = locked ? "" : [...lost, ...fx.notes].map((t) => `<li>${t}</li>`).join("");
+    drawVars(n);
     drawSuggestions();
   }
+
+  // ---- The lines as moves: on a phone, in place of the grid (CSS shows them there only) ----
+
+  /** Phones (narrow, or short in landscape): the panel alone, no grid. Same query as the CSS. */
+  const phone = matchMedia(PHONE_QUERY);
+  /** The boards behind the move buttons of the lines, by id. */
+  let varNodes = new Map<number, GNode>();
+
+  function moveButton(m: GNode, withNo: boolean, cls = ""): string {
+    varNodes.set(m.id, m);
+    const no = withNo || m.moveNo.endsWith(".") ? `<span class="muted">${m.moveNo}</span>` : "";
+    return `<button class="ag-var ${cls}" data-id="${m.id}">${no}${m.san}${m.moveMark ?? ""}</button>`;
+  }
+
+  function drawVars(n: GNode): void {
+    varNodes = new Map();
+    // The line to this board, and on from it along the main line (faded).
+    const path: GNode[] = [];
+    for (let p: GNode | null = n; p?.parent; p = p.parent) path.unshift(p);
+    const ahead: GNode[] = [];
+    for (let c = n.children[0]; c && ahead.length < 12; c = c.children[0]) ahead.push(c);
+    const start = `<button class="ag-var${n.parent ? "" : " on"}" data-id="${root.id}">Start</button>`;
+    varNodes.set(root.id, root);
+    $(".ag-var-line").innerHTML =
+      start +
+      path.map((m, i) => moveButton(m, i === 0, m === n ? "on" : "")).join("") +
+      ahead.map((m, i) => moveButton(m, i === 0 && (!n.parent || n.moveNo.endsWith(".")), "ahead")).join("");
+    // Other moves instead of this one, and the moves after it.
+    const others = n.parent ? n.parent.children.filter((c) => c !== n) : [];
+    $(".ag-var-alt").innerHTML = others.length
+      ? `<span class="ag-var-label muted">Instead of ${n.san}:</span>` + others.map((m) => moveButton(m, true)).join("")
+      : "";
+    $(".ag-var-next").innerHTML = n.children.length > 1
+      ? `<span class="ag-var-label muted">Lines from here:</span>` + n.children.map((m, i) => moveButton(m, true, i === 0 ? "main" : "")).join("")
+      : "";
+    $(".ag-var-line .on")?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }
+
+  $(".ag-vars").addEventListener("click", (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLButtonElement>(".ag-var");
+    const m = b && varNodes.get(Number(b.dataset.id));
+    if (m) select(m);
+  });
 
   // ---- Panel actions ----
 
