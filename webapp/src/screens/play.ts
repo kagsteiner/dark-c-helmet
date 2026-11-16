@@ -36,7 +36,7 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
           <div class="play-moves">
             <p class="play-meta small muted"></p>
             <p class="play-balance small" hidden></p>
-            <p class="play-report small" hidden title="Your report card: how long you held the position (engine's evaluation above −1.00 for you), your worst moment, and how often your analysis in the grid foresaw the engine's reply"></p>
+            <p class="play-report small" hidden title="Your report card: how long you held the position (engine's evaluation above −1.00 for you), your worst moment, and how often your analysis in the grid anticipated the engine's moves, how often you played the engine's choice for you"></p>
             <ol class="move-list numeric" aria-label="Moves"></ol>
             <p class="play-status small muted" aria-live="polite"></p>
             <p class="play-help small" aria-live="polite"></p>

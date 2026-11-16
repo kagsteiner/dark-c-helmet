@@ -88,7 +88,7 @@ test("report card: held until, worst moment, foresight, takebacks", () => {
   assert.deepEqual([r.judged, r.considered, r.predicted], [4, 3, 1]);
   assert.equal(
     reportText(r, true),
-    "above −1.00 until move 3 · worst −1.50 at move 3 · foresaw 3 of 4 engine replies (1 as your main line) · " +
+    "above −1.00 until move 3 · worst −1.50 at move 3 · anticipated 3 of the engine's 4 moves (1 as your main line) · " +
       "1 of 3 moves without losing ground · 2 of 3 takebacks",
   );
   // Held all game; a mate counts as worse than any score.
@@ -105,7 +105,7 @@ test("report card: held until, worst moment, foresight, takebacks", () => {
 test("report card: the engine's expected move found; ground lost, mates capped", () => {
   const r = makeReport(10, undefined, undefined, null, { 2: true, 4: false, 6: true });
   assert.deepEqual(r.found, { yes: 2, of: 3 });
-  assert.equal(reportText(r, false), "found the engine's move 2 of 3 times");
+  assert.equal(reportText(r, false), "played the engine's choice for you 2 of 3 times");
   // Gaps (a book move without evaluation) are skipped; a lost game's mate scores count as -10.
   const evals = [
     { ply: 1, e: { cp: 0 } },

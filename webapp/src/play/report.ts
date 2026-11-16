@@ -99,8 +99,9 @@ export function evalText(e: Eval): string {
   return (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(2);
 }
 
-/** The report card in one line: "above −1.00 until move 18 · worst −2.30 at move 24 · foresaw 6
- *  of 14 engine replies (2 as your main line) · 2 of 3 takebacks". Empty if nothing is known. */
+/** The report card in one line: "above −1.00 until move 18 · worst −2.30 at move 24 ·
+ *  anticipated 6 of the engine's 14 moves (2 as your main line) · played the engine's choice for
+ *  you 3 of 12 times · 2 of 3 takebacks". Empty if nothing is known. */
 export function reportText(r: Report, hasEvals: boolean): string {
   const parts: string[] = [];
   if (hasEvals) {
@@ -109,11 +110,11 @@ export function reportText(r: Report, hasEvals: boolean): string {
   }
   if (r.judged) {
     parts.push(
-      `foresaw ${r.considered} of ${r.judged} engine repl${r.judged === 1 ? "y" : "ies"}` +
+      (r.judged === 1 ? `anticipated ${r.considered} of 1 engine move` : `anticipated ${r.considered} of the engine's ${r.judged} moves`) +
         (r.considered ? ` (${r.predicted} as your main line)` : ""),
     );
   }
-  if (r.found.of) parts.push(`found the engine's move ${r.found.yes} of ${r.found.of} times`);
+  if (r.found.of) parts.push(`played the engine's choice for you ${r.found.yes} of ${r.found.of} time${r.found.of === 1 ? "" : "s"}`);
   if (r.steady.of) parts.push(`${r.steady.yes} of ${r.steady.of} moves without losing ground`);
   if (r.takebacks) parts.push(`${r.takebacks.used} of ${r.takebacks.of} takeback${r.takebacks.of === 1 ? "" : "s"}`);
   return parts.join(" · ");

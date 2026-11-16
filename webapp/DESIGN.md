@@ -185,12 +185,12 @@ time control:
   the game's position) and "Back to the game".
 - **Report card** (game screen, "So far: …", and the log): how long the player held the
   position (the engine's evaluation after each of its moves, from the player's point of view,
-  above −1.00 until move N), the worst moment, how often the player's grid analysis foresaw the
-  engine's reply, and the takebacks used. Foresight is judged when "Think in the grid" brings
+  above −1.00 until move N), the worst moment, how often the player's grid analysis anticipated
+  the engine's move ("anticipated N of the engine's M moves"), and the takebacks used. Foresight is judged when "Think in the grid" brings
   the analysis up to date: an engine move the player had entered after that position is
   "considered", as their first line "predicted"; lines there without it are "missed";
-  positions not analysed are not judged. Also: how often the player found the engine's move
-  (the reply its own search expected as best: the second move of its line; no search, no
+  positions not analysed are not judged. Also: how often the player played the engine's choice for
+  them ("played the engine's choice for you N of M times": the reply its own search expected as best: the second move of its line; no search, no
   judgement), and how many of the player's moves did not lose ground (the engine's evaluation
   before and after fell by at most 0.50; evaluations capped at ±10 so mates in a decided game
   do not count). Records: `evals`, `foresight`, `found`. These are the
