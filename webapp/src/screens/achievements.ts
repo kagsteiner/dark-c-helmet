@@ -25,7 +25,7 @@ export function achievementsScreen(): Screen {
       root.innerHTML = `
         <section class="page achievements">
           <h1 class="title">Achievements</h1>
-          <p class="muted">Earned in games with odds against Dark C. Helmet (Play, “Odds…”). Each one has three
+          <p class="muted">Earned in challenges against Dark C. Helmet (Play, “Challenge”). Each one has three
             levels by takebacks: <b>Coffeehouse</b> any number, <b>J'adoube</b> at most one,
             <b>Touch-move</b> none. A level shows the longest engine time you earned it at; the next
             step is the next longer engine time. “Within a pawn” means the engine's evaluation for you

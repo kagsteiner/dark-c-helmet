@@ -114,13 +114,13 @@ export async function chooseNewGame(
   const bookmarks = await loadBookmarks();
   const dialog = document.createElement("dialog");
   dialog.className = "sheet";
-  dialog.setAttribute("aria-label", odds ? "Game with odds" : "New game");
+  dialog.setAttribute("aria-label", odds ? "Challenge" : "New game");
   const option = (v: number, label: string, cur: number) => `<option value="${v}"${v === cur ? " selected" : ""}>${label}</option>`;
   dialog.innerHTML = `
     <form class="sheet-body" method="dialog">
-      <h2 class="title">${odds ? "Game with odds" : "New game"}</h2>
-      <p class="small muted" data-show="oddsIntro">Against Dark C. Helmet at full strength, with odds for you. An
-        experiment: these games are logged below, and do not count on the Progress screen yet.</p>
+      <h2 class="title">${odds ? "Challenge" : "New game"}</h2>
+      <p class="small muted" data-show="oddsIntro">Dark C. Helmet at full strength, with odds for you. Challenges
+        earn achievements and are logged below; they do not count on the Progress screen.</p>
       <div class="field" data-show="opponent">
         <span class="field-label">Opponent</span>
         ${segmented("opponent", [["engine", "Dark C. Helmet"], ["human-1300", "1300 Elo player"], ["human-1600", "1600 Elo player"]], c.opponent)}
@@ -214,10 +214,10 @@ export async function chooseNewGame(
         <input type="number" name="extraSeconds" min="0" max="600" value="${c.extraSeconds}">
       </label>
       <details class="odds-log" data-show="odds">
-        <summary>Your games with odds</summary>
+        <summary>Your challenges</summary>
         <div class="odds-log-body small"><p class="muted">Loading…</p></div>
       </details>
-      <p class="small" data-show="odds"><a href="#/achievements" data-action="achievements">Achievements</a> in games with odds</p>
+      <p class="small" data-show="odds"><a href="#/achievements" data-action="achievements">Your achievements</a></p>
       <div class="sheet-actions">
         <button type="button" class="btn-secondary" value="cancel">Cancel</button>
         <button type="submit" class="btn-primary" value="start">Start game</button>
@@ -390,7 +390,7 @@ export async function chooseNewGame(
 async function fillOddsLog(box: HTMLElement): Promise<void> {
   const records = (await loadRecords()).filter((r) => r.odds).sort((a, b) => b.started - a.started);
   if (!records.length) {
-    box.innerHTML = `<p class="muted">No games with odds yet.</p>`;
+    box.innerHTML = `<p class="muted">No challenges yet.</p>`;
     return;
   }
   const table = document.createElement("table");

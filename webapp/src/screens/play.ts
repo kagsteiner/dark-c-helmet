@@ -1,6 +1,6 @@
 // The Play screen: renders the PlayController's game and passes the player's input to it.
 import { placementFromFen } from "../chess/fen.ts";
-import { describeTimeControl, formatClock, noClock, type Side } from "../play/clocks.ts";
+import { describeTimeControl, formatClock, formatSeconds, noClock, type Side } from "../play/clocks.ts";
 import { opponentName, type PlayController, type StarLoss } from "../play/controller.ts";
 import { isBookmarked, setBookmarkNote, startName, toggleBookmark } from "../play/bookmarks.ts";
 import { ACHIEVEMENTS, earnedFrom, LEVELS, newIn, type Earned } from "../play/achievements.ts";
@@ -15,6 +15,9 @@ import { MoveInput } from "../ui/move-input.ts";
 import { settings } from "../settings.ts";
 import type { Screen } from "../ui/shell.ts";
 import "../styles/play.css";
+
+/** How long an achievement pop-up stays (its CSS animation has the same length). */
+const TOAST_MS = 4500;
 
 const STAR_TEXT: Record<StarLoss | "lit", string> = {
   lit: "Clean game so far: no undo, no hints.",
@@ -39,6 +42,7 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
             <p class="play-meta small muted"></p>
             <p class="play-balance small" hidden></p>
             <p class="play-report small" hidden title="Your report card: how long you held the position (engine's evaluation above −1.00 for you), your worst moment, and how often your analysis in the grid anticipated the engine's moves, how often you played the engine's choice for you"></p>
+            <a class="play-toast small" href="#/achievements" role="status" hidden></a>
             <p class="play-achieved small" hidden></p>
             <ol class="move-list numeric" aria-label="Moves"></ol>
             <p class="play-status small muted" aria-live="polite"></p>
@@ -54,8 +58,8 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
             <button class="btn-icon" data-action="bookmark" aria-label="Bookmark this start position" title="Bookmark this start position" aria-pressed="false" hidden></button>
             <button class="btn-icon" data-action="colors" aria-label="Board colours" title="Board colours">${icons.palette}</button>
             <span class="spacer"></span>
-            <button class="btn-secondary" data-action="odds" title="A game against Dark C. Helmet with odds for you: less time for the engine, no clock for you, takebacks that keep the star">Odds…</button>
             <button class="btn-secondary" data-action="new">New game</button>
+            <button class="btn-secondary" data-action="odds" title="Challenge Dark C. Helmet at full strength, with odds for you: less time for the engine, no clock for you, takebacks that keep the star. Earns achievements.">Challenge</button>
             <input class="bookmark-note" type="text" maxlength="100" placeholder="Add a note to this bookmark" aria-label="Note for this bookmark" hidden>
             <p class="star-tip small" role="status" hidden></p>
           </div>
@@ -101,7 +105,7 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
             : c.setup.chess960
               ? `Chess960 no. ${wNo ?? "?"} · `
               : "") +
-          (c.odds ? "Odds: " : "") +
+          (c.odds ? "Challenge: " : "") +
           tc +
           (c.odds ? ` · ${c.setup.takebacks ?? 0} takeback${c.setup.takebacks === 1 ? "" : "s"} with the star` : "") +
           (c.setup.strongestOpenings ? " · strongest openings" : "");
@@ -237,6 +241,7 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
         const id = controller.gameId;
         if (earlier?.id !== id) {
           earlier = { id, earned: null }; // until loaded, nothing counts as new
+          announced = null;
           void loadRecords().then((records) => {
             if (earlier?.id !== id) return;
             earlier.earned = earnedFrom(records.filter((r) => r.id !== id));
@@ -248,6 +253,39 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
         el.innerHTML = names.length
           ? `New: ${names.join(", ")} · <a href="#/achievements">Achievements</a>`
           : `<a href="#/achievements">Achievements</a>`;
+        if (!earlier.earned) return;
+        // A pop-up once per achievement level, when it is earned (not for those earned before
+        // this screen opened, nor again after a takeback undid and the game re-earned one).
+        const keys = fresh.map((f) => `${f.id}:${f.level}`);
+        if (!announced) {
+          announced = new Set(keys);
+          return;
+        }
+        const pop = fresh.filter((_, i) => !announced!.has(keys[i]));
+        for (const k of keys) announced.add(k);
+        if (pop.length) showToast(pop);
+      };
+
+      // The achievement pop-up: above the move list, never over the board, no sound; fades
+      // after a few seconds, opens the Achievements screen when clicked.
+      let announced: Set<string> | null = null;
+      let toastTimer = 0;
+      const showToast = (items: { id: string; level: number }[]) => {
+        const el = $<HTMLAnchorElement>(".play-toast");
+        const tc = controller.setup.tc;
+        const engine = tc.kind === "odds" ? ` · engine ${formatSeconds(tc.engineSeconds)}` : "";
+        el.innerHTML = items
+          .map(({ id, level }) => {
+            const a = ACHIEVEMENTS.find((x) => x.id === id)!;
+            return `<span class="toast-line"><b>★ ${a.name}</b> <span class="muted">${a.text} · ${LEVELS[level].name}${engine}</span></span>`;
+          })
+          .join("");
+        el.hidden = false;
+        el.classList.remove("show");
+        void el.offsetWidth; // restart the animation
+        el.classList.add("show");
+        clearTimeout(toastTimer);
+        toastTimer = window.setTimeout(() => (el.hidden = true), TOAST_MS);
       };
 
       const renderMoves = () => {
@@ -365,6 +403,7 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
       render();
 
       return () => {
+        clearTimeout(toastTimer);
         clearInterval(timer);
         unsubscribe();
         document.removeEventListener("pointerdown", onDocDown);

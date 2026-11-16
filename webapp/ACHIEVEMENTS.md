@@ -1,6 +1,6 @@
 # Achievements
 
-Games with odds against the real engine only. Every achievement is earned in one game, and
+Challenges (games with odds against the real engine) only. Every achievement is earned in one game, and
 can be computed from what a game already records (also for games played before).
 
 ## Three tabs

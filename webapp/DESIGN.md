@@ -166,9 +166,9 @@ then. Clicking it shows one line:
 On the Progress screen a win counts with the gold star, and against Dark C. Helmet also with
 the silver one.
 
-### Games with odds (experiment)
+### Challenges: games with odds
 
-To beat the real engine: "Odds…" on the Play screen opens the new-game sheet for a game
+To beat the real engine: "Challenge" (next to "New game") on the Play screen opens the new-game sheet for a game
 against Dark C. Helmet at full strength with odds for the player, in place of opponent and
 time control:
 
@@ -196,7 +196,7 @@ time control:
   do not count). Records: `evals`, `foresight`, `found`. These are the
   measurements the challenges of a later ladder are to be made of.
 - The record of such a game carries its odds (`odds` in the game record). They are not wins
-  on the Progress screen yet: the sheet's log ("Your games with odds") shows, per set of
+  on the Progress screen yet: the sheet's log ("Your challenges") shows, per set of
   odds, games won (with the star), drawn and lost, and the latest games. From that log the
   ladder of odds levels will be built.
 - **Engine's choice marks:** in the move list of a game with odds, a player's move that was
@@ -211,6 +211,9 @@ time control:
   ("2 s · next 5 s") — the ladder comes back as harder engine times, nothing else. Computed
   from the game records, so earlier games count. The game screen shows the levels the
   running game has earned beyond earlier games ("New: …").
+  When a level is earned, a quiet pop-up above the move list names it (never over the board,
+  no sound, fades after 4.5 s, opens Achievements when clicked): once per level and game, not
+  for levels already earned when the screen opened, nor again after a takeback.
 
 ### Progress
 

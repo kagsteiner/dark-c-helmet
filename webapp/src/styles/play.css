@@ -417,6 +417,45 @@
   margin: var(--space-1) 0;
 }
 
+/* The achievement pop-up (challenges): above the move list, quiet, fades by itself */
+.play-toast {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.play-toast[hidden] {
+  display: none;
+}
+
+.play-toast b {
+  color: var(--star);
+}
+
+.play-toast.show {
+  animation: play-toast 4.5s ease-out forwards;
+}
+
+@keyframes play-toast {
+  0% { opacity: 0; transform: translateY(-0.5rem); }
+  8% { opacity: 1; transform: none; }
+  85% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  @keyframes play-toast {
+    0%, 85% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+}
+
 /* The report card of a game with odds: on the game screen and in the log */
 .play-report {
   margin: var(--space-1) 0;
