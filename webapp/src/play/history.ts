@@ -38,6 +38,9 @@ export interface GameRecord {
   evals?: EvalPoint[];
   /** Per engine move (ply): whether the player's grid analysis foresaw it. */
   foresight?: Record<number, Foresight>;
+  /** Per player move (ply): whether it was the move the engine expected as best (the second
+   *  move of its line in the search before). */
+  found?: Record<number, boolean>;
 }
 
 /** The odds of a game, for the log of games with odds. */

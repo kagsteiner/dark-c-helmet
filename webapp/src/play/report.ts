@@ -19,6 +19,12 @@ export type Foresight = "predicted" | "considered" | "missed";
 
 /** Holding the position means staying above this (centipawns, player's view). */
 export const HOLD_CP = -100;
+/** A move of the player "lost ground" when the engine's evaluation fell by more than this
+ *  between its move before and its move after (centipawns). */
+export const LOSS_CP = 50;
+/** Evaluations are capped here for that comparison: in a game already lost (or won), mate
+ *  scores would make every move look like a big loss. */
+const CAP_CP = 1000;
 
 export interface Report {
   /** Moves of the game (full moves, rounded up). */
@@ -31,6 +37,10 @@ export interface Report {
   judged: number;
   considered: number;
   predicted: number;
+  /** Player moves judged against the engine's expected best move, and how many were it. */
+  found: { yes: number; of: number };
+  /** Player moves between two evaluated engine moves, and how many did not lose ground. */
+  steady: { yes: number; of: number };
   takebacks: { used: number; of: number } | null;
 }
 
@@ -50,12 +60,25 @@ export function makeReport(
   evals: EvalPoint[] | undefined,
   foresight: Record<number, Foresight> | undefined,
   takebacks: { used: number; of: number } | null,
+  found?: Record<number, boolean>,
 ): Report {
   const points = [...(evals ?? [])].sort((a, b) => a.ply - b.ply);
   const fell = points.find((p) => evalValue(p.e) < HOLD_CP);
   let worst: Report["worst"] = null;
   for (const p of points) if (!worst || evalValue(p.e) < evalValue(worst.e)) worst = { e: p.e, move: moveOfPly(p.ply) };
   const judged = Object.values(foresight ?? {});
+  const hits = Object.values(found ?? {});
+  // Each player move between two engine moves with an evaluation: did it lose ground?
+  const capped = (e: Eval) => Math.max(-CAP_CP, Math.min(CAP_CP, evalValue(e)));
+  const at = new Map(points.map((p) => [p.ply, p.e]));
+  let steadyOf = 0;
+  let steadyYes = 0;
+  for (const p of points) {
+    const next = at.get(p.ply + 2);
+    if (!next) continue;
+    steadyOf++;
+    if (capped(p.e) - capped(next) <= LOSS_CP) steadyYes++;
+  }
   return {
     moves: Math.ceil(plies / 2),
     fellAt: points.length && fell ? moveOfPly(fell.ply) : null,
@@ -63,6 +86,8 @@ export function makeReport(
     judged: judged.length,
     considered: judged.filter((f) => f !== "missed").length,
     predicted: judged.filter((f) => f === "predicted").length,
+    found: { yes: hits.filter(Boolean).length, of: hits.length },
+    steady: { yes: steadyYes, of: steadyOf },
     takebacks,
   };
 }
@@ -88,6 +113,8 @@ export function reportText(r: Report, hasEvals: boolean): string {
         (r.considered ? ` (${r.predicted} as your main line)` : ""),
     );
   }
+  if (r.found.of) parts.push(`found the engine's move ${r.found.yes} of ${r.found.of} times`);
+  if (r.steady.of) parts.push(`${r.steady.yes} of ${r.steady.of} moves without losing ground`);
   if (r.takebacks) parts.push(`${r.takebacks.used} of ${r.takebacks.of} takeback${r.takebacks.of === 1 ? "" : "s"}`);
   return parts.join(" · ");
 }

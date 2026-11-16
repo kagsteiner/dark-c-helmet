@@ -88,7 +88,8 @@ test("report card: held until, worst moment, foresight, takebacks", () => {
   assert.deepEqual([r.judged, r.considered, r.predicted], [4, 3, 1]);
   assert.equal(
     reportText(r, true),
-    "above −1.00 until move 3 · worst −1.50 at move 3 · foresaw 3 of 4 engine replies (1 as your main line) · 2 of 3 takebacks",
+    "above −1.00 until move 3 · worst −1.50 at move 3 · foresaw 3 of 4 engine replies (1 as your main line) · " +
+      "1 of 3 moves without losing ground · 2 of 3 takebacks",
   );
   // Held all game; a mate counts as worse than any score.
   const held = makeReport(10, [{ ply: 1, e: { cp: 30 } }], undefined, null);
@@ -99,4 +100,18 @@ test("report card: held until, worst moment, foresight, takebacks", () => {
   // A recorded game.
   assert.equal(recordReport({ ...rec("unfinished", 3, 1), evals, foresight }), reportText(makeReport(60, evals, foresight, { used: 1, of: 3 }), true));
   assert.equal(recordReport({ ...rec("unfinished", 0, 0), odds: undefined }), "");
+});
+
+test("report card: the engine's expected move found; ground lost, mates capped", () => {
+  const r = makeReport(10, undefined, undefined, null, { 2: true, 4: false, 6: true });
+  assert.deepEqual(r.found, { yes: 2, of: 3 });
+  assert.equal(reportText(r, false), "found the engine's move 2 of 3 times");
+  // Gaps (a book move without evaluation) are skipped; a lost game's mate scores count as -10.
+  const evals = [
+    { ply: 1, e: { cp: 0 } },
+    { ply: 3, e: { cp: -40 } }, // -0.40: not lost ground
+    { ply: 7, e: { cp: -1200 } }, // no evaluation at ply 5: not judged
+    { ply: 9, e: { mate: -3 } }, // -12 to mated: both capped at -10
+  ];
+  assert.deepEqual(makeReport(10, evals, undefined, null).steady, { yes: 2, of: 2 });
 });

@@ -65,5 +65,5 @@ export function oddsGameLine(r: GameRecord): string {
 /** The report card of a recorded game (empty if nothing was measured). */
 export function recordReport(r: GameRecord): string {
   const tb = r.odds ? { used: r.odds.used, of: r.odds.takebacks } : null;
-  return reportText(makeReport(r.plies, r.evals, r.foresight, tb), !!r.evals?.length);
+  return reportText(makeReport(r.plies, r.evals, r.foresight, tb, r.found), !!r.evals?.length);
 }

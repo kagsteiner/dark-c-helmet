@@ -189,7 +189,11 @@ time control:
   engine's reply, and the takebacks used. Foresight is judged when "Think in the grid" brings
   the analysis up to date: an engine move the player had entered after that position is
   "considered", as their first line "predicted"; lines there without it are "missed";
-  positions not analysed are not judged. Records: `evals`, `foresight`. These are the
+  positions not analysed are not judged. Also: how often the player found the engine's move
+  (the reply its own search expected as best: the second move of its line; no search, no
+  judgement), and how many of the player's moves did not lose ground (the engine's evaluation
+  before and after fell by at most 0.50; evaluations capped at ±10 so mates in a decided game
+  do not count). Records: `evals`, `foresight`, `found`. These are the
   measurements the challenges of a later ladder are to be made of.
 - The record of such a game carries its odds (`odds` in the game record). They are not wins
   on the Progress screen yet: the sheet's log ("Your games with odds") shows, per set of

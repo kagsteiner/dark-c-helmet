@@ -61,6 +61,8 @@ interface Saved {
   engineEval?: { cp: number } | { mate: number } | null;
   evals?: EvalPoint[];
   foresight?: Record<number, Foresight>;
+  expected?: Record<number, string>;
+  found?: Record<number, boolean>;
 }
 
 const SAVE_KEY = "current-game";
@@ -116,6 +118,10 @@ export class PlayController {
   evals: EvalPoint[] = [];
   /** Per engine move (ply): whether the player's analysis in the grid foresaw it. */
   foresight: Record<number, Foresight> = {};
+  /** Per player move (ply): the move the engine expected as best for the player (the second
+   *  move of its line), and whether the player played it. */
+  expected: Record<number, string> = {};
+  found: Record<number, boolean> = {};
   /** The engine's last move came from the opening book. */
   bookMove = false;
   /** The book knew the engine's last position, but too shallowly for this time control. */
@@ -156,6 +162,8 @@ export class PlayController {
     this.engineEval = saved.engineEval ?? null;
     this.evals = saved.evals ?? [];
     this.foresight = saved.foresight ?? {};
+    this.expected = saved.expected ?? {};
+    this.found = saved.found ?? {};
     this.emit();
   }
 
@@ -176,7 +184,7 @@ export class PlayController {
   /** The report card of this game so far. */
   get report(): Report {
     const takebacks = this.odds ? { used: this.takebacksUsed, of: this.setup.takebacks ?? 0 } : null;
-    return makeReport(this.game.moves.length, this.evals, this.foresight, takebacks);
+    return makeReport(this.game.moves.length, this.evals, this.foresight, takebacks, this.found);
   }
 
   /** When this game was started (ms since 1970). */
@@ -223,6 +231,8 @@ export class PlayController {
       engineEval: this.engineEval,
       evals: this.evals,
       foresight: this.foresight,
+      expected: this.expected,
+      found: this.found,
     } satisfies Saved);
   }
 
@@ -248,6 +258,7 @@ export class PlayController {
       ...(this.engineEval ? { engineEval: this.engineEval } : {}),
       ...(this.evals.length ? { evals: this.evals } : {}),
       ...(Object.keys(this.foresight).length ? { foresight: this.foresight } : {}),
+      ...(Object.keys(this.found).length ? { found: this.found } : {}),
       ...(this.setup.tc.kind === "odds"
         ? {
             odds: {
@@ -315,6 +326,8 @@ export class PlayController {
     this.engineEval = null;
     this.evals = [];
     this.foresight = {};
+    this.expected = {};
+    this.found = {};
     this.premove = null;
     this.bookMove = false;
     this.bookTooShallow = false;
@@ -376,8 +389,11 @@ export class PlayController {
 
   humanMove(uci: string): boolean {
     if (this.result || !this.humanToMove) return false;
+    const ply = this.game.moves.length;
     const played = this.game.play(uci);
     if (!played) return false;
+    // Was it the move the engine expected as best? (Only where its search said so.)
+    if (this.expected[ply]) this.found[ply] = this.expected[ply] === uci;
     this.token++; // a hint or evaluation still running is no longer wanted
     this.helping = null;
     this.clearHelp();
@@ -460,6 +476,8 @@ export class PlayController {
       // The engine's score is its own (the side that moved): the player's is the opposite.
       this.engineEval = "mate" in info.score ? { mate: -info.score.mate } : { cp: -info.score.cp };
       this.evals.push({ ply: this.game.moves.length - 1, e: this.engineEval });
+      // The engine's line goes on with the reply it expects from the player: the best move.
+      if (info.pv[0] === uci && info.pv[1]) this.expected[this.game.moves.length] = info.pv[1];
       const lost = "mate" in info.score ? info.score.mate < 0 : info.score.cp <= RESIGN_CP;
       this.lowScores = lost ? this.lowScores + 1 : 0;
     }
@@ -547,7 +565,9 @@ export class PlayController {
     // What belonged to the moves taken back goes with them.
     const plies = this.game.moves.length;
     this.evals = this.evals.filter((p) => p.ply < plies);
-    for (const k of Object.keys(this.foresight)) if (Number(k) >= plies) delete this.foresight[Number(k)];
+    for (const map of [this.foresight, this.expected, this.found] as Record<number, unknown>[]) {
+      for (const k of Object.keys(map)) if (Number(k) >= plies) delete map[Number(k)];
+    }
     // With odds, the first takebacks are part of the deal and keep the star.
     this.takebacksUsed++;
     if (this.takebacksLeft === null || this.takebacksUsed > (this.setup.takebacks ?? 0)) this.loseStar("undo");
