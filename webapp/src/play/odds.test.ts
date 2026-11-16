@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Clocks, describeTimeControl, noClock, type TimeControl } from "./clocks.ts";
 import { countsAsWin, type GameRecord } from "./history.ts";
-import { evalText, oddsGameLine, oddsName, tallyByOdds } from "./odds-log.ts";
+import { evalText, oddsGameLine, oddsName, recordReport, tallyByOdds } from "./odds-log.ts";
+import { makeReport, reportText } from "./report.ts";
 
 test("odds clock: the engine's own time, no clock for the player in correspondence", () => {
   let now = 0;
@@ -53,7 +54,7 @@ test("odds log: an unfinished game shows how it stood, from the player's point o
   assert.equal(evalText({ mate: 3 }), "you mate in 3");
   assert.equal(evalText({ mate: -2 }), "mated in 2");
   const left = { ...rec("unfinished", 3, 3), engineEval: { cp: -512 } };
-  assert.match(oddsGameLine(left), /not finished · 3 of 3 takebacks · 30 moves · engine's eval for you −5\.12$/);
+  assert.match(oddsGameLine(left), /not finished · 30 moves · engine's eval for you −5\.12$/);
   // A finished game says how it ended; no evaluation.
   assert.doesNotMatch(oddsGameLine({ ...rec("loss", 3, 3), engineEval: { mate: -1 } }), /eval/);
 });
@@ -70,4 +71,32 @@ test("clock refund: a move that cost no thinking gives the time back", () => {
   now += 40; // a real search
   c.moveMade("b");
   assert.equal(c.remaining("b"), 960);
+});
+
+test("report card: held until, worst moment, foresight, takebacks", () => {
+  // Engine moves at odd plies (the player is White): evals after moves 1, 2, 3, 4.
+  const evals = [
+    { ply: 1, e: { cp: -20 } },
+    { ply: 3, e: { cp: -80 } },
+    { ply: 5, e: { cp: -150 } }, // move 3: below -1.00
+    { ply: 7, e: { cp: -90 } },
+  ];
+  const foresight = { 1: "predicted", 3: "considered", 5: "missed", 7: "considered" } as const;
+  const r = makeReport(8, evals, foresight, { used: 2, of: 3 });
+  assert.equal(r.fellAt, 3);
+  assert.deepEqual(r.worst, { e: { cp: -150 }, move: 3 });
+  assert.deepEqual([r.judged, r.considered, r.predicted], [4, 3, 1]);
+  assert.equal(
+    reportText(r, true),
+    "above −1.00 until move 3 · worst −1.50 at move 3 · foresaw 3 of 4 engine replies (1 as your main line) · 2 of 3 takebacks",
+  );
+  // Held all game; a mate counts as worse than any score.
+  const held = makeReport(10, [{ ply: 1, e: { cp: 30 } }], undefined, null);
+  assert.equal(reportText(held, true), "above −1.00 all 5 moves");
+  const mated = makeReport(10, [{ ply: 1, e: { cp: -900 } }, { ply: 9, e: { mate: -2 } }], undefined, null);
+  assert.equal(mated.worst?.move, 5);
+  assert.match(reportText(mated, true), /worst mated in 2 at move 5/);
+  // A recorded game.
+  assert.equal(recordReport({ ...rec("unfinished", 3, 1), evals, foresight }), reportText(makeReport(60, evals, foresight, { used: 1, of: 3 }), true));
+  assert.equal(recordReport({ ...rec("unfinished", 0, 0), odds: undefined }), "");
 });

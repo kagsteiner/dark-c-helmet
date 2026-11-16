@@ -3,6 +3,7 @@ import { placementFromFen } from "../chess/fen.ts";
 import { describeTimeControl, formatClock, noClock, type Side } from "../play/clocks.ts";
 import { opponentName, type PlayController, type StarLoss } from "../play/controller.ts";
 import { isBookmarked, setBookmarkNote, startName, toggleBookmark } from "../play/bookmarks.ts";
+import { reportText } from "../play/report.ts";
 import { chooseNewGame } from "../play/new-game.ts";
 import { balanceOf, formatPawns, STANDARD_START_CP, startScore } from "../play/start-balance.ts";
 import { Board } from "../ui/board.ts";
@@ -35,6 +36,7 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
           <div class="play-moves">
             <p class="play-meta small muted"></p>
             <p class="play-balance small" hidden></p>
+            <p class="play-report small" hidden title="Your report card: how long you held the position (engine's evaluation above −1.00 for you), your worst moment, and how often your analysis in the grid foresaw the engine's reply"></p>
             <ol class="move-list numeric" aria-label="Moves"></ol>
             <p class="play-status small muted" aria-live="polite"></p>
             <p class="play-help small" aria-live="polite"></p>
@@ -100,6 +102,11 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
           tc +
           (c.odds ? ` · ${c.setup.takebacks ?? 0} takeback${c.setup.takebacks === 1 ? "" : "s"} with the star` : "") +
           (c.setup.strongestOpenings ? " · strongest openings" : "");
+        // Games with odds: the report card so far.
+        const report = $<HTMLElement>(".play-report");
+        const card = c.odds ? reportText(c.report, c.evals.length > 0) : "";
+        report.hidden = !card;
+        report.textContent = card ? (c.result ? "Your report: " : "So far: ") + card : "";
         renderMoves();
         renderClocks();
         renderBookmark();

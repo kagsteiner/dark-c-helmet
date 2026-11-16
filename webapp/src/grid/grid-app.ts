@@ -213,7 +213,17 @@ export async function mountGrid(
   function syncGame(): void {
     if (!gameOf || controller.gameId !== gameOf) return;
     let n = root;
-    for (const m of controller.game.moves) {
+    const engineSide = controller.engineSide;
+    for (const [ply, m] of controller.game.moves.entries()) {
+      // An engine move the grid sees for the first time: did the player's analysis have it?
+      // Their main line (first move) is a prediction, another of their lines a consideration;
+      // lines after this position that miss it are a miss. Not analysed: not judged.
+      if (n.fen.split(" ")[1] === engineSide && !controller.foresight[ply]) {
+        const had = n.children.find((k) => k.uci === m.uci);
+        const mine = n.children.filter((k) => k.origin !== "seed");
+        if (had && had.origin !== "seed") controller.noteForesight(ply, mine[0] === had ? "predicted" : "considered");
+        else if (!had && mine.length) controller.noteForesight(ply, "missed");
+      }
       const c = child(n, m.uci, "seed");
       if (!c) break;
       n.children.splice(n.children.indexOf(c), 1);

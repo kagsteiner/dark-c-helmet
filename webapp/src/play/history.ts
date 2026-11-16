@@ -3,6 +3,7 @@
 import { loadAll, save } from "../storage.ts";
 import { notifyLocalChange } from "../sync/changes.ts";
 import type { Side, TimeControl } from "./clocks.ts";
+import type { EvalPoint, Foresight } from "./report.ts";
 
 export type Outcome = "win" | "loss" | "draw" | "unfinished";
 
@@ -33,6 +34,10 @@ export interface GameRecord {
   /** The engine's evaluation after its last search, from the player's point of view
    *  (centipawns, or mate in N: positive, the player mates). How a game stood when it was left. */
   engineEval?: { cp: number } | { mate: number };
+  /** The engine's evaluation after each of its moves (player's view), for the report card. */
+  evals?: EvalPoint[];
+  /** Per engine move (ply): whether the player's grid analysis foresaw it. */
+  foresight?: Record<number, Foresight>;
 }
 
 /** The odds of a game, for the log of games with odds. */

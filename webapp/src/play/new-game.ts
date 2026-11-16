@@ -10,7 +10,7 @@ import { bookmarkDate, loadBookmarks, removeBookmark, setBookmarkNote, startName
 import type { TimeControl } from "./clocks.ts";
 import type { GameSetup } from "./controller.ts";
 import { loadRecords } from "./history.ts";
-import { oddsGameLine, tallyByOdds } from "./odds-log.ts";
+import { oddsGameLine, recordReport, tallyByOdds } from "./odds-log.ts";
 
 export interface Choices {
   /** "engine" (Dark C. Helmet) or a human-like profile ("human-1300"). */
@@ -417,6 +417,13 @@ async function fillOddsLog(box: HTMLElement): Promise<void> {
     odds.className = "muted";
     odds.textContent = " — " + tallyByOdds([r])[0].name;
     li.append(odds);
+    const card = recordReport(r);
+    if (card) {
+      const rep = document.createElement("div");
+      rep.className = "odds-report";
+      rep.textContent = card;
+      li.append(rep);
+    }
     list.append(li);
   }
   const latest = document.createElement("p");

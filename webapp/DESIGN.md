@@ -183,6 +183,14 @@ time control:
   hints, no unlocking) while the game goes on, and it does not cost the star. A strip above
   the panel's board offers "Play <move> in the game" (the first move of the selected line after
   the game's position) and "Back to the game".
+- **Report card** (game screen, "So far: …", and the log): how long the player held the
+  position (the engine's evaluation after each of its moves, from the player's point of view,
+  above −1.00 until move N), the worst moment, how often the player's grid analysis foresaw the
+  engine's reply, and the takebacks used. Foresight is judged when "Think in the grid" brings
+  the analysis up to date: an engine move the player had entered after that position is
+  "considered", as their first line "predicted"; lines there without it are "missed";
+  positions not analysed are not judged. Records: `evals`, `foresight`. These are the
+  measurements the challenges of a later ladder are to be made of.
 - The record of such a game carries its odds (`odds` in the game record). They are not wins
   on the Progress screen yet: the sheet's log ("Your games with odds") shows, per set of
   odds, games won (with the star), drawn and lost, and the latest games. From that log the

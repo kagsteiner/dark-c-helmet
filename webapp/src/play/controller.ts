@@ -9,6 +9,7 @@ import { load, save } from "../storage.ts";
 import { movesBetween } from "../ui/move-input.ts";
 import { Clocks, type ClockState, type Side, type TimeControl } from "./clocks.ts";
 import { newGameId, outcomeOf, saveRecord, type Star } from "./history.ts";
+import { makeReport, type EvalPoint, type Foresight, type Report } from "./report.ts";
 
 export interface GameSetup {
   startFen: string;
@@ -58,6 +59,8 @@ interface Saved {
   /** Takebacks used (games with odds). */
   takebacksUsed?: number;
   engineEval?: { cp: number } | { mate: number } | null;
+  evals?: EvalPoint[];
+  foresight?: Record<number, Foresight>;
 }
 
 const SAVE_KEY = "current-game";
@@ -109,6 +112,10 @@ export class PlayController {
   takebacksUsed = 0;
   /** The engine's evaluation after its last search, from the player's point of view. */
   engineEval: { cp: number } | { mate: number } | null = null;
+  /** The engine's evaluation after each of its moves, from the player's point of view. */
+  evals: EvalPoint[] = [];
+  /** Per engine move (ply): whether the player's analysis in the grid foresaw it. */
+  foresight: Record<number, Foresight> = {};
   /** The engine's last move came from the opening book. */
   bookMove = false;
   /** The book knew the engine's last position, but too shallowly for this time control. */
@@ -147,12 +154,29 @@ export class PlayController {
     this.lowScores = saved.lowScores;
     this.takebacksUsed = saved.takebacksUsed ?? 0;
     this.engineEval = saved.engineEval ?? null;
+    this.evals = saved.evals ?? [];
+    this.foresight = saved.foresight ?? {};
     this.emit();
   }
 
   /** The key of this game (in the history; a grid analysis made for it refers to it). */
   get gameId(): string {
     return this.id;
+  }
+
+  /** The grid judged whether the player's analysis foresaw the engine's move at `ply` (once
+   *  per move). */
+  noteForesight(ply: number, kind: Foresight): void {
+    if (!this.game.moves[ply] || this.foresight[ply]) return;
+    this.foresight[ply] = kind;
+    this.persist();
+    this.emit();
+  }
+
+  /** The report card of this game so far. */
+  get report(): Report {
+    const takebacks = this.odds ? { used: this.takebacksUsed, of: this.setup.takebacks ?? 0 } : null;
+    return makeReport(this.game.moves.length, this.evals, this.foresight, takebacks);
   }
 
   /** When this game was started (ms since 1970). */
@@ -197,6 +221,8 @@ export class PlayController {
       lowScores: this.lowScores,
       takebacksUsed: this.takebacksUsed,
       engineEval: this.engineEval,
+      evals: this.evals,
+      foresight: this.foresight,
     } satisfies Saved);
   }
 
@@ -220,6 +246,8 @@ export class PlayController {
       star: starOf(this.star),
       plies,
       ...(this.engineEval ? { engineEval: this.engineEval } : {}),
+      ...(this.evals.length ? { evals: this.evals } : {}),
+      ...(Object.keys(this.foresight).length ? { foresight: this.foresight } : {}),
       ...(this.setup.tc.kind === "odds"
         ? {
             odds: {
@@ -285,6 +313,8 @@ export class PlayController {
     this.lowScores = 0;
     this.takebacksUsed = 0;
     this.engineEval = null;
+    this.evals = [];
+    this.foresight = {};
     this.premove = null;
     this.bookMove = false;
     this.bookTooShallow = false;
@@ -429,6 +459,7 @@ export class PlayController {
     if (info) {
       // The engine's score is its own (the side that moved): the player's is the opposite.
       this.engineEval = "mate" in info.score ? { mate: -info.score.mate } : { cp: -info.score.cp };
+      this.evals.push({ ply: this.game.moves.length - 1, e: this.engineEval });
       const lost = "mate" in info.score ? info.score.mate < 0 : info.score.cp <= RESIGN_CP;
       this.lowScores = lost ? this.lowScores + 1 : 0;
     }
@@ -513,6 +544,10 @@ export class PlayController {
     this.bookMove = false;
     this.bookTooShallow = false;
     this.clearHelp();
+    // What belonged to the moves taken back goes with them.
+    const plies = this.game.moves.length;
+    this.evals = this.evals.filter((p) => p.ply < plies);
+    for (const k of Object.keys(this.foresight)) if (Number(k) >= plies) delete this.foresight[Number(k)];
     // With odds, the first takebacks are part of the deal and keep the star.
     this.takebacksUsed++;
     if (this.takebacksLeft === null || this.takebacksUsed > (this.setup.takebacks ?? 0)) this.loseStar("undo");
