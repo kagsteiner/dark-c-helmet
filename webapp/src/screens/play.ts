@@ -3,6 +3,8 @@ import { placementFromFen } from "../chess/fen.ts";
 import { describeTimeControl, formatClock, noClock, type Side } from "../play/clocks.ts";
 import { opponentName, type PlayController, type StarLoss } from "../play/controller.ts";
 import { isBookmarked, setBookmarkNote, startName, toggleBookmark } from "../play/bookmarks.ts";
+import { ACHIEVEMENTS, earnedFrom, LEVELS, newIn, type Earned } from "../play/achievements.ts";
+import { loadRecords } from "../play/history.ts";
 import { reportText } from "../play/report.ts";
 import { chooseNewGame } from "../play/new-game.ts";
 import { balanceOf, formatPawns, STANDARD_START_CP, startScore } from "../play/start-balance.ts";
@@ -37,6 +39,7 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
             <p class="play-meta small muted"></p>
             <p class="play-balance small" hidden></p>
             <p class="play-report small" hidden title="Your report card: how long you held the position (engine's evaluation above −1.00 for you), your worst moment, and how often your analysis in the grid anticipated the engine's moves, how often you played the engine's choice for you"></p>
+            <p class="play-achieved small" hidden></p>
             <ol class="move-list numeric" aria-label="Moves"></ol>
             <p class="play-status small muted" aria-live="polite"></p>
             <p class="play-help small" aria-live="polite"></p>
@@ -107,6 +110,7 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
         const card = c.odds ? reportText(c.report, c.evals.length > 0) : "";
         report.hidden = !card;
         report.textContent = card ? (c.result ? "Your report: " : "So far: ") + card : "";
+        renderAchieved();
         renderMoves();
         renderClocks();
         renderBookmark();
@@ -222,22 +226,61 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
         });
       };
 
+      // The last engine-choice mark that flashed (a mark flashes only when its move is new).
+      let flashedPly = Object.keys(controller.found).reduce((m, k) => Math.max(m, Number(k)), -1);
+      // Games with odds: achievement levels this game has earned that earlier games had not.
+      let earlier: { id: string; earned: Earned | null } | null = null;
+      const renderAchieved = () => {
+        const el = $<HTMLElement>(".play-achieved");
+        el.hidden = !controller.odds;
+        if (!controller.odds) return;
+        const id = controller.gameId;
+        if (earlier?.id !== id) {
+          earlier = { id, earned: null }; // until loaded, nothing counts as new
+          void loadRecords().then((records) => {
+            if (earlier?.id !== id) return;
+            earlier.earned = earnedFrom(records.filter((r) => r.id !== id));
+            renderAchieved();
+          });
+        }
+        const fresh = earlier.earned ? newIn(controller.record, earlier.earned) : [];
+        const names = fresh.map(({ id: a, level }) => `${ACHIEVEMENTS.find((x) => x.id === a)!.name} <span class="muted">(${LEVELS[level].name})</span>`);
+        el.innerHTML = names.length
+          ? `New: ${names.join(", ")} · <a href="#/achievements">Achievements</a>`
+          : `<a href="#/achievements">Achievements</a>`;
+      };
+
       const renderMoves = () => {
         const game = controller.game;
         const list = $<HTMLOListElement>(".move-list");
+        // After a takeback or a new game, a move at the same ply is new again.
+        flashedPly = Math.min(flashedPly, game.moves.length - 1);
         list.replaceChildren();
         const [, side, , , , full] = game.startFen.split(" ");
         const sans = game.moves.map((m) => m.san);
-        if (side === "b") sans.unshift("…");
+        const offset = side === "b" ? 1 : 0;
+        if (offset) sans.unshift("…");
+        // Games with odds: the player's moves that were the engine's own choice for them.
+        const found = controller.odds ? controller.found : {};
         for (let i = 0; i < sans.length; i += 2) {
           const li = document.createElement("li");
           li.innerHTML = `<span class="move-number muted">${Number(full ?? 1) + i / 2}.</span>`;
-          for (const san of sans.slice(i, i + 2)) {
+          sans.slice(i, i + 2).forEach((san, k) => {
+            const ply = i + k - offset;
             const span = document.createElement("span");
             span.className = "move";
             span.textContent = san;
+            if (found[ply]) {
+              span.classList.add("engine-choice");
+              span.title = "The engine's choice for you";
+              // Flashes once, when the move is played.
+              if (ply > flashedPly) {
+                span.classList.add("fresh");
+                flashedPly = ply;
+              }
+            }
             li.append(span);
-          }
+          });
           list.append(li);
         }
         const lastMove = list.querySelector("li:last-child .move:last-child");

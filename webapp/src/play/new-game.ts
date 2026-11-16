@@ -7,7 +7,7 @@ import { pieceUrl } from "../ui/board.ts";
 import { icons } from "../ui/icons.ts";
 import { randomBalancedPair } from "./balanced.ts";
 import { bookmarkDate, loadBookmarks, removeBookmark, setBookmarkNote, startName, type Bookmark } from "./bookmarks.ts";
-import type { TimeControl } from "./clocks.ts";
+import { ODDS_ENGINE_SECONDS, type TimeControl } from "./clocks.ts";
 import type { GameSetup } from "./controller.ts";
 import { loadRecords } from "./history.ts";
 import { oddsGameLine, recordReport, tallyByOdds } from "./odds-log.ts";
@@ -44,7 +44,6 @@ export interface Choices {
 }
 
 /** The engine's time for the whole game, in a game with odds. */
-const ODDS_ENGINE_SECONDS = [1, 2, 5, 10, 15, 30, 60, 120, 300, 900];
 const ODDS_TAKEBACKS = [0, 1, 2, 3, 5, 10, 20];
 
 const DEFAULTS: Choices = {
@@ -218,6 +217,7 @@ export async function chooseNewGame(
         <summary>Your games with odds</summary>
         <div class="odds-log-body small"><p class="muted">Loading…</p></div>
       </details>
+      <p class="small" data-show="odds"><a href="#/achievements" data-action="achievements">Achievements</a> in games with odds</p>
       <div class="sheet-actions">
         <button type="button" class="btn-secondary" value="cancel">Cancel</button>
         <button type="submit" class="btn-primary" value="start">Start game</button>
@@ -328,6 +328,7 @@ export async function chooseNewGame(
     let result: GameSetup | null = null;
     let pending: Promise<void> | null = null;
     form.querySelector<HTMLButtonElement>('[value="cancel"]')!.addEventListener("click", () => dialog.close());
+    form.querySelector('[data-action="achievements"]')!.addEventListener("click", () => dialog.close());
     form.addEventListener("submit", () => {
       const r = read();
       save(PREFS_KEY, r);

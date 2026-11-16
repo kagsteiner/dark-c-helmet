@@ -2,6 +2,7 @@ import { Rules } from "./chess/rules.ts";
 import { defaultEngineOptions, Engine } from "./engine/engine.ts";
 import { threadsAvailable } from "./engine/transport.ts";
 import { PlayController } from "./play/controller.ts";
+import { achievementsScreen } from "./screens/achievements.ts";
 import { analysisScreen } from "./screens/analysis.ts";
 import { bookScreen } from "./screens/book.ts";
 import { exploreScreen } from "./screens/explore.ts";
@@ -39,6 +40,7 @@ startShell({
   settings: settingsScreen(controller),
   explore: exploreScreen(rules, controller),
   grid: gridScreen(rules, controller, () => engineStatus),
+  achievements: achievementsScreen(),
 });
 
 // The human-like opponent is downloaded when a game against it starts.

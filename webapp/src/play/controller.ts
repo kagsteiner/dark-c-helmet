@@ -8,7 +8,7 @@ import type { Engine, SearchInfo, SearchLimits } from "../engine/engine.ts";
 import { load, save } from "../storage.ts";
 import { movesBetween } from "../ui/move-input.ts";
 import { Clocks, type ClockState, type Side, type TimeControl } from "./clocks.ts";
-import { newGameId, outcomeOf, saveRecord, type Star } from "./history.ts";
+import { newGameId, outcomeOf, saveRecord, type GameRecord, type Star } from "./history.ts";
 import { makeReport, type EvalPoint, type Foresight, type Report } from "./report.ts";
 
 export interface GameSetup {
@@ -242,8 +242,13 @@ export class PlayController {
     const plies = this.game.moves.length;
     if (!this.recorded && plies < this.firstHumanPly() && !this.result) return;
     this.recorded = true;
-    const outcome = outcomeOf(this.result);
-    saveRecord({
+    saveRecord(this.record);
+  }
+
+  /** This game as a record of the history. */
+  get record(): GameRecord {
+    const plies = this.game.moves.length;
+    return {
       id: this.id,
       started: this.started,
       chess960: this.setup.chess960,
@@ -252,7 +257,7 @@ export class PlayController {
       human: this.setup.human,
       opponent: this.setup.humanProfile ?? "engine",
       tc: this.setup.tc,
-      outcome,
+      outcome: outcomeOf(this.result),
       star: starOf(this.star),
       plies,
       ...(this.engineEval ? { engineEval: this.engineEval } : {}),
@@ -269,7 +274,7 @@ export class PlayController {
             },
           }
         : {}),
-    });
+    };
   }
 
   /** Number of moves in the game once the player has made their first one. */

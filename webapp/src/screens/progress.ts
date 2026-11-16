@@ -58,6 +58,7 @@ export function progressScreen(controller: PlayController): Screen {
           </ul>
           <div class="pg-detail" hidden></div>
           <div class="pg-actions"><button class="btn-secondary" data-action="random">Play one I haven't won yet</button></div>
+          <p class="small">Games with odds against the engine: <a href="#/achievements">Achievements</a></p>
           <p class="pg-none small muted" hidden></p>
         </section>`;
       const $ = <T extends Element>(sel: string) => root.querySelector<T>(sel)!;

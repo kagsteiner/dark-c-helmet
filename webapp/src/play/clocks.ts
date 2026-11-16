@@ -27,6 +27,9 @@ export function describeTimeControl(tc: TimeControl): string {
 
 export type Side = "w" | "b";
 
+/** The engine's times for a whole game with odds (seconds), on the odds sheet. */
+export const ODDS_ENGINE_SECONDS = [1, 2, 5, 10, 15, 30, 60, 120, 300, 900];
+
 /** "5 s", "1 min", "1 min 30 s". */
 export function formatSeconds(s: number): string {
   if (s < 60) return `${s} s`;

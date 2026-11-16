@@ -199,6 +199,18 @@ time control:
   on the Progress screen yet: the sheet's log ("Your games with odds") shows, per set of
   odds, games won (with the star), drawn and lost, and the latest games. From that log the
   ladder of odds levels will be built.
+- **Engine's choice marks:** in the move list of a game with odds, a player's move that was
+  the engine's choice for them gets a dot (flashing once when played). Only a match is shown,
+  never the engine's move, so it is no hint; a move taken back loses its dot.
+- **Achievements** (`#/achievements`, linked from the game screen, the odds sheet and
+  Progress; rules in `src/play/achievements.ts`, list in `ACHIEVEMENTS.md`) instead of a
+  ladder: no order needed, the player picks the goal. Three tabs like the new-game screen
+  (standard, Chess960, 960²). Each achievement is earned in one game, at three takeback
+  levels (Coffeehouse: any, J'adoube: at most one, Touch-move: none; a stricter level also
+  earns the lenient ones), and each level remembers the longest engine time it was earned at
+  ("2 s · next 5 s") — the ladder comes back as harder engine times, nothing else. Computed
+  from the game records, so earlier games count. The game screen shows the levels the
+  running game has earned beyond earlier games ("New: …").
 
 ### Progress
 
