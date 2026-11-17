@@ -98,9 +98,9 @@ The work plan is in `BACKLOG.md`.
 | Screen | Purpose |
 |---|---|
 | Play | the game in progress; new-game sheet (variant, start position, colour, time control) |
-| Setup | position editor, then "Play" or "Analyze" |
-| Analysis | endless analysis of the current position; full-game pass with eval graph |
-| Analysis grid | exploring lines from a position as rows of small boards (desktop only; from Analysis) |
+| Setup | position editor, then "Play", "Analyze" or "Explore" |
+| Analysis | the game just played: endless analysis of a position; full-game review with eval graph |
+| Explore | the analysis grid: explorations kept like documents (openings, correspondence games) |
 | Progress | the 960 Chess960 start positions with the player's games and starred wins |
 | Book | statistics, export, merge from file |
 | Settings | threads, hash, move input, theme |
@@ -257,15 +257,21 @@ key-value store), and with reduced motion the tiles only fade.
 - Opened during a game: both clocks stop, the star goes out, moves tried in analysis do not
   touch the game, "Back to game" resumes exactly where it was.
 - Import PGN (post-MVP), FEN import/export (MVP).
-- "Explore from here" opens the position in the analysis grid (from 1024 px wide; hidden on
-  phones and small tablets).
+- "Explore from here" starts a new exploration (the analysis grid) from the position.
 
 ### Analysis grid
 
 For exploring how a position can go on (openings, correspondence games), where the normal
-Analysis screen would show one line at a time. Route `#/grid`, not in the navigation; reached
-with "Explore from here" on the Analysis screen (`#/grid?fen=…&chess960=1` starts a new
-analysis there). Code: `src/grid/` (`grid-app.ts` builds the screen), `src/screens/grid.ts`.
+Analysis screen would show one line at a time. Analysis is the post mortem of the game just
+played; Explore holds documents: named explorations you keep and come back to. In the
+navigation as "Explore" (route `#/grid`; `#/explore` is the background book explorer, reached
+from Settings). It opens the last exploration, as an editor reopens the last document;
+"Explorations…" lists them all (with a small board: the end of the main line), "New…" starts
+one from the start position, a pasted FEN or PGN, or a Chess960 start (a number, or random).
+Also reached with "Explore from here" on the Analysis screen and "Explore" in Setup
+(`#/grid?fen=…&chess960=1` starts a new exploration there). On phones: the board with the
+lines as moves, without the grid. Code: `src/grid/` (`grid-app.ts` builds the screen),
+`src/screens/grid.ts`.
 
 - **Grid:** one column per ply, one row per line. A node's first child continues its row;
   other children start rows below, joined to their branch point (nearest branch first, so

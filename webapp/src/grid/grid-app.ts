@@ -6,6 +6,7 @@
 // can be switched off for this screen; when it is on, it gives every board a quick look in
 // the background, searches deeply the boards played by hand or marked for attention, shows
 // the threat on the selected board and suggests moves on request.
+import { chess960Fen, randomChess960 } from "../chess/chess960.ts";
 import { placementFromFen } from "../chess/fen.ts";
 import type { LegalMove, Rules } from "../chess/rules.ts";
 import { san } from "../chess/san.ts";
@@ -16,12 +17,12 @@ import type { PlayController } from "../play/controller.ts";
 import { settings } from "../settings.ts";
 import { load, save } from "../storage.ts";
 import { icons } from "../ui/icons.ts";
-import { Board } from "../ui/board.ts";
+import { Board, pieceUrl } from "../ui/board.ts";
 import { MoveInput } from "../ui/move-input.ts";
 import { features } from "./features.ts";
 import { GridView, materialView } from "./grid-view.ts";
 import { currentAnalysis, deleteAnalysis, listAnalyses, newId, saveAnalysis, type Analysis, type SavedNode } from "./library.ts";
-import { overMarks, underMarks } from "./marks.ts";
+import { overMarks, squarePos, underMarks } from "./marks.ts";
 import { describeWin, forcingEnd, type LineMove } from "./threat-text.ts";
 import { normalSan, parsePgn, writePgn, type Annotation, type PgnMove } from "./pgn.ts";
 import {
@@ -348,9 +349,9 @@ export async function mountGrid(
   const originalTitle = document.title; // restored when leaving the screen
   app.innerHTML = `
     <header class="ag-bar">
-      <strong class="ag-title">Analysis grid</strong>
-      <input class="ag-name" type="text" spellcheck="false" title="Name of this analysis" />
-      <button class="ag-library btn-secondary">Analyses…</button>
+      <strong class="ag-title">Explore</strong>
+      <input class="ag-name" type="text" spellcheck="false" title="Name of this exploration" />
+      <button class="ag-library btn-secondary">Explorations…</button>
       <button class="ag-new btn-secondary">New…</button>
       <button class="ag-import btn-secondary">Import PGN</button>
       <button class="ag-export btn-secondary">Export PGN</button>
@@ -453,22 +454,24 @@ export async function mountGrid(
     </main>
     <dialog class="ag-dialog ag-new-dialog">
       <form method="dialog">
-        <p><strong>New analysis</strong></p>
+        <p><strong>New exploration</strong></p>
         <p><input class="ag-new-name" type="text" placeholder="Name" /></p>
-        <p><input class="ag-fen" type="text" spellcheck="false" placeholder="FEN (empty: the normal start position)" /></p>
-        <p><label><input class="ag-960" type="checkbox" /> Chess960</label></p>
+        <p><textarea class="ag-fen" rows="3" spellcheck="false" placeholder="Empty: the start position. Or paste a FEN or a PGN."></textarea></p>
+        <p><label><input class="ag-960" type="checkbox" /> Chess960 start position</label>
+          <input class="ag-960-n" type="number" min="0" max="959" placeholder="random" aria-label="Chess960 position number (empty: random)" /></p>
         <p class="ag-fen-error error"></p>
         <p class="ag-dialog-buttons">
           <button value="ok" type="submit" class="btn-primary">Start</button>
           <button value="cancel" type="submit" class="btn-secondary">Cancel</button>
           <button value="sample" type="submit" class="btn-secondary">Load the sample</button>
         </p>
-        <p class="muted">The current analysis stays in the list (Analyses…).</p>
+        <p class="muted">The current exploration stays in the list (Explorations…). For a position
+          you set up on the board, use Setup → Explore.</p>
       </form>
     </dialog>
     <dialog class="ag-dialog ag-library-dialog">
       <form method="dialog">
-        <p><strong>Analyses on this device</strong></p>
+        <p><strong>Explorations on this device</strong></p>
         <ul class="ag-library-list"></ul>
         <p class="ag-dialog-buttons"><button value="close" type="submit" class="btn-secondary">Close</button></p>
       </form>
@@ -1029,7 +1032,7 @@ export async function mountGrid(
   const nameInput = $<HTMLInputElement>(".ag-name");
   function showName(): void {
     nameInput.value = analysisName;
-    document.title = `${analysisName} · Analysis grid`;
+    document.title = `${analysisName} · Explore`;
   }
   nameInput.addEventListener("change", () => {
     analysisName = nameInput.value.trim() || "Analysis";
@@ -1074,9 +1077,10 @@ export async function mountGrid(
 
   const newDialog = $<HTMLDialogElement>(".ag-new-dialog");
   $(".ag-new").addEventListener("click", () => {
-    $<HTMLInputElement>(".ag-new-name").value = `Analysis ${today()}`;
-    $<HTMLInputElement>(".ag-fen").value = "";
+    $<HTMLInputElement>(".ag-new-name").value = `Exploration ${today()}`;
+    $<HTMLTextAreaElement>(".ag-fen").value = "";
     $<HTMLInputElement>(".ag-960").checked = false;
+    $<HTMLInputElement>(".ag-960-n").value = "";
     $(".ag-fen-error").textContent = "";
     newDialog.returnValue = "";
     newDialog.showModal();
@@ -1086,14 +1090,26 @@ export async function mountGrid(
     persistNow();
     if (newDialog.returnValue === "sample") sample();
     else {
-      const fen = $<HTMLInputElement>(".ag-fen").value.trim() || START_FEN;
-      const name = $<HTMLInputElement>(".ag-new-name").value.trim() || `Analysis ${today()}`;
-      if (!startNew(fen, $<HTMLInputElement>(".ag-960").checked, name)) {
-        $(".ag-fen-error").textContent = "That FEN is not a legal position.";
+      const text = $<HTMLTextAreaElement>(".ag-fen").value.trim();
+      const name = $<HTMLInputElement>(".ag-new-name").value.trim() || `Exploration ${today()}`;
+      const is960 = $<HTMLInputElement>(".ag-960").checked;
+      const again = (error: string) => {
+        $(".ag-fen-error").textContent = error;
         newDialog.returnValue = "";
         newDialog.showModal();
+      };
+      if (looksLikePgn(text)) {
+        if (!(await importPgn(text, name))) again("This PGN starts from a position that is not legal.");
         return;
       }
+      let fen = text || START_FEN;
+      if (!text && is960) {
+        const n = $<HTMLInputElement>(".ag-960-n").value.trim();
+        const k = n === "" ? randomChess960() : Number(n);
+        if (!Number.isInteger(k) || k < 0 || k > 959) return again("Chess960 positions are numbered 0 to 959.");
+        fen = chess960Fen(k);
+      }
+      if (!startNew(fen, is960, name)) return again("That FEN is not a legal position.");
     }
     await switched();
   });
@@ -1111,6 +1127,28 @@ export async function mountGrid(
     libDialog.showModal();
   });
 
+  /** A small board of an exploration: the end of its main line (its start would look the
+   *  same for every opening). */
+  function thumbnail(a: Analysis): HTMLElement {
+    const b = document.createElement("div");
+    b.className = "mb ag-thumb";
+    let fen = a.fen;
+    if (rules.setFen(a.fen, a.chess960)) {
+      for (let n = a.tree.children[0]; n?.uci && rules.play(n.uci); n = n.children[0]) fen = rules.fen();
+    }
+    placementFromFen(fen).forEach((p, sq) => {
+      if (!p) return;
+      const d = document.createElement("div");
+      d.className = "mb-p";
+      const { left, top } = squarePos(sq, a.flipped ?? false);
+      d.style.left = left + "%";
+      d.style.top = top + "%";
+      d.style.backgroundImage = `url("${pieceUrl(p)}")`;
+      b.append(d);
+    });
+    return b;
+  }
+
   async function drawLibrary(): Promise<void> {
     const list = $(".ag-library-list");
     const all = await listAnalyses();
@@ -1123,8 +1161,9 @@ export async function mountGrid(
       const meta = document.createElement("div");
       meta.className = "muted";
       const engineNote = a.locked ? " · locked: own analysis, no engine" : a.engineOn ? " · engine on" : "";
-      meta.textContent = `${a.boards} boards${a.chess960 ? ", Chess960" : ""}${engineNote} · ${new Date(a.updated).toLocaleString()}`;
+      meta.textContent = `${a.boards} board${a.boards === 1 ? "" : "s"}${a.chess960 ? ", Chess960" : ""}${engineNote} · ${new Date(a.updated).toLocaleString()}`;
       info.append(name, meta);
+      li.append(thumbnail(a));
       const openBtn = document.createElement("button");
       openBtn.type = "button";
       openBtn.className = "btn-secondary";
@@ -1197,15 +1236,23 @@ export async function mountGrid(
     const file = fileInput.files?.[0];
     fileInput.value = "";
     if (!file) return;
-    const game = parsePgn(await file.text());
+    persistNow();
+    if (!(await importPgn(await file.text(), file.name.replace(/\.pgn$/i, "")))) alert("This PGN starts from a position that is not legal.");
+  });
+
+  /** A PGN rather than a FEN: tags, or a numbered move. */
+  function looksLikePgn(text: string): boolean {
+    return /^\s*\[/.test(text) || /(^|\s)1\.\s*\S/.test(text);
+  }
+
+  /** A new exploration from a PGN (its variations become lines). False if it does not start
+   *  from a legal position. */
+  async function importPgn(text: string, fallbackName: string): Promise<boolean> {
+    const game = parsePgn(text);
     const fen = game.tags.FEN || START_FEN;
     const is960 = /960|fischer/i.test(game.tags.Variant ?? "");
-    const name = game.tags.Event && game.tags.Event !== "?" ? game.tags.Event : file.name.replace(/\.pgn$/i, "");
-    persistNow();
-    if (!startNew(fen, is960, name)) {
-      alert("This PGN starts from a position that is not legal.");
-      return;
-    }
+    const name = game.tags.Event && game.tags.Event !== "?" ? game.tags.Event : fallbackName;
+    if (!startNew(fen, is960, name)) return false;
     let skipped = 0;
     readNotes(root, game.root);
     const build = (n: GNode, pm: PgnMove) => {
@@ -1226,7 +1273,8 @@ export async function mountGrid(
     build(root, game.root);
     await switched();
     if (skipped) alert(`${skipped} move${skipped > 1 ? "s" : ""} in this PGN could not be read and were left out (with what follows them).`);
-  });
+    return true;
+  }
 
   /** NAGs and comment commands of a PGN move onto a node. */
   function readNotes(n: GNode, pm: PgnMove): void {

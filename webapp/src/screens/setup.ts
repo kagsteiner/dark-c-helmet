@@ -80,6 +80,7 @@ export function setupScreen(rules: Rules, controller: PlayController): Screen {
             <div class="setup-problems small error" aria-live="polite"></div>
             <div class="setup-actions">
               <button class="btn-secondary" data-action="analyze">Analyze</button>
+              <button class="btn-secondary" data-action="explore" title="A new exploration from this position">Explore</button>
               <button class="btn-primary" data-action="play">Play</button>
             </div>
           </div>
@@ -169,6 +170,8 @@ export function setupScreen(rules: Rules, controller: PlayController): Screen {
               controller.start(setup);
               location.hash = "#/play";
             });
+          } else if (action === "explore") {
+            location.hash = `#/grid?fen=${encodeURIComponent(fen)}${chess960 ? "&chess960=1" : ""}`;
           } else {
             location.hash = `#/analysis?fen=${encodeURIComponent(fen)}${chess960 ? "&chess960=1" : ""}`;
           }

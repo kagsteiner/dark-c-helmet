@@ -12,14 +12,16 @@ const ROUTES = [
   { path: "play", label: "Play" },
   { path: "setup", label: "Setup" },
   { path: "analysis", label: "Analysis" },
+  { path: "grid", label: "Explore" },
   { path: "progress", label: "Progress" },
   { path: "book", label: "Book" },
   { path: "settings", label: "Settings" },
 ] as const;
 
-/** Not in the navigation: explore through a link in Settings, grid from the Analysis screen,
- *  achievements from the Play and Progress screens and the odds sheet. */
-const OTHER_ROUTES = ["explore", "grid", "achievements"] as const;
+/** Not in the navigation: the background book explorer (#/explore) through a link in Settings,
+ *  achievements from the Play and Progress screens and the odds sheet. ("Explore" in the
+ *  navigation is the analysis grid, #/grid.) */
+const OTHER_ROUTES = ["explore", "achievements"] as const;
 
 export type Route = (typeof ROUTES)[number]["path"] | (typeof OTHER_ROUTES)[number];
 

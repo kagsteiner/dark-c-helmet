@@ -131,7 +131,7 @@ export function analysisScreen(rules: Rules, controller: PlayController, engineS
               <table class="an-narrow small" hidden></table>
             </div>
             <div class="an-explore">
-              <a class="btn-secondary" href="#/grid" title="Open this position in the analysis grid: lines as rows of small boards">Explore from here</a>
+              <a class="btn-secondary" href="#/grid" title="A new exploration from this position: lines as rows of small boards">Explore from here</a>
             </div>
           </div>
         </section>`;

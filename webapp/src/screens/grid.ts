@@ -1,5 +1,6 @@
-// The Analysis grid screen (#/grid): see grid/grid-app.ts. Reached from the Analysis screen
-// ("Explore from here"); not in the navigation, and not offered on phones.
+// The analysis grid screen (#/grid), "Explore" in the navigation: see grid/grid-app.ts. Also
+// reached from the Analysis screen ("Explore from here") and from Setup ("Explore"). On
+// phones it shows the board with the lines as moves instead of the grid.
 import type { Rules } from "../chess/rules.ts";
 import { mountGrid } from "../grid/grid-app.ts";
 import type { PlayController } from "../play/controller.ts";
