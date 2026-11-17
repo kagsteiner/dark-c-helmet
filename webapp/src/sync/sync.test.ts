@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { SyncApi } from "../../server/sync.ts";
+import { MAX_MISSES, SyncApi } from "../../server/sync.ts";
 import type { GameRecord } from "../play/history.ts";
 import { completeWord, generateCode, parseCode, suggestWords } from "./code.ts";
 import { cleanData, mergeData, type SyncData } from "./merge.ts";
@@ -80,7 +80,9 @@ test("cleanData keeps only known fields and rejects bad ones", () => {
 
 test("server: create, merge from a second device, peek, delete", () => {
   const { dir, sync } = api();
-  sync.sync(body({ code: CODE, create: true, data: data({ results: [rec("a")] }) }));
+  // A new code only through its own endpoint (old app versions are told to reload).
+  assert.throws(() => sync.sync(body({ code: CODE, create: true, data: data() })), { status: 400 });
+  sync.sync(body({ code: CODE, data: data({ results: [rec("a")] }) }), true);
   assert.deepEqual(sync.peek(body({ code: CODE })), { results: 1, bookmarks: 0 });
   const { data: merged } = sync.sync(body({ code: CODE, data: data({ results: [rec("b")] }) }));
   assert.equal(merged.results.length, 2);
@@ -95,9 +97,9 @@ test("server: create, merge from a second device, peek, delete", () => {
 test("server: unknown codes are limited, known ones keep working", () => {
   let t = 1_000_000;
   const { sync } = api(() => t);
-  sync.sync(body({ code: CODE, create: true, data: data() }));
+  sync.sync(body({ code: CODE, data: data() }), true);
   const other = "river-river-river-river-river";
-  for (let i = 0; i < 30; i++) assert.throws(() => sync.peek(body({ code: other })), { status: 404 });
+  for (let i = 0; i < MAX_MISSES; i++) assert.throws(() => sync.peek(body({ code: other })), { status: 404 });
   assert.throws(() => sync.peek(body({ code: other })), { status: 429 });
   assert.deepEqual(sync.peek(body({ code: CODE })), { results: 0, bookmarks: 0 });
   t += 60_000;

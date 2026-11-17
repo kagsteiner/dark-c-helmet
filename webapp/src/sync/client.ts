@@ -79,7 +79,8 @@ export async function localCounts(): Promise<Counts> {
 /** Sends this device's data and stores the merged data. Merges with the device once more, in
  *  case something changed while the request was under way. */
 async function exchange(code: string, create: boolean): Promise<void> {
-  const { data } = await post<{ data: SyncData }>("sync", { code, create, data: await readLocal() });
+  // A new code has its own endpoint: the server limits it more strictly.
+  const { data } = await post<{ data: SyncData }>(create ? "sync/create" : "sync", { code, data: await readLocal() });
   const local = await readLocal();
   const merged = mergeData(local, data);
   const before = new Map(local.results.map((r) => [r.id, r]));

@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { normalizeCode } from "../src/book/contrib.ts";
 import { publish } from "./publish.ts";
-import { Store, type Device } from "./store.ts";
+import { printable, Store, type Device } from "./store.ts";
 
 const USAGE = `usage: book-admin <command>
   pending                          browsers waiting for approval
@@ -32,7 +32,7 @@ function fail(message: string): never {
 
 const date = (iso?: string) => (iso ? iso.slice(0, 10) : "");
 const describe = (d: Device) =>
-  `${d.code}  ${d.state.padEnd(8)}  ${(d.user ?? "").padEnd(12)}  ${date(d.registered)}  ${d.name || "(no name)"}`;
+  `${d.code}  ${d.state.padEnd(8)}  ${(d.user ?? "").padEnd(12)}  ${date(d.registered)}  ${printable(d.name) || "(no name)"}`;
 
 switch (command) {
   case "pending": {
@@ -62,7 +62,7 @@ switch (command) {
       users[user] = { improvements: 0, created: d.approved };
       store.saveUsers(users);
     }
-    console.log(`Approved ${code} (${d.name || "no name"}) for ${user}.`);
+    console.log(`Approved ${code} (${printable(d.name) || "no name"}) for ${user}.`);
     break;
   }
   case "revoke": {
@@ -73,7 +73,7 @@ switch (command) {
       d.state = "revoked";
       d.revoked = new Date().toISOString();
       store.saveDevice(d);
-      console.log(`Revoked ${d.code} (${d.name || "no name"}, ${d.user ?? "no user"}).`);
+      console.log(`Revoked ${d.code} (${printable(d.name) || "no name"}, ${d.user ?? "no user"}).`);
     }
     console.log("Their moves leave the master book with the next publish.");
     break;

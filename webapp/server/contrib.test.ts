@@ -10,7 +10,7 @@ import { Api, ApiError } from "./api.ts";
 import { readMaster } from "./master-write.ts";
 import { publish } from "./publish.ts";
 import { loadRules } from "./rules-node.ts";
-import { Store } from "./store.ts";
+import { printable, Store } from "./store.ts";
 
 const START = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -";
 // Chess960-style castling rights (Shredder-FEN): White castles king side as b1h1.
@@ -132,4 +132,11 @@ test("publish: deeper wins, improvements counted once, revoked devices drop out"
   publish(store, bookDir);
   assert.deepEqual(readMaster(bookDir).map((e) => e.move).sort(), ["d2d4", "e2e4"]);
   assert.equal(readMaster(bookDir).find((e) => e.move === "d2d4")!.nodes, 40e6);
+});
+
+test("device names: no control or direction characters (printed in the admin's terminal)", async () => {
+  assert.equal(printable("Fred\u001b]52;c;ZXZpbA==\u0007's \u202eenohPi\u200b phone\r\n"), "Fred]52;c;ZXZpbA=='s enohPi phone");
+  const { store, api, publicKey } = await setup();
+  const reg = await api.register(JSON.stringify({ publicKey, name: "\u001b[2Jx" }));
+  assert.equal(store.device(reg.code)?.name, "[2Jx");
 });

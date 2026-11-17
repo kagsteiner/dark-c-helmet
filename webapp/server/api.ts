@@ -14,7 +14,7 @@ import {
   type StatusReply,
   type SubmitReply,
 } from "../src/book/contrib.ts";
-import { PENDING_MAX, type Device, type LoggedEntry, type Store } from "./store.ts";
+import { PENDING_MAX, printable, type Device, type LoggedEntry, type Store } from "./store.ts";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -45,7 +45,7 @@ export class Api {
     const known = this.store.device(code);
     if (known) return this.reply(known);
     if (this.store.pending().length >= PENDING_MAX) throw new ApiError(503, "too many registrations are waiting; try again later");
-    const name = typeof req.name === "string" ? req.name.trim().slice(0, 60) : "";
+    const name = typeof req.name === "string" ? printable(req.name).trim().slice(0, 60) : "";
     const device: Device = { code, publicKey: req.publicKey, name, state: "pending", registered: new Date().toISOString() };
     this.store.saveDevice(device);
     return this.reply(device);

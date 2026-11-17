@@ -125,6 +125,12 @@ export class Store {
   }
 }
 
+/** Without control and direction characters: names are printed in the admin's terminal, where
+ *  escape sequences could rewrite the screen or worse. */
+export function printable(s: string): string {
+  return s.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]/g, "");
+}
+
 /** Writes via a temporary file, so a reader never sees half a file. */
 export function writeAtomic(path: string, data: string | Uint8Array): void {
   writeFileSync(path + ".tmp", data);

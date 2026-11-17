@@ -3,7 +3,7 @@
 // against guessing and filling the disk are global. All file access is synchronous, so a merge
 // cannot interleave with another one.
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { CODE_WORDS } from "../src/sync/code.ts";
@@ -11,11 +11,16 @@ import { cleanData, countLiveBookmarks, InvalidData, MAX_BOOKMARKS, MAX_RESULTS,
 import { ApiError } from "./api.ts";
 
 const CODE = new RegExp(`^[a-z]{3,8}(-[a-z]{3,8}){${CODE_WORDS - 1}}$`);
-const MAX_CODES = 5000;
-/** Lookups of codes that do not exist, per minute. */
-const MAX_MISSES = 30;
+// Global backstops: nginx limits each client address (deploy/limits.conf); these only bound what
+// many addresses together can do. Every global limit can be used up by an attacker, so they are
+// set well above normal use, and the disk limit is in bytes, not in codes.
+const MAX_CODES = 20_000;
+/** All sync files together (bytes): a full code is about 1.5 MB. */
+const MAX_BYTES = 2 * 1024 ** 3;
+/** Lookups of codes that do not exist, per minute (55-bit codes: guessing stays hopeless). */
+export const MAX_MISSES = 120;
 /** New codes per hour. */
-const MAX_CREATES = 30;
+export const MAX_CREATES = 120;
 
 /** At most `max` events per `ms`. */
 class Limit {
@@ -48,13 +53,16 @@ class Limit {
 export class SyncApi {
   private dir: string;
   private codes: number;
+  private bytes = 0;
   private misses: Limit;
   private creates: Limit;
 
   constructor(dir?: string, now: () => number = Date.now) {
     this.dir = dir ?? join(process.env.CHESS_DATA ?? join(homedir(), "chess-data"), "sync");
     mkdirSync(this.dir, { recursive: true });
-    this.codes = readdirSync(this.dir).filter((f) => f.endsWith(".json")).length;
+    const files = readdirSync(this.dir).filter((f) => f.endsWith(".json"));
+    this.codes = files.length;
+    for (const f of files) this.bytes += statSync(join(this.dir, f)).size;
     this.misses = new Limit(MAX_MISSES, 60_000, now);
     this.creates = new Limit(MAX_CREATES, 3_600_000, now);
   }
@@ -92,9 +100,12 @@ export class SyncApi {
     return { results: data.results.length, bookmarks: countLiveBookmarks(data) };
   }
 
-  /** Merges what a device sent into what is stored and returns the result. */
-  sync(body: string): { data: SyncData } {
-    const { create, data, file } = this.parse(body);
+  /** Merges what a device sent into what is stored and returns the result. A new code only
+   *  with `allowCreate` (its own endpoint, /sync/create, so nginx can limit it per address). */
+  sync(body: string, allowCreate = false): { data: SyncData } {
+    const { create: wants, data, file } = this.parse(body);
+    if (wants && !allowCreate && !existsSync(file)) throw new ApiError(400, "please reload the app to create a code");
+    const create = allowCreate;
     let sent: SyncData;
     try {
       sent = cleanData(data);
@@ -110,9 +121,14 @@ export class SyncApi {
     }
     const merged = known ? mergeData(this.read(file), sent) : sent;
     if (merged.results.length > MAX_RESULTS || merged.bookmarks.length > MAX_BOOKMARKS) throw new ApiError(413, "the storage for this code is full");
+    const text = JSON.stringify(merged);
+    const size = Buffer.byteLength(text);
+    const old = known ? statSync(file).size : 0;
+    if (size > old && this.bytes + size - old > MAX_BYTES) throw new ApiError(507, "the sync storage is full right now, try again later");
     const tmp = `${file}.tmp`;
-    writeFileSync(tmp, JSON.stringify(merged));
+    writeFileSync(tmp, text);
     renameSync(tmp, file);
+    this.bytes += size - old;
     if (!known) this.codes++;
     return { data: merged };
   }
@@ -120,6 +136,7 @@ export class SyncApi {
   remove(body: string): { deleted: true } {
     const { file } = this.parse(body);
     if (!existsSync(file)) this.missing();
+    this.bytes -= statSync(file).size;
     unlinkSync(file);
     this.codes--;
     return { deleted: true };

@@ -14,6 +14,10 @@ import { SyncApi } from "./sync.ts";
 
 const PORT = Number(process.env.PORT ?? 3060);
 const MAX_BODY = 3 << 19; // 1.5 MB: 500 book entries are about 150 KB, a full sync file about 1 MB
+/** Requests handled at once; more get 503 at once. Bounds memory (bodies are held in full) and
+ *  keeps a flood from taking the CPU the other apps on the server share. Per-address limits
+ *  are nginx's (deploy/limits.conf). */
+const MAX_IN_FLIGHT = 8;
 
 // Bundled: the rules module lies in rules/ next to server.mjs. From the sources: public/engine/.
 const rulesDir = process.env.RULES_DIR ? pathToFileURL(process.env.RULES_DIR.replace(/\/?$/, "/")) : new URL("./rules/", import.meta.url);
@@ -36,21 +40,32 @@ function readBody(req: IncomingMessage): Promise<string> {
   });
 }
 
-createServer(async (req, res) => {
-  const send = (status: number, value: unknown) => {
-    res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" });
+let inFlight = 0;
+
+const server = createServer(async (req, res) => {
+  const send = (status: number, value: unknown, headers: Record<string, string> = {}) => {
+    if (res.headersSent) return;
+    res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store", ...headers });
     res.end(JSON.stringify(value));
   };
+  if (inFlight >= MAX_IN_FLIGHT) {
+    res.setHeader("connection", "close");
+    return send(503, { error: "the server is busy, try again in a moment" }, { "retry-after": "5" });
+  }
+  inFlight++;
+  res.on("close", () => inFlight--);
   try {
     const path = new URL(req.url ?? "/", "http://localhost").pathname;
     if (req.method === "GET" && path === "/health") return send(200, { ok: true });
     if (req.method !== "POST") throw new ApiError(405, "POST only");
+    if (Number(req.headers["content-length"] ?? 0) > MAX_BODY) throw new ApiError(413, "request too large");
     const body = await readBody(req);
     const signature = String(req.headers[SIGNATURE_HEADER] ?? "");
     if (path === "/register") return send(200, await api.register(body));
     if (path === "/status") return send(200, await api.status(body, signature));
     if (path === "/submit") return send(200, await api.submit(body, signature));
     if (path === "/sync") return send(200, sync.sync(body));
+    if (path === "/sync/create") return send(200, sync.sync(body, true));
     if (path === "/sync/peek") return send(200, sync.peek(body));
     if (path === "/sync/delete") return send(200, sync.remove(body));
     throw new ApiError(404, "no such endpoint");
@@ -59,4 +74,9 @@ createServer(async (req, res) => {
     console.error(err);
     send(500, { error: "server error" });
   }
-}).listen(PORT, "127.0.0.1", () => console.log(`contribution server on 127.0.0.1:${PORT}`));
+});
+// Slow or stalled requests are cut off (nginx has its own, shorter timeouts in front).
+server.requestTimeout = 20_000;
+server.headersTimeout = 10_000;
+server.keepAliveTimeout = 5_000;
+server.listen(PORT, "127.0.0.1", () => console.log(`contribution server on 127.0.0.1:${PORT}`));
