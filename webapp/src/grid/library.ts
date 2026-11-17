@@ -21,7 +21,7 @@ export interface SavedNode {
   expanded: boolean;
   children: SavedNode[];
   /** A folded engine line. */
-  ghost?: { ucis: string[]; score: Score | null };
+  ghost?: { ucis: string[]; score: Score | null; depth?: number };
   /** Hidden by the player (drawn as the end of its line). */
   hidden?: boolean;
   /** Marked "not needed" (a cutoff by hand). */

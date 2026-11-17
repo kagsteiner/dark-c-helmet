@@ -47,6 +47,8 @@ export interface Ghost {
   state: GameState;
   /** The engine's evaluation when the line was added. */
   score: Score | null;
+  /** The search depth behind the line's first move (one less per move after it); 0 unknown. */
+  depth: number;
 }
 
 export interface GNode {

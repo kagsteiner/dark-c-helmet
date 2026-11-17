@@ -37,7 +37,7 @@ test("layout: first child continues the row, others start rows below, nearest br
 });
 
 test("layout: a ghost ends its row, or gets a row of its own beside real children", () => {
-  const ghost = { ucis: ["a", "b"], text: "", fen: "", san: "", moveNo: "", lastMove: null, state: "ongoing" as const, score: null };
+  const ghost = { ucis: ["a", "b"], text: "", fen: "", san: "", moveNo: "", lastMove: null, state: "ongoing" as const, score: null, depth: 0 };
   const root = node(null);
   const a = node(root);
   a.ghost = ghost;
@@ -190,7 +190,7 @@ test("assess: checkmate and stalemate settle themselves; ghosts do not count", (
   m.state = "checkmate"; // White is mated
   const s = node(root, "s", "p w");
   s.state = "stalemate";
-  root.ghost = { ucis: ["x"], text: "", fen: "", san: "", moveNo: "", lastMove: null, state: "ongoing", score: null };
+  root.ghost = { ucis: ["x"], text: "", fen: "", san: "", moveNo: "", lastMove: null, state: "ongoing", score: null, depth: 0 };
   const r = assess(root);
   assert.equal(r.get(m)!.mark, "--");
   assert.equal(r.get(s)!.mark, "0");

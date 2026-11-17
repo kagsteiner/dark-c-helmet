@@ -124,7 +124,7 @@ export async function mountGrid(
   }
 
   /** A folded engine line after `n` (null if none of its moves is legal). */
-  function makeGhost(n: GNode, ucis: string[], score: Score | null): Ghost | null {
+  function makeGhost(n: GNode, ucis: string[], score: Score | null, depth: number): Ghost | null {
     rules.setFen(n.fen, chess960);
     const words: string[] = [];
     const played: string[] = [];
@@ -142,7 +142,17 @@ export async function mountGrid(
       last = { san: s, moveNo: no, lastMove: [m.from, m.to] };
     }
     if (!last) return null;
-    return { ucis: played, text: words.join(" "), fen: rules.fen(), state: rules.state(), score, ...last };
+    return { ucis: played, text: words.join(" "), fen: rules.fen(), state: rules.state(), score, depth: Math.max(0, depth), ...last };
+  }
+
+  /** A board on a search's main line takes the search's evaluation at `depth` (if that is at
+   *  least as deep as what it has): it needs no quick look of its own. */
+  function takeEval(n: GNode, score: Score | null, depth: number): boolean {
+    if (!score || depth < 1 || depth < n.depth || n.state !== "ongoing") return false;
+    n.score = score;
+    n.depth = depth;
+    n.analysed = 2;
+    return true;
   }
 
   /** Turns a ghost into real boards: the whole line, or its next move (the ghost moves on).
@@ -153,10 +163,20 @@ export async function mountGrid(
     n.ghost = null;
     n.expanded = true;
     let next: GNode | null = null;
-    if (all) addLine(n, g.ucis, "engine");
-    else {
+    // The new boards continue the search that found the line: its evaluation, one ply less
+    // deep per move.
+    if (all) {
+      let m = n;
+      for (const [k, u] of g.ucis.entries()) {
+        const c = child(m, u, "engine");
+        if (!c) break;
+        takeEval(c, g.score, g.depth - k);
+        m = c;
+      }
+    } else {
       next = child(n, g.ucis[0], "engine");
-      if (next && g.ucis.length > 1 && !next.ghost && !next.children.length) next.ghost = makeGhost(next, g.ucis.slice(1), g.score);
+      if (next) takeEval(next, g.score, g.depth);
+      if (next && g.ucis.length > 1 && !next.ghost && !next.children.length) next.ghost = makeGhost(next, g.ucis.slice(1), g.score, g.depth - 1);
     }
     persist();
     if (next) select(next);
@@ -168,7 +188,7 @@ export async function mountGrid(
     return {
       uci: n.uci, score: n.score, analysed: n.analysed, depth: n.depth, origin: n.origin, attention: n.attention,
       comment: n.comment, moveMark: n.moveMark, posMark: n.posMark, expanded: n.expanded, children: n.children.map(serialize),
-      ghost: n.ghost ? { ucis: n.ghost.ucis, score: n.ghost.score } : undefined,
+      ghost: n.ghost ? { ucis: n.ghost.ucis, score: n.ghost.score, depth: n.ghost.depth || undefined } : undefined,
       hidden: n.hidden || undefined,
       cut: n.cut || undefined,
     };
@@ -180,7 +200,7 @@ export async function mountGrid(
       comment: s.comment ?? "", moveMark: s.moveMark ?? null, posMark: s.posMark ?? null, hidden: s.hidden ?? false,
       cut: s.cut ?? false,
     });
-    if (s.ghost) n.ghost = makeGhost(n, s.ghost.ucis, s.ghost.score);
+    if (s.ghost) n.ghost = makeGhost(n, s.ghost.ucis, s.ghost.score, s.ghost.depth ?? 0);
     for (const cs of s.children) {
       const c = child(n, cs.uci!, cs.origin);
       if (c) applySaved(c, cs);
@@ -1793,12 +1813,7 @@ export async function mountGrid(
       n = n.children.find((c) => c.uci === u);
       const d = depth - k;
       if (!n || d < 1) break;
-      if (d >= n.depth && n.state === "ongoing") {
-        n.score = score;
-        n.depth = d;
-        n.analysed = 2;
-        changed = true;
-      }
+      if (takeEval(n, score, d)) changed = true;
     }
     return changed;
   }
@@ -1823,14 +1838,15 @@ export async function mountGrid(
       // The end of a line: the new moves fold after it (a longer folded line on the same
       // moves stays).
       if (n.ghost && rest.every((u, k) => n!.ghost!.ucis[k] === u)) return;
-      n.ghost = makeGhost(n, rest, c.score);
+      n.ghost = makeGhost(n, rest, c.score, c.depth - (i + 1));
       return;
     }
     // The line leaves the grid's moves here: a new alternative, folded after its first move.
     const alt = child(n, rest[0], "engine");
     if (!alt) return;
     n.expanded = true;
-    if (rest.length > 1 && !alt.children.length) alt.ghost = makeGhost(alt, rest.slice(1), c.score);
+    takeEval(alt, c.score, c.depth - (i + 1));
+    if (rest.length > 1 && !alt.children.length) alt.ghost = makeGhost(alt, rest.slice(1), c.score, c.depth - (i + 2));
   }
 
   function drawSuggestions(): void {
@@ -1928,7 +1944,7 @@ export async function mountGrid(
         }
         const n = child(s.node, c.uci, "engine");
         if (n) takeLine(s.node, [c.uci], c.score, c.depth); // the search's evaluation, not a new quick look
-        if (n && c.pv.length && !n.children.length) n.ghost = makeGhost(n, c.pv.slice(0, PV_PLIES - 1), c.score);
+        if (n && c.pv.length && !n.children.length) n.ghost = makeGhost(n, c.pv.slice(0, PV_PLIES - 1), c.score, c.depth - 1);
       }
       s.node.expanded = true;
       suggestions = null;
