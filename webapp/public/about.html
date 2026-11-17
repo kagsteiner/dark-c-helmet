@@ -246,6 +246,9 @@
               alt="The New game dialog with Chess960 and Bookmark selected: a list of bookmarked start positions with their back rank, number, date and a note." />
           </figure>
 
+          <h3>Start position assessment</h3>
+          <p>At the beginning of a Chess960 game, a small sentence will tell you how difficult this game will be for white/black compared to the standard chess opening position. This information was pre-computed for all opening positions.
+          </p>
 
           <h3>Chess 960²</h3>
           <p>For those who want even more variation, the app supports Chess 960² - a variation also known as "Fischer Double Random Chess". As this variation can lead to severely unfair starting positions, the engine has pre-computed the winning chances of every variation (yes, the whole million), and will serve only variations with an evaluation in the range of -0.5 to +0.5.</p>
@@ -264,6 +267,41 @@
             it feels like playing a real human. Have work to do to get there.
           </p>
 
+          <h3>Playing</h3>
+          <ul>
+            <li>Time per engine move, minutes per game, minutes plus increment, or FIDE classical.</li>
+            <li>Click, drag, or click only the target square if just one of your pieces can go there.</li>
+            <li>One premove, undo, a hint as an arrow, and an evaluation at any time.</li>
+            <li>If you run out of time, the game goes on and your clock shows the overrun in red. A reload does not lose your game.</li>
+          </ul>
+
+          <h3>Challenge Mode</h3>
+          <p>If you're not Magnus Carlsen, but still find it undignified to play against an engine (the 1300 ELO or 1600 ELO ones) that has been specifically designed to simulate a weak player, try out the challenge mode. In this mode you get a number of unique special advantages, and a number of unique special challenges:</p>
+          <p><b>Your advantages:</b></p>
+          <p>
+            <ul><li>You can give the engine an unreasonable, embarrassingly low amount of time, down to 1 second for the whole game.</li>
+              <li>You can enter a number of undos you can do without ending the challenge, up to 20 (!)</li>
+              <li>You can use the full analysis mode, to treat the game like a correspondence match in which you look at all variations, mark them, rate them, comment them, and then decide for your move.</li>
+              </ul>
+            </p>
+          <p><b>Your challenges</b></p>
+          <p>Depending on your device, the engine will still evaluate 100,000 positions in the one second it has for the match. For mere mortals like me, even then beating it is too high a challenge, so there are achievable ones like these:</p>
+          <p><ul>
+            <li>Survive 10, 15 or even 20 moves without losing more than a pawn's worth of evaluation.</li>
+            <li>Guess a number of engine moves in the grid correctly.</li>
+            <li>Play a number of moves that the engine considers best.</li>
+          </ul>
+          </p>
+          <p>This way, you can play against the full engine and still get a sense of achievement.</p>
+          <p>Please note: the grid to move between variations is not available on a mobile phone. Just not enough screen for grid and board.</p>
+          <h3>Analyzing</h3>
+          <ul>
+            <li>Endless analysis with score, depth, speed and the line in normal notation. Try your own moves on the board without touching the game.</li>
+            <li>Game review with up to 5 minutes per position, an evaluation graph, marks for ?!, ? and ?? (lichess thresholds) and a summary per side.</li>
+            <li>Setup with FEN import and export, in standard chess and Chess960.</li>
+          </ul>
+
+
           <h3>Optional cross-device sync</h3>
           <p>You want your Chess960 progress to be your progress, synced between all devices. Likewise, you want to have the same bookmarks on all devices. The app supports this with a simple and anonymous device sync: on your first device you create a code, which are five words, separated by a "-" symbol. The server will then create a storage that can be accessed by every device with that code. On your other devices, use "I have a code", enter the same code, and from that moment on, the devices will sync your 960 progress and your bookmarks across all your devices. You don't need to set this up. It is entirely up to you.</p>
 
@@ -274,23 +312,6 @@
           <p>Okay, that was probably not the most brilliant idea. I found going for an open-source opening book boring, loved the idea of an opening book
             that learns, keeps improving, a bit like AlphaGo Zero for Chess openings. The result is, well, underwhelming. Don't expect an opponent that floods you with perfect opening theory. Right now my book contains 20,000 moves, all searched by the engine. And by now it even knows the first moves of Ruy Lopez or Italian... And sometimes makes a few book moves in 960 positions. But hey, it is exploring more as I write this. Someday it will be a real opening library, with 100% engine knowledge.
           </p>
-
-          <h2>What else?</h2>
-
-          <h3>Playing</h3>
-          <ul>
-            <li>Time per engine move, minutes per game, minutes plus increment, or FIDE classical.</li>
-            <li>Click, drag, or click only the target square if just one of your pieces can go there.</li>
-            <li>One premove, undo, a hint as an arrow, and an evaluation at any time.</li>
-            <li>If you run out of time, the game goes on and your clock shows the overrun in red. A reload does not lose your game.</li>
-          </ul>
-
-          <h3>Analyzing</h3>
-          <ul>
-            <li>Endless analysis with score, depth, speed and the line in normal notation. Try your own moves on the board without touching the game.</li>
-            <li>Game review with up to 5 minutes per position, an evaluation graph, marks for ?!, ? and ?? (lichess thresholds) and a summary per side.</li>
-            <li>Setup with FEN import and export, in standard chess and Chess960.</li>
-          </ul>
 
           <h3>The rest</h3>
           <ul>
