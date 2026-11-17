@@ -9,7 +9,9 @@
 import { placementFromFen } from "../chess/fen.ts";
 import type { LegalMove, Rules } from "../chess/rules.ts";
 import { san } from "../chess/san.ts";
-import type { Engine, SearchInfo } from "../engine/engine.ts";
+import { Game } from "../chess/game.ts";
+import { record, recordMoveLeadingHere } from "../book/book.ts";
+import type { Engine, SearchInfo, SearchResult } from "../engine/engine.ts";
 import type { PlayController } from "../play/controller.ts";
 import { settings } from "../settings.ts";
 import { load, save } from "../storage.ts";
@@ -1434,13 +1436,27 @@ export async function mountGrid(
     /** Positions searched, and the time it took (ms). */
     nodes: number;
     time: number;
+    result: SearchResult;
+  }
+
+  /** A deep search of a board also teaches the opening book (standard chess from the start
+   *  position, up to the book's move limit: `record` checks the range), the best move of the
+   *  position and the score of the move that led to it. Quick looks are too shallow. */
+  function teachBook(node: GNode, r: SearchResult): void {
+    if (chess960 || root.fen !== START_FEN || !r.info || !r.bestmove) return;
+    const path: string[] = [];
+    for (let n: GNode | null = node; n && n.uci; n = n.parent) path.unshift(n.uci);
+    const game = new Game(rules, START_FEN, false);
+    for (const uci of path) if (!game.play(uci)) return;
+    void record(game, r, engine!, "analysis");
+    void recordMoveLeadingHere(game, r, engine!, "analysis");
   }
 
   async function evaluate(fen: string, ms: number): Promise<Evaluation | null> {
     const r = await engine!.search({ startFen: fen, moves: [], chess960 }, { movetime: ms }, undefined, false);
     if (!r.info) return null;
     return {
-      score: whiteScore(r.info.score, fen.split(" ")[1] === "w"), depth: r.info.depth, pv: r.info.pv, nodes: r.nodes, time: r.time,
+      score: whiteScore(r.info.score, fen.split(" ")[1] === "w"), depth: r.info.depth, pv: r.info.pv, nodes: r.nodes, time: r.time, result: r,
     };
   }
 
@@ -1471,6 +1487,7 @@ export async function mountGrid(
         if (r) {
           job.node.score = r.score;
           job.node.depth = r.depth;
+          if (job.deep) teachBook(job.node, r.result);
         }
         job.node.analysed = job.deep ? 2 : (Math.max(job.node.analysed, 1) as 1 | 2);
         persist();
@@ -1606,6 +1623,7 @@ export async function mountGrid(
       if (gen !== generation || run !== suggestRun) return;
       const info = r.info ?? deep.info;
       if (r.info?.pv.length) deep.info = r.info;
+      teachBook(node, r);
       const uci = r.bestmove ?? info?.pv[0];
       if (info && uci) {
         const whiteToMove = node.fen.split(" ")[1] === "w";
