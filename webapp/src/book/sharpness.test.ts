@@ -3,7 +3,6 @@ import { test } from "node:test";
 import {
   compareNarrowness,
   computeSharpness,
-  describeSharpness,
   isSharpRecord,
   mergeSharpRecords,
   sharpBand,
@@ -65,14 +64,4 @@ test("records are checked", () => {
   assert.ok(isSharpRecord({ key: "a b c d", n: 2, gap: 5, legal: 20, nodes: 1, net: "v12" }));
   assert.ok(!isSharpRecord({ key: "a b c d", n: 30, gap: 5, legal: 20, nodes: 1, net: "v12" }));
   assert.ok(!isSharpRecord({ key: "a b", n: 2, gap: 5, legal: 20, nodes: 1, net: "v12" }));
-});
-
-test("description", () => {
-  assert.match(describeSharpness({ n: 1, gap: 250, legal: 20 }), /One move holds.*2\.5 pawns/);
-  assert.match(describeSharpness({ n: 3, gap: 40, legal: 20 }), /3 moves hold/);
-  assert.match(describeSharpness({ n: 1, gap: 0, legal: 1 }), /Only one legal move/);
-});
-
-test("a tiny gap is not shown as 0.0 pawns", () => {
-  assert.match(describeSharpness({ n: 20, gap: 2, legal: 20 }), /practically as good/);
 });

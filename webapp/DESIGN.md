@@ -403,9 +403,21 @@ to find). Code: `src/book/sharpness.ts`.
   candidate book move leads to (the human is on move there); within the usual margin the
   narrowest wins (smaller n, then larger gap), unknown positions count as robust. Standard chess
   only; Chess960 has no sharpness for now.
-- **Analysis screen.** Label of the position (from the book, else "Measure game": quick probes
-  here, rougher than the book), and a strip along the game: top lane White to move, bottom lane
-  Black to move, darker = narrower.
+- **Game review only.** Sharpness is shown nowhere else in the analysis screen. "Review"
+  measures the positions of the side at the bottom of the board (the human in a game against
+  the engine): from the book where it has them, else in the review's own time per position:
+  30 % for the evaluation search (best move and score, which also drive the marks), 70 % for
+  sharpness: a brief probe of every other move, then a second, longer look at the moves within
+  half a pawn of the one-pawn edge (they decide n). `src/analysis/sharpness-probe.ts`. The other
+  side's positions keep the whole time for the evaluation, so a review takes as long as before.
+- **In the graph.** A faint band behind the curve for each move played from a position where
+  1, 2 or 3 moves held (stronger the fewer); the band spans the move, so the move's mark sits at
+  its right edge. Hover adds "only move" / "2 moves held" / "3 moves held". Under the graph a
+  small table: the side's moves by how many held (only move, 2, 3, more) and how many of them
+  got a mark (?! ? ??). Positions with one legal move are no decision and left out. Part of the
+  link between narrow positions and mistakes is built in (in a position with one good move,
+  most moves are mistakes); the split still tells missed only-moves (calculation) from spoiled
+  quiet positions.
 
 ### Sharing
 

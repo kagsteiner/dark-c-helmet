@@ -1,5 +1,7 @@
 // Evaluation over the game: White's winning chances per position (top = White winning).
 // One series, so no legend; hover shows the move and score, a click jumps to the position.
+// Behind the curve, faint bands mark the moves played from a narrow position (only one, two
+// or three moves held): the band spans the move, so its mark sits at the band's right edge.
 import { MARK_SYMBOL, winPercent, type Mark } from "../analysis/review.ts";
 
 export interface GraphData {
@@ -10,6 +12,13 @@ export interface GraphData {
   /** labels[i]: the move leading to position i + 1, e.g. "12… Qxe4". */
   labels: string[];
   cursor: number;
+  /** narrow[i]: moves that held in position i (1-3), 0 when not narrow or not measured. */
+  narrow?: number[];
+}
+
+/** Hover text for a move played from a position where `n` moves held. */
+export function narrowLabel(n: number): string {
+  return n === 1 ? "only move" : n > 1 && n <= 3 ? `${n} moves held` : "";
 }
 
 const HEIGHT = 96;
@@ -66,7 +75,7 @@ export class EvalGraph {
   }
 
   private render(): void {
-    const { evals, marks, cursor } = this.data;
+    const { evals, marks, cursor, narrow = [] } = this.data;
     const w = this.width();
     this.svg.setAttribute("viewBox", `0 0 ${w} ${HEIGHT}`);
     this.svg.setAttribute("height", String(HEIGHT));
@@ -98,7 +107,15 @@ export class EvalGraph {
       return `<line class="tick" x1="${GUTTER}" x2="${w}" y1="${y}" y2="${y}"/>` +
         `<text class="tick-label" x="${GUTTER - 4}" y="${y}">${p > 0 ? "+" : ""}${p}</text>`;
     }).join("");
+    const bands = narrow
+      .map((n, i) => {
+        if (n < 1 || n > 3 || i >= evals.length - 1) return "";
+        const x0 = this.x(i);
+        return `<rect class="band n${n}" x="${x0}" y="0" width="${Math.max(1, this.x(i + 1) - x0)}" height="${HEIGHT}"/>`;
+      })
+      .join("");
     this.svg.innerHTML = `
+      ${bands}
       ${scale}
       <line class="mid" x1="${GUTTER}" x2="${w}" y1="${mid}" y2="${mid}"/>
       <path class="area" d="${area}"/>
@@ -123,7 +140,8 @@ export class EvalGraph {
     const ev = this.data.evals[ply];
     const label = ply === 0 ? "Start" : this.data.labels[ply - 1] + (this.data.marks[ply - 1] ? MARK_SYMBOL[this.data.marks[ply - 1]!] : "");
     const score = ev === null ? "–" : Math.abs(ev) >= 9000 ? (ev > 0 ? "#" : "-#") + (10000 - Math.abs(ev)) : (ev > 0 ? "+" : "") + (ev / 100).toFixed(2);
-    this.tip.textContent = `${label} · ${score}`;
+    const narrow = ply > 0 ? narrowLabel(this.data.narrow?.[ply - 1] ?? 0) : "";
+    this.tip.textContent = `${label} · ${score}` + (narrow ? ` · ${narrow}` : "");
     this.tip.hidden = false;
     const tw = this.tip.offsetWidth;
     this.tip.style.left = `${Math.min(Math.max(0, x - tw / 2), this.width() - tw)}px`;

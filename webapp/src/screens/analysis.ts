@@ -1,10 +1,11 @@
 // The Analysis screen: step through a game or a position, try moves, let the engine analyse
-// without end, or review the whole game (evaluation graph, marks for weak moves).
+// without end, or review the whole game (evaluation graph, marks for weak moves, and how
+// narrow the reviewed side's positions were).
 import { markMoves, MARK_SYMBOL, whiteCp, type Mark } from "../analysis/review.ts";
-import { probeSharpness } from "../analysis/sharpness-probe.ts";
+import { measureSharpness, SHARP_SHARE } from "../analysis/sharpness-probe.ts";
 import { record } from "../book/book.ts";
-import { bookKey } from "../book/book-logic.ts";
-import { BAND_LABEL, describeSharpness, sharpBand, type Sharpness } from "../book/sharpness.ts";
+import { bookKey, bookScore } from "../book/book-logic.ts";
+import type { Sharpness } from "../book/sharpness.ts";
 import { sharpnessMany } from "../book/sharpness-store.ts";
 import { placementFromFen } from "../chess/fen.ts";
 import { Game, type PlayedMove } from "../chess/game.ts";
@@ -15,7 +16,6 @@ import { Board, type Color } from "../ui/board.ts";
 import { EvalGraph } from "../ui/eval-graph.ts";
 import { icons } from "../ui/icons.ts";
 import { MoveInput } from "../ui/move-input.ts";
-import { SharpStrip } from "../ui/sharp-strip.ts";
 import { settings } from "../settings.ts";
 import type { Screen } from "../ui/shell.ts";
 import "../styles/play.css";
@@ -33,7 +33,15 @@ interface Line {
 interface Review {
   evals: (number | null)[];
   marks: (Mark | null)[];
+  /** The side whose positions get their sharpness measured (the board's bottom side). */
+  white: boolean;
+  /** sharp[i]: sharpness of position i, for the reviewed side's positions (else null). */
+  sharp: (Sharpness | null)[];
 }
+
+/** Narrowness classes of the table: moves that held (1, 2, 3), or more. */
+const NARROW_COLUMNS = ["Only move", "2 moves", "3 moves", "More"];
+const narrowColumn = (s: Sharpness) => Math.min(s.n, 4) - 1;
 
 const REVIEW_TIMES = [0.5, 1, 2, 5, 10, 30, 60, 120, 300]; // seconds per position
 
@@ -60,8 +68,6 @@ export function analysisScreen(rules: Rules, controller: PlayController, engineS
   let reviewSeconds = 1;
   let orientation: Color = "white";
   const board = new Board();
-  // Sharpness by position (book key): from the opening book, or measured here (rougher).
-  const sharpness = new Map<string, { s: Sharpness; source: "book" | "measured" }>();
 
   return {
     mount(root) {
@@ -111,15 +117,6 @@ export function analysisScreen(rules: Rules, controller: PlayController, engineS
                 <p class="an-pv-full small" hidden></p>
               </div>
             </div>
-            <div class="an-sharp">
-              <div class="an-sharp-top">
-                <span class="field-label">Sharpness</span>
-                <span class="an-sharp-band"></span>
-                <button class="btn-secondary" data-action="sharp">Measure game</button>
-              </div>
-              <p class="an-sharp-text small muted"></p>
-              <div class="an-sharp-strip"></div>
-            </div>
             <ol class="move-list an-moves numeric" aria-label="Moves"></ol>
             <div class="an-graph"></div>
             <div class="an-review">
@@ -131,6 +128,7 @@ export function analysisScreen(rules: Rules, controller: PlayController, engineS
                 <button class="btn-secondary" data-action="review">Review</button>
               </div>
               <p class="an-review-status small muted"></p>
+              <table class="an-narrow small" hidden></table>
             </div>
             <div class="an-explore">
               <a class="btn-secondary" href="#/grid" title="Open this position in the analysis grid: lines as rows of small boards">Explore from here</a>
@@ -143,10 +141,7 @@ export function analysisScreen(rules: Rules, controller: PlayController, engineS
       const graph = new EvalGraph((ply) => goTo(ply));
       $(".an-graph").append(graph.el);
 
-      const strip = new SharpStrip((ply) => goTo(ply));
-      $(".an-sharp-strip").append(strip.el);
       let analyzing = false; // endless analysis running
-      let sharpening: { done: number; total: number } | null = null;
       let lastInfo: SearchInfo | null = null;
       let reviewing: { token: number; done: number; total: number; seconds: number } | null = null;
       let token = 0;
@@ -166,7 +161,6 @@ export function analysisScreen(rules: Rules, controller: PlayController, engineS
         }
         line!.moves = played.map((p) => p.uci);
         cursor = Math.min(cursor, played.length);
-        loadBookSharpness();
       };
       const gameAt = (ply: number) => {
         const g = new Game(rules, line!.startFen, line!.chess960);
@@ -187,15 +181,9 @@ export function analysisScreen(rules: Rules, controller: PlayController, engineS
           if (line!.moves[cursor] === uci) {
             cursor++;
           } else {
-            if (sharpening) {
-              // the positions being measured are gone
-              token++;
-              sharpening = null;
-              controller.engine?.stop();
-            }
             line!.moves = [...line!.moves.slice(0, cursor), uci];
             cursor++;
-            if (review) review = { evals: review.evals.slice(0, cursor), marks: review.marks.slice(0, cursor - 1) };
+            if (review) review = { ...review, evals: review.evals.slice(0, cursor), marks: review.marks.slice(0, cursor - 1), sharp: review.sharp.slice(0, cursor) };
             rebuild();
           }
           positionChanged();
@@ -280,7 +268,7 @@ export function analysisScreen(rules: Rules, controller: PlayController, engineS
         const toggle = $<HTMLButtonElement>('[data-action="toggle"]');
         toggle.innerHTML = analyzing ? icons.stop : icons.play;
         toggle.setAttribute("aria-label", analyzing ? "Stop analysis" : "Start analysis");
-        toggle.disabled = !engine || reviewing !== null || sharpening !== null;
+        toggle.disabled = !engine || reviewing !== null;
         const terminal = gameAt(cursor).state();
         if (!engine) {
           $(".an-score").textContent = "";
@@ -352,7 +340,7 @@ export function analysisScreen(rules: Rules, controller: PlayController, engineS
         const status = $(".an-review-status");
         const btn = $<HTMLButtonElement>('[data-action="review"]');
         btn.textContent = reviewing ? "Cancel" : "Review";
-        btn.disabled = !controller.engine || played.length === 0 || sharpening !== null;
+        btn.disabled = !controller.engine || played.length === 0;
         if (reviewing) {
           const left = (reviewing.total - reviewing.done) * reviewing.seconds;
           status.textContent =
@@ -371,8 +359,31 @@ export function analysisScreen(rules: Rules, controller: PlayController, engineS
         $<HTMLElement>(".an-graph").hidden = !review;
         if (review) {
           const evals = Array.from({ length: played.length + 1 }, (_, i) => review!.evals[i] ?? null);
-          graph.set({ evals, marks: review.marks, labels: played.map((_, i) => moveLabel(i)), cursor });
+          const narrow = review.sharp.map((s) => (s && s.legal > 1 && s.n <= 3 ? s.n : 0));
+          graph.set({ evals, marks: review.marks, labels: played.map((_, i) => moveLabel(i)), cursor, narrow });
         }
+        renderNarrowTable();
+      };
+
+      // The reviewed side's moves by how many moves held in their position, and how many of
+      // them were marked (?!, ?, ??). Positions with one legal move are no decision: left out.
+      const renderNarrowTable = () => {
+        const table = $<HTMLTableElement>(".an-narrow");
+        const moves = [0, 0, 0, 0];
+        const weak = [0, 0, 0, 0];
+        review?.sharp.forEach((s, i) => {
+          if (!s || s.legal <= 1 || i >= played.length) return;
+          const c = narrowColumn(s);
+          moves[c]++;
+          if (review!.marks[i]) weak[c]++;
+        });
+        table.hidden = !review || moves.every((m) => m === 0);
+        if (table.hidden) return;
+        const side = review!.white ? "White" : "Black";
+        const row = (label: string, xs: number[]) => `<tr><th scope="row">${label}</th>${xs.map((x) => `<td>${x}</td>`).join("")}</tr>`;
+        table.innerHTML =
+          `<thead><tr><th scope="col">${side}</th>${NARROW_COLUMNS.map((c) => `<th scope="col">${c}</th>`).join("")}</tr></thead>` +
+          `<tbody>${row("Moves", moves)}${row("Marked ?! ? ??", weak)}</tbody>`;
       };
 
       const render = () => {
@@ -395,7 +406,6 @@ export function analysisScreen(rules: Rules, controller: PlayController, engineS
         renderMoves();
         renderEngine();
         renderReview();
-        renderSharp();
         $<HTMLAnchorElement>(".an-explore a").href =
           `#/grid?fen=${encodeURIComponent(fen)}${line!.chess960 ? "&chess960=1" : ""}${orientation === "black" ? "&black=1" : ""}`;
       };
@@ -405,67 +415,6 @@ export function analysisScreen(rules: Rules, controller: PlayController, engineS
         return m ? [{ from: m.from, to: m.castle ? m.rook : m.to }] : [];
       };
 
-      // The opening book's sharpness for the positions of the line (measured values stay unless
-      // the book has one: it is measured more carefully).
-      const loadBookSharpness = () => {
-        const keys = fens.map(bookKey);
-        sharpnessMany(keys).then((found) => {
-          for (const [k, r] of found) sharpness.set(k, { s: { n: r.n, gap: r.gap, legal: r.legal }, source: "book" });
-          if (found.size) renderSharp();
-        });
-      };
-
-      const renderSharp = () => {
-        const btn = $<HTMLButtonElement>('[data-action="sharp"]');
-        const text = $(".an-sharp-text");
-        const here = sharpness.get(bookKey(fens[cursor]));
-        const side = whiteToMoveAt(cursor) ? "White" : "Black";
-        btn.disabled = !controller.engine || reviewing !== null;
-        btn.textContent = sharpening ? "Cancel" : played.length ? "Measure game" : "Measure";
-        $(".an-sharp-band").textContent = here ? `${BAND_LABEL[sharpBand(here.s)]} for ${side}` : "";
-        if (sharpening) text.textContent = `Measuring position ${Math.min(sharpening.done + 1, sharpening.total)} of ${sharpening.total}…`;
-        else if (here)
-          text.textContent =
-            describeSharpness(here.s) + (here.source === "book" ? " From the opening book." : " Measured here, quickly: rougher than the book.");
-        else text.textContent = "Not measured yet. The opening book has it for many opening positions; \"Measure game\" searches the rest.";
-        strip.set(
-          fens.map((fen, i) => ({
-            white: fen.split(" ")[1] === "w",
-            sharpness: sharpness.get(bookKey(fen))?.s ?? null,
-            label: i === 0 ? "Start position" : `after ${moveLabel(i - 1)}`,
-          })),
-          cursor,
-        );
-      };
-
-      const runSharp = async () => {
-        const engine = controller.engine;
-        if (!engine) return;
-        stopEngine();
-        const t = ++token;
-        // Positions without a value, nearest the one on the board first.
-        const todo = fens
-          .map((_, i) => i)
-          .filter((i) => !sharpness.has(bookKey(fens[i])))
-          .sort((a, b) => Math.abs(a - cursor) - Math.abs(b - cursor));
-        sharpening = { done: 0, total: todo.length };
-        renderSharp();
-        renderEngine();
-        renderReview();
-        for (const i of todo) {
-          if (t !== token) return;
-          const s = await probeSharpness(engine, rules, { startFen: line!.startFen, chess960: line!.chess960, moves: line!.moves.slice(0, i) }, () => t !== token);
-          if (t !== token) return;
-          if (s) sharpness.set(bookKey(fens[i]), { s, source: "measured" });
-          sharpening.done++;
-          renderSharp();
-        }
-        sharpening = null;
-        renderSharp();
-        renderEngine();
-        renderReview();
-      };
-
       const runReview = async () => {
         const engine = controller.engine;
         if (!engine) return;
@@ -473,10 +422,21 @@ export function analysisScreen(rules: Rules, controller: PlayController, engineS
         const t = ++token;
         const total = played.length + 1;
         const evals: (number | null)[] = new Array(total).fill(null);
-        review = { evals, marks: [] };
+        const white = orientation === "white";
+        const sharp: (Sharpness | null)[] = new Array(total).fill(null);
+        review = { evals, marks: [], white, sharp };
         const seconds = reviewSeconds; // changing the choice does not affect a running review
         reviewing = { token: t, done: 0, total, seconds };
         render();
+        // The reviewed side's positions: from the opening book where it has them (no time
+        // spent), else measured here with most of the position's time.
+        const ours = (i: number) => whiteToMoveAt(i) === white;
+        const fromBook = await sharpnessMany(fens.map(bookKey).filter((_, i) => ours(i)));
+        if (t !== token) return;
+        fens.forEach((f, i) => {
+          const r = ours(i) ? fromBook.get(bookKey(f)) : undefined;
+          if (r) sharp[i] = { n: r.n, gap: r.gap, legal: r.legal };
+        });
         for (let i = 0; i < total; i++) {
           if (t !== token) return;
           reviewing.done = i;
@@ -487,13 +447,18 @@ export function analysisScreen(rules: Rules, controller: PlayController, engineS
           if (state === "checkmate") evals[i] = whiteToMove ? -10000 : 10000;
           else if (state !== "ongoing") evals[i] = 0;
           else {
-            const r = await engine.search(
-              { startFen: line!.startFen, moves: line!.moves.slice(0, i), chess960: line!.chess960 },
-              { movetime: seconds * 1000 },
-            );
+            const pos = { startFen: line!.startFen, moves: line!.moves.slice(0, i), chess960: line!.chess960 };
+            const measure = ours(i) && !sharp[i];
+            const ms = seconds * 1000;
+            const r = await engine.search(pos, { movetime: measure ? ms * (1 - SHARP_SHARE) : ms });
             if (t !== token) return;
             record(g, r, engine, "analysis");
             evals[i] = r.info ? whiteCp(r.info.score, whiteToMove) : null;
+            if (measure) {
+              const main = r.info && r.bestmove ? { uci: r.bestmove, score: bookScore(r.info.score) } : null;
+              sharp[i] = await measureSharpness(engine, g, pos, ms * SHARP_SHARE, main, () => t !== token);
+              if (t !== token) return;
+            }
           }
           review.marks = markMoves(evals.slice(0, i + 1).map((e) => e ?? 0), whiteToMoveAt(0));
           renderReview();
@@ -531,15 +496,6 @@ export function analysisScreen(rules: Rules, controller: PlayController, engineS
             engineSearch();
           }
           render();
-        } else if (action === "sharp") {
-          if (sharpening) {
-            token++;
-            sharpening = null;
-            controller.engine?.stop();
-            renderSharp();
-            renderEngine();
-            renderReview();
-          } else runSharp();
         } else if (action === "review") {
           if (reviewing) {
             token++;
@@ -574,7 +530,6 @@ export function analysisScreen(rules: Rules, controller: PlayController, engineS
         token++;
         analyzing = false;
         reviewing = null;
-        sharpening = null;
         controller.engine?.stop();
         document.removeEventListener("keydown", onKey);
         document.removeEventListener("pointerdown", closePvOutside, true);

@@ -142,6 +142,28 @@
   display: none;
 }
 
+/* Moves of the reviewed side by how many moves held, and the weak ones among them. */
+.an-narrow {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.an-narrow th,
+.an-narrow td {
+  padding: 2px var(--space-1);
+  text-align: right;
+  font-weight: normal;
+}
+
+.an-narrow th:first-child {
+  text-align: left;
+}
+
+.an-narrow thead th {
+  color: var(--muted);
+}
+
 /* Evaluation graph */
 .eval-graph {
   position: relative;
@@ -194,6 +216,20 @@
   stroke: var(--muted);
   stroke-width: 1;
   stroke-dasharray: 3 3;
+}
+
+/* Moves from narrow positions: one tint, stronger the fewer moves held. */
+.eval-graph .band {
+  fill: var(--accent);
+}
+.eval-graph .band.n1 {
+  opacity: 0.22;
+}
+.eval-graph .band.n2 {
+  opacity: 0.13;
+}
+.eval-graph .band.n3 {
+  opacity: 0.07;
 }
 
 .eval-graph .dot {
@@ -267,64 +303,4 @@
   .an-explore {
     display: block;
   }
-}
-
-/* Sharpness: the position's label and a strip along the game (darker = narrower path). */
-.an-sharp-top {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.an-sharp-top .field-label {
-  flex: none;
-}
-
-.an-sharp-band {
-  flex: 1;
-  font-weight: var(--weight-strong);
-}
-
-.an-sharp-text:empty {
-  display: none;
-}
-
-.sharp-strip {
-  display: grid;
-  grid-template-rows: 10px 10px;
-  gap: 2px;
-  margin-top: var(--space-2);
-}
-
-.sharp-cell {
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 1px;
-  cursor: pointer;
-  background: color-mix(in srgb, var(--text) 8%, transparent);
-}
-
-.sharp-cell.unknown {
-  background: transparent;
-  box-shadow: inset 0 0 0 1px var(--hairline);
-}
-.sharp-cell.lvl-0 {
-  background: color-mix(in srgb, var(--text) 18%, transparent);
-}
-.sharp-cell.lvl-1 {
-  background: color-mix(in srgb, var(--accent) 25%, transparent);
-}
-.sharp-cell.lvl-2 {
-  background: color-mix(in srgb, var(--accent) 50%, transparent);
-}
-.sharp-cell.lvl-3 {
-  background: color-mix(in srgb, var(--accent) 75%, transparent);
-}
-.sharp-cell.lvl-4 {
-  background: var(--accent);
-}
-.sharp-cell.current {
-  outline: 2px solid var(--text);
-  outline-offset: 1px;
 }

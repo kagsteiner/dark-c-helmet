@@ -54,26 +54,6 @@ export function sharpBand(s: Sharpness): SharpBand {
   return s.n <= 1 ? "forced" : s.n === 2 ? "very-sharp" : s.n === 3 ? "sharp" : "robust";
 }
 
-export const BAND_LABEL: Record<SharpBand, string> = {
-  nochoice: "No choice",
-  forced: "Forced",
-  "very-sharp": "Very sharp",
-  sharp: "Sharp",
-  robust: "Robust",
-};
-
-/** Darkness of a band on the strip (0 = none): narrower paths are darker. */
-export const BAND_LEVEL: Record<SharpBand, number> = { nochoice: 0, robust: 1, sharp: 2, "very-sharp": 3, forced: 4 };
-
-/** One sentence for the analysis screen. */
-export function describeSharpness(s: Sharpness): string {
-  if (s.legal <= 1) return "Only one legal move.";
-  const pawns = (cp: number) => (cp / 100).toFixed(1);
-  const moves = s.n === 1 ? "One move holds" : `${s.n} moves hold`;
-  const behind = s.gap < 10 ? "The second best is practically as good." : `The second best is ${pawns(s.gap)} pawns behind it.`;
-  return `${moves} within a pawn of the best. ${behind}`;
-}
-
 /** Order for the sharp opening style: lower is a narrower path for the opponent. A position
  *  that is unknown, or has no choice, counts as robust. */
 export function narrowness(s: Sharpness | undefined): [number, number] {
