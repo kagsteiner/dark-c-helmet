@@ -4,6 +4,7 @@ import type { LegalMove } from "../chess/rules.ts";
 import type { Engine, SearchInfo, SearchResult } from "../engine/engine.ts";
 import { BOOK_STORE, db, request } from "../storage.ts";
 import { offerEntry } from "./contrib-client.ts";
+import { clearSharpness, sharpnessMany } from "./sharpness-store.ts";
 import {
   BOOK_FILE_FORMAT,
   BOOK_MAX_MOVE,
@@ -17,6 +18,7 @@ import {
   shouldStore,
   type BookEntry,
 } from "./book-logic.ts";
+import type { SharpLookup } from "./sharpness.ts";
 
 /** Does the book cover the current position of this game? (Games from a start position, up
  *  to move 20.) */
@@ -36,13 +38,30 @@ export async function lookup(key: string): Promise<BookEntry[]> {
  *  `strongest`: the best-scored move rather than a random one among the near-best. */
 /** The book's move for this search budget; `shallow`: the book knows the position, but none
  *  of its moves was searched as deeply as this search would be. */
-export async function bookMove(game: Game, nodes: number, strongest = false): Promise<{ uci: string | null; shallow: boolean }> {
+export async function bookMove(game: Game, nodes: number, strongest = false, sharp = false): Promise<{ uci: string | null; shallow: boolean }> {
   if (!inBookRange(game)) return { uci: null, shallow: false };
   const fen = game.fen();
   const entries = await lookup(bookKey(fen));
-  const entry = chooseBookMove(entries, nodes, moveNumber(fen), Math.random(), strongest);
+  const lookupSharp = sharp ? await sharpnessAfter(game, entries) : undefined;
+  const entry = chooseBookMove(entries, nodes, moveNumber(fen), Math.random(), strongest, lookupSharp);
   if (!entry) return { uci: null, shallow: entries.length > 0 };
   return { uci: game.legalMoves().find((m) => bookMoveName(m) === entry.move)?.uci ?? null, shallow: false };
+}
+
+/** The sharpness of the position each entry's move leads to (the opponent is on move there). */
+async function sharpnessAfter(game: Game, entries: BookEntry[]): Promise<SharpLookup> {
+  const keyOf = new Map<string, string>();
+  for (const e of entries) {
+    const m = game.legalMoves().find((x) => bookMoveName(x) === e.move);
+    if (!m || !game.play(m.uci)) continue;
+    keyOf.set(e.id, bookKey(game.fen()));
+    game.undo();
+  }
+  const known = await sharpnessMany([...keyOf.values()]);
+  return (e) => {
+    const k = keyOf.get(e.id);
+    return k ? known.get(k) : undefined;
+  };
 }
 
 async function put(entry: BookEntry): Promise<"added" | "updated" | "kept"> {
@@ -134,6 +153,8 @@ export interface MergeResult {
   updated: number;
   kept: number;
   invalid: number;
+  /** Positions whose sharpness was added (master book merges only). */
+  sharpness?: number;
 }
 
 /** Merges a book file: for the same position and move the deeper search wins. */
@@ -181,4 +202,5 @@ export async function mergeEntries(incoming: unknown[]): Promise<MergeResult> {
 
 export async function clearBook(): Promise<void> {
   await request(BOOK_STORE, "readwrite", (s) => s.clear());
+  await clearSharpness();
 }

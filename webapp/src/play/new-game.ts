@@ -25,8 +25,9 @@ export interface Choices {
   /** The chosen bookmark as "white-black". */
   bookmark: string;
   color: "w" | "random" | "b";
-  /** Standard chess: the engine's book moves varied, or always the strongest. */
-  openings: "varied" | "strongest";
+  /** Standard chess: the engine's book moves varied, the ones that leave you the narrowest
+   *  path (sharp), or always the strongest. */
+  openings: "varied" | "sharp" | "strongest";
   tcKind: "move" | "game" | "increment" | "classical";
   seconds: number;
   minutes: number;
@@ -160,7 +161,8 @@ export async function chooseNewGame(
       </div>
       <div class="field" data-show="openings">
         <span class="field-label">Engine's openings</span>
-        ${segmented("openings", [["varied", "Varied"], ["strongest", "Strongest"]], c.openings)}
+        ${segmented("openings", [["varied", "Varied"], ["sharp", "Sharp"], ["strongest", "Strongest"]], c.openings)}
+        <p class="small muted">Sharp: among the moves of its book that are about equally good, the engine picks the one that leaves you the narrowest path.</p>
       </div>
       <label class="field" data-show="odds">
         <span class="field-label">Engine's time for the whole game</span>
@@ -375,7 +377,7 @@ export async function chooseNewGame(
           start(n, n);
         }
       } else {
-        result = { startFen: START_FEN, chess960: false, human, tc, humanProfile, takebacks, strongestOpenings: !humanProfile && r.openings === "strongest" };
+        result = { startFen: START_FEN, chess960: false, human, tc, humanProfile, takebacks, strongestOpenings: !humanProfile && r.openings === "strongest", sharpOpenings: !humanProfile && r.openings === "sharp" };
       }
     });
     dialog.addEventListener("close", async () => {

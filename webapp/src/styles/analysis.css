@@ -268,3 +268,63 @@
     display: block;
   }
 }
+
+/* Sharpness: the position's label and a strip along the game (darker = narrower path). */
+.an-sharp-top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.an-sharp-top .field-label {
+  flex: none;
+}
+
+.an-sharp-band {
+  flex: 1;
+  font-weight: var(--weight-strong);
+}
+
+.an-sharp-text:empty {
+  display: none;
+}
+
+.sharp-strip {
+  display: grid;
+  grid-template-rows: 10px 10px;
+  gap: 2px;
+  margin-top: var(--space-2);
+}
+
+.sharp-cell {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 1px;
+  cursor: pointer;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.sharp-cell.unknown {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--hairline);
+}
+.sharp-cell.lvl-0 {
+  background: color-mix(in srgb, var(--text) 18%, transparent);
+}
+.sharp-cell.lvl-1 {
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.sharp-cell.lvl-2 {
+  background: color-mix(in srgb, var(--accent) 50%, transparent);
+}
+.sharp-cell.lvl-3 {
+  background: color-mix(in srgb, var(--accent) 75%, transparent);
+}
+.sharp-cell.lvl-4 {
+  background: var(--accent);
+}
+.sharp-cell.current {
+  outline: 2px solid var(--text);
+  outline-offset: 1px;
+}

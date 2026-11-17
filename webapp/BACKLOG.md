@@ -108,6 +108,11 @@ Status: `[ ]` open, `[~]` in progress, `[x]` done.
 - [x] Seed book generator (`tools/seed-book.ts`: native engine, tree expansion, standard and
       Chess960, resumable); the engine now prints the totals of each search before `bestmove`
 - [ ] Rule for book entries from different nets
+- [ ] Book: shallow entries can outrank a deeper entry that proves another move better (kept
+      on purpose, see DESIGN.md, Opening book → Known limitation)
+- [x] Sharpness of positions (DESIGN.md, Opening book → Sharpness): offline tool, master book
+      table, "Sharp" opening style, analysis label and strip
+- [ ] Sharpness: Chess960; a sharpness curve per game with critical moments; the player's rating
 - [ ] PGN import (paste/file, choose game from multi-game file) and PGN export
 - [ ] "My games" list
 - [x] Master book on the VPS (`tools/publish-book.ts`; startup check, ask or merge

@@ -108,7 +108,7 @@ export function playScreen(controller: PlayController, engineStatus: () => strin
           (c.odds ? "Challenge: " : "") +
           tc +
           (c.odds ? ` · ${c.setup.takebacks ?? 0} takeback${c.setup.takebacks === 1 ? "" : "s"} with the star` : "") +
-          (c.setup.strongestOpenings ? " · strongest openings" : "");
+          (c.setup.strongestOpenings ? " · strongest openings" : c.setup.sharpOpenings ? " · sharp openings" : "");
         // Games with odds: the report card so far.
         const report = $<HTMLElement>(".play-report");
         const card = c.odds ? reportText(c.report, c.evals.length > 0) : "";

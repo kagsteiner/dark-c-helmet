@@ -3,7 +3,8 @@
 import { readFileSync } from "node:fs";
 import { BOOK_FILE_FORMAT, isBookEntry, shouldStore, type BookEntry } from "../src/book/book-logic.ts";
 import type { MasterManifest } from "../src/book/master-format.ts";
-import { readMaster, writeMaster } from "./master-write.ts";
+import { readMaster, readMasterSharpness, writeMaster } from "./master-write.ts";
+import { mergeSharpnessFiles } from "./sharpness-files.ts";
 import type { Store } from "./store.ts";
 
 export interface PublishResult {
@@ -44,7 +45,8 @@ export function publish(store: Store, bookDir: string): PublishResult {
   for (const { entry, user } of merged.values())
     if (user && (before.get(entry.id) ?? 0) < entry.nodes) improvements[user] = (improvements[user] ?? 0) + 1;
 
-  const manifest = writeMaster(bookDir, [...merged.values()].map((m) => m.entry));
+  const sharp = mergeSharpnessFiles(readMasterSharpness(bookDir), store.sharpnessFiles());
+  const manifest = writeMaster(bookDir, [...merged.values()].map((m) => m.entry), sharp);
   const users = store.users();
   for (const [user, n] of Object.entries(improvements)) {
     users[user] ??= { improvements: 0, created: new Date().toISOString() };

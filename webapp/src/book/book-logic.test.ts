@@ -61,3 +61,21 @@ test("file entries are checked", () => {
   assert.equal(isBookEntry({ ...entry("e2e4", 1, 0), move: "xx" }), false);
   assert.equal(isBookEntry(null), false);
 });
+
+test("sharp style: among the near-best moves, the narrowest path for the opponent", () => {
+  const entries = [entry("e2e4", 9e6, 30), entry("d2d4", 9e6, 22), entry("b2b3", 9e6, 5), entry("g2g4", 9e6, 0)];
+  const known: Record<string, { n: number; gap: number; legal: number }> = {
+    e2e4: { n: 5, gap: 10, legal: 30 },
+    d2d4: { n: 2, gap: 80, legal: 30 },
+    b2b3: { n: 1, gap: 200, legal: 30 }, // narrowest, but 25 cp below the best: still inside 30 cp
+    g2g4: { n: 1, gap: 300, legal: 30 }, // 30 cp below the best: inside; narrower still
+  };
+  const sharp = (e: BookEntry) => known[e.move];
+  assert.equal(chooseBookMove(entries, 1e6, 12, 0, false, sharp)?.move, "g2g4");
+  // 31 cp or more below the best never makes it, whatever its sharpness
+  assert.equal(chooseBookMove([...entries.slice(0, 3), entry("a2a3", 9e6, -5)], 1e6, 12, 0, false, (e) => (e.move === "a2a3" ? { n: 1, gap: 500, legal: 30 } : known[e.move]))?.move, "b2b3");
+  // unknown positions count as robust; with nothing known the choice is random among the near ones
+  assert.deepEqual([0, 0.3, 0.6, 0.99].map((r) => chooseBookMove(entries, 1e6, 12, r, false, () => undefined)?.move), ["e2e4", "d2d4", "b2b3", "g2g4"]);
+  // the depth rule still applies first
+  assert.equal(chooseBookMove([entry("e2e4", 1, 30), entry("d2d4", 9e6, 22)], 1e7, 12, 0, false, sharp)?.move, "d2d4");
+});

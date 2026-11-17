@@ -5,7 +5,7 @@
 // Usage (from anywhere):
 //   node webapp/tools/publish-book.ts --in ~/chess-data/seed-standard.json \
 //        --in ~/chess-data/seed-960.json --dir ~/chess-data/master-book
-//   ... add  --upload vps:nodejs/chess/book  to copy it to the server
+//   ... add  --sharp FILE (tools/book-sharpness.ts) to add sharpness, and  --upload vps:nodejs/chess/book  to copy it to the server
 //
 // The upload goes in two steps so that the manifest on the server never names a missing file:
 // first the new book file, then the manifest (removing older book files).
@@ -13,21 +13,24 @@
 import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync } from "node:fs";
 import { BOOK_FILE_FORMAT, isBookEntry, shouldStore, type BookEntry } from "../src/book/book-logic.ts";
-import { writeMaster } from "../server/master-write.ts";
+import { readMasterSharpness, writeMaster } from "../server/master-write.ts";
+import { mergeSharpnessFiles } from "../server/sharpness-files.ts";
 
 const inputs: string[] = [];
+const sharpFiles: string[] = [];
 let dir = "";
 let upload = "";
 const argv = process.argv.slice(2);
 for (let i = 0; i < argv.length; i += 2) {
   const [k, v] = [argv[i], argv[i + 1]];
   if (k === "--in") inputs.push(v);
+  else if (k === "--sharp") sharpFiles.push(v);
   else if (k === "--dir") dir = v;
   else if (k === "--upload") upload = v;
   else throw new Error(`unknown option ${k}`);
 }
 if (!inputs.length || !dir) {
-  console.error("usage: node webapp/tools/publish-book.ts --in FILE [--in FILE ...] --dir FOLDER [--upload HOST:PATH]");
+  console.error("usage: node webapp/tools/publish-book.ts --in FILE [--in FILE ...] [--sharp FILE ...] --dir FOLDER [--upload HOST:PATH]");
   process.exit(2);
 }
 
@@ -46,10 +49,10 @@ for (const path of inputs) {
 }
 
 mkdirSync(dir, { recursive: true });
-const manifest = writeMaster(dir, [...merged.values()]);
+const manifest = writeMaster(dir, [...merged.values()], mergeSharpnessFiles(readMasterSharpness(dir), sharpFiles));
 console.log(
   `Master book version ${manifest.version}: ${manifest.positions.toLocaleString("en")} positions, ` +
-    `${manifest.moves.toLocaleString("en")} moves, ${(manifest.bytes / 1e6).toFixed(2)} MB (gzip) in ${dir}`,
+    `${manifest.moves.toLocaleString("en")} moves, ${(manifest.sharpness ?? 0).toLocaleString("en")} sharpness records, ${(manifest.bytes / 1e6).toFixed(2)} MB (gzip) in ${dir}`,
 );
 
 if (upload) {

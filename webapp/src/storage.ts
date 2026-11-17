@@ -5,17 +5,19 @@ const DB_NAME = "dark-c-helmet";
 const KV = "kv";
 export const BOOK_STORE = "book";
 export const OUTBOX_STORE = "outbox";
+export const SHARP_STORE = "sharpness";
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
 export function db(): Promise<IDBDatabase> {
   dbPromise ??= new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 3);
+    const req = indexedDB.open(DB_NAME, 4);
     req.onupgradeneeded = (e) => {
       const d = req.result;
       if (e.oldVersion < 1) d.createObjectStore(KV);
       if (e.oldVersion < 2) d.createObjectStore(BOOK_STORE, { keyPath: "id" }).createIndex("key", "key");
       if (e.oldVersion < 3) d.createObjectStore(OUTBOX_STORE, { keyPath: "id" });
+      if (e.oldVersion < 4) d.createObjectStore(SHARP_STORE, { keyPath: "key" });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);

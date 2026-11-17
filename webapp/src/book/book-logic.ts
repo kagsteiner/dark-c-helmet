@@ -6,6 +6,7 @@
 // instead (a random one among those within 10 cp of the best). See DESIGN.md, "Opening book".
 import type { LegalMove } from "../chess/rules.ts";
 import { squareName } from "../chess/san.ts";
+import { compareNarrowness, type SharpLookup } from "./sharpness.ts";
 
 export interface BookEntry {
   /** key + " " + move */
@@ -74,17 +75,27 @@ export function moveNumber(fen: string): number {
 }
 
 /** Book move for a search of `budget` nodes at move `move`, or null. `random` in [0, 1).
- *  `strongest`: only the best-scored moves (a random one if several share the best score). */
+ *  `strongest`: only the best-scored moves (a random one if several share the best score).
+ *  `sharp`: the sharp opening style - among the moves within BOOK_SPREAD_OPENING_CP of the best
+ *  (at every move), the one that leaves the opponent the narrowest path (a random one among
+ *  equally narrow ones; positions without a sharpness count as robust). */
 export function chooseBookMove(
   entries: BookEntry[],
   budget: number,
   move = 1,
   random = Math.random(),
   strongest = false,
+  sharp?: SharpLookup,
 ): BookEntry | null {
   const deep = entries.filter((e) => e.nodes >= budget * BOOK_NODE_TOLERANCE);
   if (!deep.length) return null;
   const best = Math.max(...deep.map((e) => e.score));
+  if (sharp) {
+    const near = deep.filter((e) => e.score >= best - BOOK_SPREAD_OPENING_CP);
+    const narrowest = near.reduce((a, b) => (compareNarrowness(sharp(b), sharp(a)) < 0 ? b : a));
+    const equal = near.filter((e) => compareNarrowness(sharp(e), sharp(narrowest)) === 0);
+    return equal[Math.floor(random * equal.length)];
+  }
   const spread = strongest ? 0 : move <= BOOK_SPREAD_OPENING_MOVES ? BOOK_SPREAD_OPENING_CP : BOOK_SPREAD_CP;
   const near = deep.filter((e) => e.score >= best - spread);
   return near[Math.floor(random * near.length)];

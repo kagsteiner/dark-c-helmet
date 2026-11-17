@@ -2,6 +2,7 @@
 // small manifest, built from the seed book files by tools/publish-book.ts. The app checks the
 // manifest at startup and offers to merge a newer version (see book/master.ts).
 import { isBookEntry, type BookEntry } from "./book-logic.ts";
+import { isSharpRecord, type SharpRecord } from "./sharpness.ts";
 
 export const MASTER_FORMAT = "dark-c-helmet-master-book";
 
@@ -13,6 +14,8 @@ export interface MasterManifest {
   created: string;
   positions: number;
   moves: number;
+  /** Positions with a sharpness (see sharpness.ts); older manifests have none. */
+  sharpness?: number;
   /** File name of the book (gzip), e.g. "master-3.json.gz", and its size in bytes. */
   file: string;
   bytes: number;
@@ -26,9 +29,11 @@ export interface MasterFile {
   created: string;
   nets: string[];
   positions: Record<string, [string, number, number, number, number][]>;
+  /** Sharpness per position as [n, gap, legal moves, probe nodes, net index]; optional. */
+  sharpness?: Record<string, [number, number, number, number, number]>;
 }
 
-export function toMasterFile(entries: BookEntry[], version: number, created: string): MasterFile {
+export function toMasterFile(entries: BookEntry[], version: number, created: string, sharp: SharpRecord[] = []): MasterFile {
   const nets: string[] = [];
   const positions: MasterFile["positions"] = {};
   for (const e of entries) {
@@ -36,7 +41,30 @@ export function toMasterFile(entries: BookEntry[], version: number, created: str
     if (net < 0) net = nets.push(e.net) - 1;
     (positions[e.key] ??= []).push([e.move, e.nodes, e.depth, e.score, net]);
   }
-  return { format: MASTER_FORMAT, version, created, nets, positions };
+  const file: MasterFile = { format: MASTER_FORMAT, version, created, nets, positions };
+  if (sharp.length) {
+    file.sharpness = {};
+    for (const r of sharp) {
+      let net = nets.indexOf(r.net);
+      if (net < 0) net = nets.push(r.net) - 1;
+      file.sharpness[r.key] = [r.n, r.gap, r.legal, r.nodes, net];
+    }
+  }
+  return file;
+}
+
+/** Sharpness records of a master file; malformed parts are skipped. */
+export function sharpnessFromMasterFile(file: MasterFile): SharpRecord[] {
+  if (file?.format !== MASTER_FORMAT) throw new Error("This is not a master book file.");
+  const out: SharpRecord[] = [];
+  if (typeof file.sharpness !== "object" || file.sharpness === null) return out;
+  for (const [key, v] of Object.entries(file.sharpness)) {
+    if (!Array.isArray(v)) continue;
+    const [n, gap, legal, nodes, net] = v;
+    const r: SharpRecord = { key, n, gap, legal, nodes, net: file.nets[net] ?? "" };
+    if (isSharpRecord(r)) out.push(r);
+  }
+  return out;
 }
 
 /** Book entries of a master file; malformed parts are skipped. */

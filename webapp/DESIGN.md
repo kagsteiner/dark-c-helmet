@@ -359,14 +359,53 @@ games that began at a standard or Chess960 start position.
    saves the whole search for later moves, and twice the nodes rarely changes the move). If
    there are any, the engine plays one at once: chosen at random among the moves within 0.3 pawns of the best up to
    move 5 (varied openings), within 0.1 pawns later. The new-game sheet's "Engine's
-   openings: Strongest" (standard chess only) makes it always play the best-scored move.
+   openings: Strongest" (standard chess only) makes it always play the best-scored move;
+   "Sharp" picks, among the moves within 0.3 pawns of the best (at every move), the one that
+   leaves the human the narrowest path (see Sharpness below).
 3. Otherwise search. Then: if this move already has an entry with fewer nodes, replace it;
    otherwise add a new entry.
 
 Endless analysis that reaches a deeper search than the stored one also writes an entry.
 
+**Known limitation (deliberate, 2026-11-17):** the 50% rule compares entries of different
+depths. At a shallow time control an old 1M-node entry (d4, +0.9) can outrank a newer 10M-node
+entry (Nf3, +0.7) that has proved the other move better; at a deep time control only the deep
+entry qualifies. We keep it that way: our book is tiny compared with other engines', and people
+expect book moves for at least the first 8 plies, so using a shallow entry is better than
+dropping it. A fix (say, ignoring an entry that a much deeper entry of the same position
+scores clearly lower) is for some day, when the book is larger.
+
 **Open:** entries from different nets (100k nodes with v12 vs 200k nodes with v11). For now
 all nets are treated alike; the rule is decided when v12 exists.
+
+### Sharpness
+
+How narrow is the path for the side to move? The scores of all legal moves (searched alike)
+are clamped at ±3 pawns (a mate counts as +3: beyond that a position is decided); `n` is the
+number of moves within 1 pawn of the best, `gap` the best score minus the second-best. Bands:
+n = 1 *forced*, 2 *very sharp*, 3 *sharp*, ≥ 4 *robust*; one legal move is *no choice* (nothing
+to find). Code: `src/book/sharpness.ts`.
+
+- The engine has no MultiPV. Every legal move gets its own search of the position after it
+  (the seed book's probe technique), with a fixed node count so values are comparable.
+- **Book.** Sharpness belongs to a position, not to an entry, and is measured separately from
+  the entry scores (so a deep game does not change it). It is a table in the master book file
+  (`sharpness`: position → n, gap, legal moves, probe nodes, net) and in IndexedDB (store
+  `sharpness`). For a position the record with more probe nodes wins.
+- **Offline, incremental.** `tools/book-sharpness.ts` reads the published master book, measures
+  every position of the opening tree and the position after every book move, and skips those
+  already measured at the wanted quality; so the first run takes hours and later runs, after
+  contributions, minutes. Its sharpness file goes into the master book with
+  `publish-book.ts --sharp` or, on the VPS, into `<data>/sharpness/` before `book-admin publish`
+  (the published records stay, the files add to them). Positions of other nets are measured
+  again only with `--refresh-other-nets`.
+- **Sharp openings.** "Engine's openings: Sharp" looks up the sharpness of the position each
+  candidate book move leads to (the human is on move there); within the usual margin the
+  narrowest wins (smaller n, then larger gap), unknown positions count as robust. Standard chess
+  only; Chess960 has no sharpness for now.
+- **Analysis screen.** Label of the position (from the book, else "Measure game": quick probes
+  here, rougher than the book), and a strip along the game: top lane White to move, bottom lane
+  Black to move, darker = narrower.
 
 ### Sharing
 

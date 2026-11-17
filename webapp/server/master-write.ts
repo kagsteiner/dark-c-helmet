@@ -4,7 +4,8 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync } from "no
 import { join } from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
 import type { BookEntry } from "../src/book/book-logic.ts";
-import { fromMasterFile, isManifest, MASTER_FORMAT, toMasterFile, type MasterManifest } from "../src/book/master-format.ts";
+import { fromMasterFile, isManifest, MASTER_FORMAT, sharpnessFromMasterFile, toMasterFile, type MasterManifest } from "../src/book/master-format.ts";
+import { type SharpRecord } from "../src/book/sharpness.ts";
 import { writeAtomic } from "./store.ts";
 
 export function readManifest(dir: string): MasterManifest | null {
@@ -21,15 +22,22 @@ export function readMaster(dir: string): BookEntry[] {
   return fromMasterFile(JSON.parse(gunzipSync(readFileSync(join(dir, m.file))).toString("utf8")));
 }
 
-/** Writes the next version. The book file comes first, the manifest second, so the manifest
+/** The sharpness records of the version the manifest names (empty if there is none). */
+export function readMasterSharpness(dir: string): SharpRecord[] {
+  const m = readManifest(dir);
+  if (!m || !existsSync(join(dir, m.file))) return [];
+  return sharpnessFromMasterFile(JSON.parse(gunzipSync(readFileSync(join(dir, m.file))).toString("utf8")));
+}
+
+/** Writes the next version, with the given sharpness records. The book file comes first, the manifest second, so the manifest
  *  never names a missing file; the previous version's file is kept for apps that just read the
  *  old manifest, older ones go. */
-export function writeMaster(dir: string, entries: BookEntry[]): MasterManifest {
+export function writeMaster(dir: string, entries: BookEntry[], sharp: SharpRecord[] = []): MasterManifest {
   mkdirSync(dir, { recursive: true });
   const previous = readManifest(dir);
   const version = (previous?.version ?? 0) + 1;
   const created = new Date().toISOString();
-  const gz = gzipSync(JSON.stringify(toMasterFile(entries, version, created)), { level: 9 });
+  const gz = gzipSync(JSON.stringify(toMasterFile(entries, version, created, sharp)), { level: 9 });
   const file = `master-${version}.json.gz`;
   writeAtomic(join(dir, file), gz);
   const manifest: MasterManifest = {
@@ -38,6 +46,7 @@ export function writeMaster(dir: string, entries: BookEntry[]): MasterManifest {
     created,
     positions: new Set(entries.map((e) => e.key)).size,
     moves: entries.length,
+    sharpness: sharp.length,
     file,
     bytes: gz.length,
   };

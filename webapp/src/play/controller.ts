@@ -24,6 +24,8 @@ export interface GameSetup {
   firstMoveExtra?: number;
   /** The engine always plays the strongest book move instead of varying (standard chess). */
   strongestOpenings?: boolean;
+  /** The engine picks the book move that leaves the human the narrowest path (standard chess). */
+  sharpOpenings?: boolean;
   /** The opponent: Dark C. Helmet (default) or a human-like player of a rating band ("1300"),
    *  which plays without the book and uses its whole move time. */
   humanProfile?: string;
@@ -440,7 +442,7 @@ export class PlayController {
     // The human-like player has no book.
     const book =
       !humanLike && engine.nps
-        ? await bookMove(this.game, (engine.nps * this.budgetMs()) / 1000, this.setup.strongestOpenings)
+        ? await bookMove(this.game, (engine.nps * this.budgetMs()) / 1000, this.setup.strongestOpenings, this.setup.sharpOpenings)
         : null;
     const fromBook = book?.uci ?? null;
     if (token !== this.token) return;

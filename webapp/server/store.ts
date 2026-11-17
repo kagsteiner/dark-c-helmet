@@ -6,6 +6,7 @@
 //   <data>/users.json            per user: moves that went into the master book
 //   <data>/contrib/<CODE>.jsonl  what a device sent, one entry per line, append only
 //   <data>/seed/*.json           seed books (book files from tools/seed-book.ts)
+//   <data>/sharpness/*.json      sharpness files (from tools/book-sharpness.ts)
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -44,7 +45,7 @@ export class Store {
 
   constructor(dir = process.env.CHESS_DATA ?? join(homedir(), "chess-data")) {
     this.dir = dir;
-    for (const d of ["devices", "contrib", "seed"]) mkdirSync(join(dir, d), { recursive: true });
+    for (const d of ["devices", "contrib", "seed", "sharpness"]) mkdirSync(join(dir, d), { recursive: true });
   }
 
   private devicePath(code: string): string {
@@ -116,6 +117,14 @@ export class Store {
   }
 
   /** Paths of the seed book files. */
+  sharpnessFiles(): string[] {
+    const d = join(this.dir, "sharpness");
+    return readdirSync(d)
+      .filter((f) => f.endsWith(".json") && !f.endsWith(".state.json"))
+      .sort()
+      .map((f) => join(d, f));
+  }
+
   seedFiles(): string[] {
     const d = join(this.dir, "seed");
     return readdirSync(d)

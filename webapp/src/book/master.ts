@@ -3,7 +3,8 @@
 import { settings } from "../settings.ts";
 import { load, save } from "../storage.ts";
 import { mergeEntries, type MergeResult } from "./book.ts";
-import { fromMasterFile, isManifest, type MasterManifest } from "./master-format.ts";
+import { fromMasterFile, isManifest, sharpnessFromMasterFile, type MasterManifest } from "./master-format.ts";
+import { mergeSharpness } from "./sharpness-store.ts";
 
 const INSTALLED_KEY = "master-book";
 const DISMISSED_KEY = "master-book-dismissed";
@@ -54,7 +55,9 @@ export async function mergeMaster(m: MasterManifest, onProgress?: (fraction: num
   const head = new Uint8Array(await blob.slice(0, 2).arrayBuffer());
   const gzipped = head[0] === 0x1f && head[1] === 0x8b;
   const text = await new Response(gzipped ? blob.stream().pipeThrough(new DecompressionStream("gzip")) : blob).text();
-  const result = await mergeEntries(fromMasterFile(JSON.parse(text)));
+  const file = JSON.parse(text);
+  const result = await mergeEntries(fromMasterFile(file));
+  result.sharpness = (await mergeSharpness(sharpnessFromMasterFile(file)).catch(() => null))?.added ?? 0;
   await save(INSTALLED_KEY, { version: m.version, moves: m.moves, created: m.created } satisfies InstalledMaster);
   return result;
 }
@@ -65,7 +68,10 @@ export function formatBytes(n: number): string {
 
 export function describeMerge(r: MergeResult): string {
   const n = (k: number) => k.toLocaleString("en");
-  return `${n(r.added)} moves added, ${n(r.updated)} replaced by deeper searches, ${n(r.kept)} kept.`;
+  return (
+    `${n(r.added)} moves added, ${n(r.updated)} replaced by deeper searches, ${n(r.kept)} kept.` +
+    (r.sharpness ? ` ${n(r.sharpness)} positions with a sharpness added.` : "")
+  );
 }
 
 /** At startup: if the server has a newer master book, merge it (setting) or ask once per version. */
