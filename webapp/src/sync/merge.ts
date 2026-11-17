@@ -71,6 +71,12 @@ function cleanTimeControl(v: unknown): GameRecord["tc"] {
     need(typeof t.seconds === "number" && t.seconds >= 0 && t.seconds < 1e5);
     return { kind: "move", seconds: t.seconds as number };
   }
+  if (t.kind === "odds") {
+    need(t.engine === "w" || t.engine === "b");
+    need(typeof t.engineSeconds === "number" && t.engineSeconds > 0 && t.engineSeconds <= 86400);
+    need(typeof t.humanMinutes === "number" && t.humanMinutes >= 0 && t.humanMinutes < 1e5);
+    return { kind: "odds", engine: t.engine, engineSeconds: t.engineSeconds as number, humanMinutes: t.humanMinutes as number };
+  }
   need(t.kind === "game" && typeof t.minutes === "number" && t.minutes >= 0 && t.minutes < 1e5 && typeof t.increment === "number" && t.increment >= 0 && t.increment < 1e5);
   return { kind: "game", minutes: t.minutes as number, increment: t.increment as number };
 }
@@ -99,7 +105,59 @@ function cleanResult(v: unknown): GameRecord {
   };
   if (r.position960 !== undefined) clean.position960 = r.position960 as number;
   if (r.black960 !== undefined) clean.black960 = r.black960 as number;
+  // Challenges (games with odds): their odds and report-card measurements. Optional extras: a
+  // part that does not pass is left out, the game itself still syncs.
+  const odds = cleanOdds(r.odds);
+  if (odds) clean.odds = odds;
+  const engineEval = cleanEval(r.engineEval);
+  if (engineEval) clean.engineEval = engineEval;
+  if (Array.isArray(r.evals) && r.evals.length <= MAX_PLY_ENTRIES) {
+    const evals = r.evals.map((p: unknown) => {
+      const q = p as Record<string, unknown> | null;
+      const e = cleanEval(q?.e);
+      return q && isCount(q.ply, MAX_PLY) && e ? { ply: q.ply as number, e } : null;
+    });
+    if (evals.every(Boolean)) clean.evals = evals as NonNullable<GameRecord["evals"]>;
+  }
+  const foresight = cleanPlyMap(r.foresight, (v) => v === "predicted" || v === "considered" || v === "missed");
+  if (foresight) clean.foresight = foresight as GameRecord["foresight"];
+  const found = cleanPlyMap(r.found, (v) => typeof v === "boolean");
+  if (found) clean.found = found as GameRecord["found"];
   return clean;
+}
+
+/** Per-move measurements of a challenge: at most this many entries (a game of 600 plies). */
+const MAX_PLY_ENTRIES = 300;
+const MAX_PLY = 100000;
+
+function cleanOdds(v: unknown): GameRecord["odds"] | undefined {
+  if (typeof v !== "object" || v === null) return undefined;
+  const o = v as Record<string, unknown>;
+  if (!(typeof o.engineSeconds === "number" && o.engineSeconds > 0 && o.engineSeconds <= 86400)) return undefined;
+  if (!(typeof o.humanMinutes === "number" && o.humanMinutes >= 0 && o.humanMinutes < 1e5)) return undefined;
+  if (!isCount(o.takebacks, 1000) || !isCount(o.used, MAX_PLY)) return undefined;
+  return { engineSeconds: o.engineSeconds, humanMinutes: o.humanMinutes, takebacks: o.takebacks, used: o.used };
+}
+
+function cleanEval(v: unknown): { cp: number } | { mate: number } | undefined {
+  if (typeof v !== "object" || v === null) return undefined;
+  const e = v as Record<string, unknown>;
+  if (Number.isInteger(e.cp) && Math.abs(e.cp as number) <= 100000) return { cp: e.cp as number };
+  if (Number.isInteger(e.mate) && Math.abs(e.mate as number) <= 1000) return { mate: e.mate as number };
+  return undefined;
+}
+
+/** A map from ply to a value, as a plain object with numeric keys. */
+function cleanPlyMap<T>(v: unknown, ok: (x: unknown) => boolean): Record<number, T> | undefined {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return undefined;
+  const entries = Object.entries(v as Record<string, unknown>);
+  if (entries.length > MAX_PLY_ENTRIES) return undefined;
+  const out: Record<number, T> = {};
+  for (const [k, x] of entries) {
+    if (!/^\d{1,5}$/.test(k) || !ok(x)) return undefined;
+    out[Number(k)] = x as T;
+  }
+  return out;
 }
 
 function cleanBookmark(v: unknown): Bookmark {

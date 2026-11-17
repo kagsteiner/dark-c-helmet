@@ -109,3 +109,21 @@ test("server: unknown codes are limited, known ones keep working", () => {
 test("server: rejects malformed codes", () => {
   assert.throws(() => api().sync.peek(body({ code: "../../etc/passwd" })), { status: 400 });
 });
+
+test("cleanData keeps challenge games with their odds and measurements", () => {
+  const challenge = rec("c", {
+    tc: { kind: "odds", engine: "b", engineSeconds: 1, humanMinutes: 0 },
+    odds: { engineSeconds: 1, humanMinutes: 0, takebacks: 3, used: 1 },
+    engineEval: { cp: -230 },
+    evals: [{ ply: 1, e: { cp: 20 } }, { ply: 3, e: { mate: -4 } }],
+    foresight: { 1: "predicted", 3: "missed" },
+    found: { 0: true, 2: false },
+  });
+  assert.deepEqual(cleanData(data({ results: [challenge] })).results[0], challenge);
+  // A bad measurement is left out, the game stays; a bad time control is still refused.
+  const bad = cleanData(data({ results: [{ ...challenge, found: { x: true }, evals: [{ ply: 1, e: { cp: "1" } }] } as unknown as GameRecord] })).results[0];
+  assert.equal(bad.found, undefined);
+  assert.equal(bad.evals, undefined);
+  assert.deepEqual(bad.odds, challenge.odds);
+  assert.throws(() => cleanData(data({ results: [rec("d", { tc: { kind: "odds", engine: "x", engineSeconds: 1, humanMinutes: 0 } as never })] })));
+});
