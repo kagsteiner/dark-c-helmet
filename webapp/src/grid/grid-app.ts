@@ -986,6 +986,8 @@ export async function mountGrid(
     if (document.querySelector("dialog[open]")) return;
     if (e.key === "ArrowLeft" && selected.parent) select(selected.parent);
     else if (e.key === "ArrowRight" && selected.children[0]) select(selected.children[0]);
+    // At the end of the line, a folded engine line unfolds one move (as "Unfold next move").
+    else if (e.key === "ArrowRight" && selected.ghost && !locked) unfold(selected, false);
     else if ((e.key === "ArrowUp" || e.key === "ArrowDown") && selected.parent) {
       const sib = selected.parent.children;
       const i = sib.indexOf(selected) + (e.key === "ArrowDown" ? 1 : -1);
