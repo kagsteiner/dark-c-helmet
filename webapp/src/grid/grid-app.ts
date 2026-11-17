@@ -79,6 +79,8 @@ export async function mountGrid(
   /** After the next drawing, scroll the selected board into the middle of the grid: the
    *  screen or an analysis was opened (e.g. "Think in the grid" after a few more moves). */
   let revealOnDraw = true;
+  /** A newly selected board may only exist after the next draw (an unfolded move). */
+  let revealSelectedOnDraw = false;
 
   // ---- Tree ----
 
@@ -613,6 +615,7 @@ export async function mountGrid(
       }
     }
     selected = n;
+    revealSelectedOnDraw = true;
     draw();
     grid.reveal(n);
     pump(); // its threat, if not known yet
@@ -631,7 +634,8 @@ export async function mountGrid(
       if (revealOnDraw) {
         revealOnDraw = false;
         grid.reveal(selected, true);
-      }
+      } else if (revealSelectedOnDraw) grid.reveal(selected);
+      revealSelectedOnDraw = false;
       drawPanel();
       drawGame();
     });
